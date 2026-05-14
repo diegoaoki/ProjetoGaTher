@@ -48,6 +48,8 @@ app.get("/", (_req, res) => {
       auth: true,
       admin: true,
       desks: true,
+      teleport: true,
+      invite: true,
     },
     ts: Date.now(),
   });
