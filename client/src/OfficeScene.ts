@@ -160,6 +160,31 @@ export class OfficeScene extends Phaser.Scene {
       this.recenterCamera();
     });
 
+    // Desabilita TODO o keyboard manager do Phaser quando o usuário foca em
+    // um input HTML. Sem isso, Phaser intercepta letras (E, W, A, S, D, C)
+    // antes do input receber, e o user não consegue digitar essas letras
+    // no chat / login / modais.
+    const onFocusIn = (e: FocusEvent) => {
+      const t = (e.target as HTMLElement | null);
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) {
+        if (this.input?.keyboard) this.input.keyboard.enabled = false;
+      }
+    };
+    const onFocusOut = () => {
+      // Pequeno delay pra evitar race entre blur de um e focus de outro
+      setTimeout(() => {
+        if (!isTypingInInput() && this.input?.keyboard) {
+          this.input.keyboard.enabled = true;
+        }
+      }, 0);
+    };
+    window.addEventListener("focusin", onFocusIn);
+    window.addEventListener("focusout", onFocusOut);
+    this.events.once("shutdown", () => {
+      window.removeEventListener("focusin", onFocusIn);
+      window.removeEventListener("focusout", onFocusOut);
+    });
+
     // Pan com botão direito do mouse — não interfere com cliques de UI nem com tecla E
     this.input.mouse?.disableContextMenu();
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
