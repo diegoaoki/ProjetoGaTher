@@ -76,6 +76,19 @@ function saveProfile(p: SavedProfile) {
   } catch {}
 }
 
+/** Tenta dar play em um vídeo, ignorando AbortError (que é benigno) */
+function safePlay(video: HTMLVideoElement) {
+  const p = video.play();
+  if (p && typeof p.catch === "function") {
+    p.catch((err) => {
+      // AbortError acontece quando o vídeo é destruído antes do play resolver — é OK
+      if (err?.name !== "AbortError") {
+        console.warn("[play] falhou:", err);
+      }
+    });
+  }
+}
+
 export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoContainerRef = useRef<HTMLDivElement>(null);
@@ -236,7 +249,6 @@ export default function App() {
 
       spatial.onScreenShareStarted = (identity, element) => {
         console.log("[app] screen share começou:", identity);
-        // Extrai o MediaStream — é o que precisamos pra criar novos <video> sem clonar
         const stream = element.srcObject as MediaStream;
         if (!stream) {
           console.warn("[app] screen share sem stream");
@@ -244,7 +256,6 @@ export default function App() {
         }
         setActiveScreenShare({ identity, stream });
 
-        // Mostra na TV do mapa (passa o stream, não o elemento)
         if (sceneRef.current) {
           sceneRef.current.showScreenShareOnTV(stream);
         }
@@ -311,7 +322,7 @@ export default function App() {
     return () => clearTimeout(t);
   }, [conn, camOn]);
 
-  // Modal fullscreen — cria seu próprio video element com o stream
+  // Modal fullscreen
   useEffect(() => {
     if (!fullscreenVideoRef.current || !fullscreenStream) return;
     const wrap = fullscreenVideoRef.current;
@@ -329,9 +340,7 @@ export default function App() {
     video.style.background = "#000";
 
     wrap.appendChild(video);
-
-    // Força play
-    video.play().catch((err) => console.warn("[fullscreen] play falhou:", err));
+    safePlay(video);
 
     return () => {
       video.srcObject = null;

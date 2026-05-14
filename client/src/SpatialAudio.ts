@@ -23,7 +23,11 @@ interface RemotePeer {
   cameraElement?: HTMLVideoElement;
   screenElement?: HTMLVideoElement;
   isSpeaking: boolean;
+  // Timer pra "stopped" pendente que pode ser cancelado por novo "started"
+  screenStopTimer?: number;
 }
+
+const SCREEN_STOP_DEBOUNCE_MS = 800;
 
 export class SpatialAudio {
   private room: Room;
@@ -110,6 +114,7 @@ export class SpatialAudio {
   private handleParticipantDisconnected(p: RemoteParticipant) {
     const peer = this.peers.get(p.identity);
     if (peer) {
+      if (peer.screenStopTimer) clearTimeout(peer.screenStopTimer);
       peer.audioElement?.remove();
       peer.cameraElement?.remove();
       peer.screenElement?.remove();
@@ -136,12 +141,25 @@ export class SpatialAudio {
       const el = track.attach() as HTMLVideoElement;
       el.muted = true;
 
-      // Diferencia camera vs screen share pelo source
       if (track.source === Track.Source.ScreenShare) {
         el.style.objectFit = "contain";
         el.style.background = "#000";
-        peer.screenElement = el;
-        this.onScreenShareStarted?.(participant.identity, el);
+
+        // Se havia um "stop" pendente, cancela — é só uma re-subscription
+        if (peer.screenStopTimer) {
+          console.log("[spatial] re-subscribe rápido de screen share, cancelando stop");
+          clearTimeout(peer.screenStopTimer);
+          peer.screenStopTimer = undefined;
+
+          // Atualiza o elemento mas NÃO dispara "started" de novo (UI mantém o stream antigo brevemente)
+          peer.screenElement?.remove();
+          peer.screenElement = el;
+          this.onScreenShareStarted?.(participant.identity, el);
+        } else {
+          // Primeira vez (ou após stop confirmado)
+          peer.screenElement = el;
+          this.onScreenShareStarted?.(participant.identity, el);
+        }
       } else {
         el.style.borderRadius = "8px";
         peer.cameraElement = el;
@@ -159,9 +177,17 @@ export class SpatialAudio {
       peer.audioElement = undefined;
     } else if (track.kind === Track.Kind.Video) {
       if (track.source === Track.Source.ScreenShare) {
-        peer.screenElement?.remove();
-        peer.screenElement = undefined;
-        this.onScreenShareStopped?.(participant.identity);
+        // DEBOUNCE: aguarda um tempo antes de confirmar "stopped"
+        // Se vier um novo "subscribed" antes do timer disparar, o stop é cancelado
+        if (peer.screenStopTimer) clearTimeout(peer.screenStopTimer);
+
+        peer.screenStopTimer = window.setTimeout(() => {
+          console.log("[spatial] screen share stop confirmado:", participant.identity);
+          peer.screenElement?.remove();
+          peer.screenElement = undefined;
+          peer.screenStopTimer = undefined;
+          this.onScreenShareStopped?.(participant.identity);
+        }, SCREEN_STOP_DEBOUNCE_MS);
       } else {
         peer.cameraElement?.remove();
         peer.cameraElement = undefined;
@@ -203,16 +229,10 @@ export class SpatialAudio {
     await this.localParticipant.setCameraEnabled(enabled);
   }
 
-  /**
-   * Liga/desliga compartilhamento de tela.
-   * O navegador vai abrir o seletor de tela quando enabled=true.
-   */
   public async setScreenShareEnabled(enabled: boolean): Promise<boolean> {
     if (!this.localParticipant) return false;
     try {
-      await this.localParticipant.setScreenShareEnabled(enabled, {
-        audio: false,
-      });
+      await this.localParticipant.setScreenShareEnabled(enabled, { audio: false });
       return true;
     } catch (err: any) {
       console.error("[spatial] erro screen share:", err);
@@ -239,6 +259,7 @@ export class SpatialAudio {
 
   public disconnect() {
     this.peers.forEach((peer) => {
+      if (peer.screenStopTimer) clearTimeout(peer.screenStopTimer);
       peer.audioElement?.remove();
       peer.cameraElement?.remove();
       peer.screenElement?.remove();
