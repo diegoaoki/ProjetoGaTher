@@ -143,11 +143,29 @@ export default function App() {
   }
 
   function logout() {
-    if (conn === "connected") disconnect();
+    if (conn === "connected") {
+      roomRef.current?.leave();
+      cleanupGame();
+    }
+    setConn("idle");
     clearToken();
     setSession(null);
     setAuthState("anonymous");
+    autoConnectedRef.current = false;
   }
+
+  // Auto-connect: assim que autentica, vai direto pro escritório (sem passar
+  // por tela intermediária de customização). Pra editar avatar, usa o modal 🎨.
+  const autoConnectedRef = useRef(false);
+  useEffect(() => {
+    if (authState === "authed" && conn === "idle" && !autoConnectedRef.current) {
+      autoConnectedRef.current = true;
+      connect();
+    }
+    if (authState !== "authed") {
+      autoConnectedRef.current = false;
+    }
+  }, [authState, conn]);
 
   useEffect(() => {
     if (conn !== "connected" || !roomRef.current || !containerRef.current) return;
@@ -517,85 +535,46 @@ export default function App() {
     return <LoginScreen httpUrl={HTTP_URL} onAuthed={handleAuthed} />;
   }
 
-  // === Render: customização (autenticado, ainda não conectado) ===
-  if (conn !== "connected") {
+  // === Render: erro de conexão (auth OK mas algo falhou no caminho) ===
+  if (conn === "error") {
     return (
       <div style={overlayStyle}>
         <div style={cardStyle}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <h1 style={{ margin: 0, fontSize: 28 }}>Virtual Office</h1>
-            <button onClick={logout} style={{ ...iconBtnStyle(false), fontSize: 12 }} title="Sair da conta">
-              Sair
+          <h1 style={{ margin: "0 0 8px", fontSize: 22 }}>Não consegui conectar</h1>
+          <p style={{ margin: "0 0 16px", fontSize: 13, color: "#f87171" }}>{errorMsg}</p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={() => {
+                setErrorMsg("");
+                autoConnectedRef.current = false;
+                setConn("idle");
+              }}
+              style={buttonStyle}
+            >
+              Tentar de novo
+            </button>
+            <button onClick={logout} style={{ ...buttonStyle, background: "#334155", color: "#e2e8f0" }}>
+              Sair da conta
             </button>
           </div>
-          <p style={{ margin: "0 0 20px", opacity: 0.7, fontSize: 14 }}>
-            Olá, <strong>{session.profile.displayName}</strong>. Confirme seu avatar e entre.
+        </div>
+      </div>
+    );
+  }
+
+  // === Render: conectando (auth OK, esperando Colyseus + LiveKit) ===
+  if (conn !== "connected") {
+    return (
+      <div style={overlayStyle}>
+        <div style={{ ...cardStyle, textAlign: "center" }}>
+          <h1 style={{ margin: "0 0 8px", fontSize: 22 }}>Entrando no escritório</h1>
+          <p style={{ margin: "0 0 8px", opacity: 0.7, fontSize: 13 }}>
+            Olá, <strong>{session.profile.displayName}</strong>
           </p>
-
-          <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
-            <canvas
-              ref={avatarPreviewRef}
-              width={64}
-              height={80}
-              style={{
-                imageRendering: "pixelated",
-                width: 96,
-                height: 120,
-                background: "#0f172a",
-                borderRadius: 8,
-                border: "1px solid #334155",
-                padding: 8,
-              }}
-            />
-          </div>
-
-          <label style={labelStyle}>
-            Camisa
-            {profileSaveStatus === "saving" && <span style={saveStatusStyle("saving")}>Salvando…</span>}
-            {profileSaveStatus === "saved" && <span style={saveStatusStyle("saved")}>✓ Salvo</span>}
-            {profileSaveStatus === "error" && <span style={saveStatusStyle("error")}>✕ Falha ao salvar</span>}
-          </label>
-          <div style={paletteStyle}>
-            {SHIRT_COLORS.map((c) => (
-              <button
-                key={c}
-                onClick={() => selectAndSaveColor("bodyColor", c)}
-                style={{
-                  ...swatchStyle, background: c,
-                  outline: bodyColor === c ? "2px solid #fff" : "none",
-                  outlineOffset: 2,
-                }}
-                title={c}
-              />
-            ))}
-          </div>
-
-          <label style={labelStyle}>Cabelo</label>
-          <div style={paletteStyle}>
-            {HAIR_COLORS.map((c) => (
-              <button
-                key={c}
-                onClick={() => selectAndSaveColor("hairColor", c)}
-                style={{
-                  ...swatchStyle, background: c,
-                  outline: hairColor === c ? "2px solid #fff" : "none",
-                  outlineOffset: 2,
-                }}
-                title={c}
-              />
-            ))}
-          </div>
-
-          <button
-            onClick={connect}
-            disabled={conn === "connecting" || profileSaveStatus === "saving"}
-            style={{ ...buttonStyle, marginTop: 16 }}
-          >
-            {conn === "connecting" ? (audioStatus || "Conectando...") : "Entrar no escritório"}
-          </button>
-
-          {errorMsg && <p style={{ color: "#f87171", marginTop: 16, fontSize: 13 }}>{errorMsg}</p>}
-          <p style={{ marginTop: 12, fontSize: 11, opacity: 0.5 }}>⚠ Vai pedir acesso a microfone e câmera.</p>
+          <p style={{ margin: "12px 0", opacity: 0.7, fontSize: 13, color: "#fbbf24" }}>
+            {audioStatus || "Conectando..."}
+          </p>
+          <p style={{ marginTop: 12, fontSize: 11, opacity: 0.5 }}>⚠ Pode pedir acesso a microfone e câmera.</p>
         </div>
       </div>
     );
@@ -614,7 +593,7 @@ export default function App() {
           <button onClick={toggleCam} style={iconBtnStyle(camOn)} title="Câmera">{camOn ? "📹" : "🚫"}</button>
           <button onClick={toggleScreen} style={iconBtnStyle(screenOn)} title="Compartilhar tela">{screenOn ? "🛑" : "🖥️"}</button>
           <button onClick={() => setEditingAvatar(true)} style={iconBtnStyle(false)} title="Editar avatar">🎨</button>
-          <button onClick={disconnect} style={{ ...iconBtnStyle(false), background: "#7f1d1d" }}>Sair</button>
+          <button onClick={logout} style={{ ...iconBtnStyle(false), background: "#7f1d1d" }} title="Sair da conta">Sair</button>
         </div>
         {audioStatus && <div style={{ fontSize: 11, opacity: 0.8, marginTop: 6, color: "#fbbf24" }}>{audioStatus}</div>}
       </div>
