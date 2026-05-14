@@ -19,6 +19,26 @@ interface JoinOptions {
   hairColor?: string;
 }
 
+/**
+ * Spawn points conhecidos como SEGUROS (longe de qualquer móvel).
+ * Verificados manualmente contra o OfficeLayout do cliente.
+ * Adicione mais se quiser distribuir melhor a entrada.
+ */
+const SPAWN_POINTS: Array<[number, number]> = [
+  [450, 420],  // centro-superior (entre fileiras de mesas)
+  [400, 420],
+  [500, 420],
+  [550, 420],
+  [380, 680],  // abaixo das mesas inferiores
+  [480, 680],
+  [580, 680],
+  [380, 720],
+  [480, 720],
+  [580, 720],
+  [620, 420],
+  [340, 680],
+];
+
 export class OfficeRoom extends Room<OfficeState> {
   maxClients = 50;
   private readonly MAX_DELTA = 100;
@@ -54,8 +74,14 @@ export class OfficeRoom extends Room<OfficeState> {
     player.name = options.name?.slice(0, 24) || `Convidado-${client.sessionId.slice(0, 4)}`;
     player.color = (options.color && /^#[0-9a-fA-F]{6}$/.test(options.color)) ? options.color : this.randomColor();
     player.hairColor = (options.hairColor && /^#[0-9a-fA-F]{6}$/.test(options.hairColor)) ? options.hairColor : "#3b2c20";
-    player.x = 400 + Math.floor(Math.random() * 200);
-    player.y = 400 + Math.floor(Math.random() * 200);
+
+    // Spawn em ponto seguro pré-definido (rotacionando entre os pontos disponíveis)
+    const spawnIdx = this.state.players.size % SPAWN_POINTS.length;
+    const [sx, sy] = SPAWN_POINTS[spawnIdx];
+    // Pequeno jitter pra evitar empilhar avatares
+    player.x = sx + Math.floor(Math.random() * 20) - 10;
+    player.y = sy + Math.floor(Math.random() * 20) - 10;
+
     this.state.players.set(client.sessionId, player);
   }
 
