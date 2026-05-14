@@ -4,6 +4,7 @@ import { Client, Room } from "colyseus.js";
 import { OfficeScene } from "./OfficeScene";
 import { SpatialAudio } from "./SpatialAudio";
 import LoginScreen from "./LoginScreen";
+import AdminPanel from "./AdminPanel";
 import {
   AuthSession,
   clearToken,
@@ -112,6 +113,9 @@ export default function App() {
 
   // === Indicador de auto-save da tela de customização ===
   const [profileSaveStatus, setProfileSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
+  // === Painel de admin ===
+  const [adminOpen, setAdminOpen] = useState(false);
 
   // Auto-login: ao montar, tenta validar JWT salvo
   useEffect(() => {
@@ -593,6 +597,9 @@ export default function App() {
           <button onClick={toggleCam} style={iconBtnStyle(camOn)} title="Câmera">{camOn ? "📹" : "🚫"}</button>
           <button onClick={toggleScreen} style={iconBtnStyle(screenOn)} title="Compartilhar tela">{screenOn ? "🛑" : "🖥️"}</button>
           <button onClick={() => setEditingAvatar(true)} style={iconBtnStyle(false)} title="Editar avatar">🎨</button>
+          {session.user.isAdmin && (
+            <button onClick={() => setAdminOpen(true)} style={iconBtnStyle(false)} title="Painel de administração">🛡️</button>
+          )}
           <button onClick={logout} style={{ ...iconBtnStyle(false), background: "#7f1d1d" }} title="Sair da conta">Sair</button>
         </div>
         {audioStatus && <div style={{ fontSize: 11, opacity: 0.8, marginTop: 6, color: "#fbbf24" }}>{audioStatus}</div>}
@@ -638,6 +645,15 @@ export default function App() {
             ✕ Fechar
           </button>
         </div>
+      )}
+
+      {adminOpen && session.user.isAdmin && (
+        <AdminPanel
+          httpUrl={HTTP_URL}
+          token={session.token}
+          currentUserId={session.user.id}
+          onClose={() => setAdminOpen(false)}
+        />
       )}
 
       {editingAvatar && (

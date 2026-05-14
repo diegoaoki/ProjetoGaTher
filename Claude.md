@@ -77,6 +77,7 @@ Escritório virtual com mundo 2D multiplayer, áudio/vídeo espacial, salas, e f
 - `ALLOWED_ORIGINS=https://projeto-ga-ther.vercel.app` (CORS)
 - `DATABASE_URL` — injetado pelo plugin Postgres do Railway
 - `JWT_SECRET` — segredo HS256 (mín. 16 chars). Gerar com `openssl rand -hex 32`
+- `ADMIN_EMAILS` — lista CSV de emails admin (ex: `foo@x.com,bar@y.com`). Define quem vê 🛡️ no HUD e pode usar `/admin/users/*`
 - `MONITOR_USER` + `MONITOR_PASS` — basic auth do dashboard `/colyseus`
 - `LIVEKIT_URL=wss://gatherprivate-wj37bvum.livekit.cloud`
 - `LIVEKIT_API_KEY` (secret)
@@ -133,6 +134,14 @@ npm run build      # build de produção
 5. Sem domínio restrito no email (decisão consciente — uso interno, mas qualquer email serve).
 6. `PATCH /profile` (autenticado) atualiza displayName/bodyColor/hairColor. Modal "🎨 Editar avatar" no HUD usa esse endpoint e refresca o Player na room ativa.
 7. Logout: limpa JWT, derruba Colyseus + LiveKit.
+
+### Administração de usuários
+- Quem está em `ADMIN_EMAILS` (env) vê o botão 🛡️ no HUD em jogo.
+- Endpoints: `GET /admin/users` (lista), `PATCH /admin/users/:id/password` (reset), `DELETE /admin/users/:id` (apagar).
+- Middleware `requireAdmin` em `server/src/auth/admin.ts` confere o email do JWT contra a env.
+- Auto-delete é **bloqueado** no server (admin não pode apagar a própria conta) — evita travar o sistema.
+- Reset de senha é feito definindo a nova senha manualmente; o admin precisa transmitir por outro canal (não tem fluxo de "esqueci a senha" por email).
+- Apagar usuário cascateia pra `profiles` via FK `ON DELETE CASCADE`. Sessão JWT existente do user apagado vira inválida no próximo `/auth/me`.
 
 ### Conexão de um novo jogador (autenticado)
 1. Cliente, já com JWT válido, mostra preview do avatar (cores vindas do server). Pode ajustar antes de entrar.

@@ -7,6 +7,7 @@ import { users, profiles } from "../db/schema";
 import { hashPassword, verifyPassword } from "./password";
 import { signAuthToken } from "./jwt";
 import { requireAuth } from "./middleware";
+import { isAdminEmail, requireAdmin } from "./admin";
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
@@ -86,7 +87,11 @@ export function createAuthRouter() {
         .returning();
 
       const token = signAuthToken({ sub: user.id, email: user.email });
-      return res.status(201).json({ token, user: { id: user.id, email: user.email }, profile });
+      return res.status(201).json({
+        token,
+        user: { id: user.id, email: user.email, isAdmin: isAdminEmail(user.email) },
+        profile,
+      });
     } catch (err: any) {
       console.error("[/auth/register] erro:", err);
       return res.status(500).json({ error: "Falha ao registrar" });
@@ -118,7 +123,11 @@ export function createAuthRouter() {
       const [profile] = await db.select().from(profiles).where(eq(profiles.userId, user.id)).limit(1);
 
       const token = signAuthToken({ sub: user.id, email: user.email });
-      return res.json({ token, user: { id: user.id, email: user.email }, profile });
+      return res.json({
+        token,
+        user: { id: user.id, email: user.email, isAdmin: isAdminEmail(user.email) },
+        profile,
+      });
     } catch (err: any) {
       console.error("[/auth/login] erro:", err);
       return res.status(500).json({ error: "Falha ao autenticar" });
@@ -138,12 +147,110 @@ export function createAuthRouter() {
       if (!user) return res.status(401).json({ error: "Usuário não encontrado" });
 
       const [profile] = await db.select().from(profiles).where(eq(profiles.userId, userId)).limit(1);
-      return res.json({ user, profile });
+      return res.json({
+        user: { id: user.id, email: user.email, isAdmin: isAdminEmail(user.email) },
+        profile,
+      });
     } catch (err: any) {
       console.error("[/auth/me] erro:", err);
       return res.status(500).json({ error: "Falha ao buscar usuário" });
     }
   });
+
+  // ============================================================
+  //  Endpoints admin (montados aqui pra reusar limiter + middleware)
+  //  Lista de admins definida pela env ADMIN_EMAILS.
+  // ============================================================
+
+  const resetPasswordSchema = z.object({
+    newPassword: z.string().min(8).max(128),
+  });
+
+  router.get("/admin/users", authReadLimiter, requireAuth, requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const db = getDb();
+      const rows = await db
+        .select({
+          id: users.id,
+          email: users.email,
+          createdAt: users.createdAt,
+        })
+        .from(users)
+        .orderBy(users.createdAt);
+
+      // Enriquece com displayName do profile, em uma única query separada
+      const profileRows = await db.select().from(profiles);
+      const profileById = new Map(profileRows.map((p) => [p.userId, p]));
+
+      const list = rows.map((u) => ({
+        ...u,
+        isAdmin: isAdminEmail(u.email),
+        displayName: profileById.get(u.id)?.displayName ?? null,
+      }));
+      return res.json({ users: list });
+    } catch (err: any) {
+      console.error("[/admin/users GET] erro:", err);
+      return res.status(500).json({ error: "Falha ao listar usuários" });
+    }
+  });
+
+  router.patch(
+    "/admin/users/:id/password",
+    authReadLimiter,
+    requireAuth,
+    requireAdmin,
+    async (req: Request, res: Response) => {
+      const parsed = resetPasswordSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: formatZodError(parsed.error) });
+
+      const targetId = req.params.id;
+      try {
+        const db = getDb();
+        const passwordHash = await hashPassword(parsed.data.newPassword);
+        const [updated] = await db
+          .update(users)
+          .set({ passwordHash })
+          .where(eq(users.id, targetId))
+          .returning({ id: users.id, email: users.email });
+
+        if (!updated) return res.status(404).json({ error: "Usuário não encontrado" });
+        console.log(`[admin] ${req.auth!.email} resetou senha de ${updated.email}`);
+        return res.json({ ok: true });
+      } catch (err: any) {
+        console.error("[/admin/users/:id/password] erro:", err);
+        return res.status(500).json({ error: "Falha ao resetar senha" });
+      }
+    }
+  );
+
+  router.delete(
+    "/admin/users/:id",
+    authReadLimiter,
+    requireAuth,
+    requireAdmin,
+    async (req: Request, res: Response) => {
+      const targetId = req.params.id;
+      // Bloqueia auto-delete (admin se trancando do sistema).
+      if (targetId === req.auth!.sub) {
+        return res.status(400).json({ error: "Você não pode apagar a própria conta" });
+      }
+      try {
+        const db = getDb();
+        // profiles tem FK com ON DELETE CASCADE — apaga junto.
+        const [deleted] = await db
+          .delete(users)
+          .where(eq(users.id, targetId))
+          .returning({ id: users.id, email: users.email });
+
+        if (!deleted) return res.status(404).json({ error: "Usuário não encontrado" });
+        console.log(`[admin] ${req.auth!.email} apagou ${deleted.email}`);
+        return res.json({ ok: true });
+      } catch (err: any) {
+        console.error("[/admin/users/:id DELETE] erro:", err);
+        return res.status(500).json({ error: "Falha ao apagar usuário" });
+      }
+    }
+  );
 
   router.patch("/profile", authReadLimiter, requireAuth, async (req: Request, res: Response) => {
     const parsed = profilePatchSchema.safeParse(req.body);

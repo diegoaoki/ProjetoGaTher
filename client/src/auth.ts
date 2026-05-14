@@ -8,6 +8,15 @@ const TOKEN_KEY = "virtual-office-jwt-v1";
 export interface AuthUser {
   id: string;
   email: string;
+  isAdmin?: boolean;
+}
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  displayName: string | null;
+  isAdmin: boolean;
+  createdAt: string;
 }
 
 export interface AuthProfile {
@@ -107,4 +116,37 @@ export async function updateProfile(
   if (!resp.ok) throw new Error(await parseError(resp));
   const data = await resp.json();
   return data.profile;
+}
+
+// ============ Admin ============
+
+export async function listUsers(httpUrl: string, token: string): Promise<AdminUser[]> {
+  const resp = await fetch(httpUrl + "/admin/users", {
+    headers: { Authorization: "Bearer " + token },
+  });
+  if (!resp.ok) throw new Error(await parseError(resp));
+  const data = await resp.json();
+  return data.users;
+}
+
+export async function resetUserPassword(
+  httpUrl: string,
+  token: string,
+  userId: string,
+  newPassword: string
+): Promise<void> {
+  const resp = await fetch(httpUrl + `/admin/users/${userId}/password`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+    body: JSON.stringify({ newPassword }),
+  });
+  if (!resp.ok) throw new Error(await parseError(resp));
+}
+
+export async function deleteUser(httpUrl: string, token: string, userId: string): Promise<void> {
+  const resp = await fetch(httpUrl + `/admin/users/${userId}`, {
+    method: "DELETE",
+    headers: { Authorization: "Bearer " + token },
+  });
+  if (!resp.ok) throw new Error(await parseError(resp));
 }
