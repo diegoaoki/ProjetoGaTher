@@ -63,6 +63,14 @@ export class OfficeScene extends Phaser.Scene {
   private myDeskId: string | null = null;
   private keyE!: Phaser.Input.Keyboard.Key;
 
+  // === Pan da câmera com mouse ===
+  private cameraFollowing = true;
+  private isPanning = false;
+  private panStartScreenX = 0;
+  private panStartScreenY = 0;
+  private panStartScrollX = 0;
+  private panStartScrollY = 0;
+
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd!: { W: Phaser.Input.Keyboard.Key; A: Phaser.Input.Keyboard.Key; S: Phaser.Input.Keyboard.Key; D: Phaser.Input.Keyboard.Key };
 
@@ -89,6 +97,9 @@ export class OfficeScene extends Phaser.Scene {
   public onNearbyDeskChange?: (info: { deskId: string; isMine: boolean; ownerName?: string } | null) => void;
   public onMyDeskChange?: (deskId: string | null) => void;
   public onDeskError?: (msg: string) => void;
+
+  // === Callback de câmera (pra App.tsx mostrar hint "C pra centralizar") ===
+  public onCameraFollowingChange?: (following: boolean) => void;
 
   constructor() {
     super({ key: "OfficeScene" });
@@ -119,6 +130,28 @@ export class OfficeScene extends Phaser.Scene {
     this.keyE = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.E);
     this.keyE.on("down", () => this.handleClaimKey());
 
+    // Tecla C: recentraliza câmera no avatar (volta a seguir)
+    this.input.keyboard!.addKey("C").on("down", () => this.recenterCamera());
+
+    // Pan com botão direito do mouse — não interfere com cliques de UI nem com tecla E
+    this.input.mouse?.disableContextMenu();
+    this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+      if (pointer.rightButtonDown()) {
+        this.startPan(pointer.x, pointer.y);
+      }
+    });
+    this.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+      if (this.isPanning && pointer.rightButtonDown()) {
+        this.updatePan(pointer.x, pointer.y);
+      } else if (this.isPanning && !pointer.rightButtonDown()) {
+        // Soltou o botão fora da área (ex: drag pra fora do canvas)
+        this.isPanning = false;
+      }
+    });
+    this.input.on("pointerup", () => {
+      this.isPanning = false;
+    });
+
     // Erros vindos do server (mesa já reservada, mesa inválida, etc)
     this.room.onMessage("desk:error", (msg: { error: string }) => {
       this.onDeskError?.(msg?.error || "Falha na ação de mesa");
@@ -126,6 +159,35 @@ export class OfficeScene extends Phaser.Scene {
 
     this.cameras.main.setBackgroundColor("#1a1a2e");
     this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
+  }
+
+  private startPan(screenX: number, screenY: number) {
+    this.isPanning = true;
+    this.panStartScreenX = screenX;
+    this.panStartScreenY = screenY;
+    this.panStartScrollX = this.cameras.main.scrollX;
+    this.panStartScrollY = this.cameras.main.scrollY;
+    if (this.cameraFollowing) {
+      this.cameraFollowing = false;
+      this.cameras.main.stopFollow();
+      this.onCameraFollowingChange?.(false);
+    }
+  }
+
+  private updatePan(screenX: number, screenY: number) {
+    const zoom = this.cameras.main.zoom || 1;
+    const dx = (screenX - this.panStartScreenX) / zoom;
+    const dy = (screenY - this.panStartScreenY) / zoom;
+    this.cameras.main.scrollX = this.panStartScrollX - dx;
+    this.cameras.main.scrollY = this.panStartScrollY - dy;
+  }
+
+  private recenterCamera() {
+    if (!this.myContainer) return;
+    if (this.cameraFollowing) return;
+    this.cameraFollowing = true;
+    this.cameras.main.startFollow(this.myContainer, true, 0.1, 0.1);
+    this.onCameraFollowingChange?.(true);
   }
 
   public setRemoteSpeaking(sessionId: string, speaking: boolean) {
@@ -526,6 +588,11 @@ export class OfficeScene extends Phaser.Scene {
 
     const wasMoving = this.isMoving;
     this.isMoving = vx !== 0 || vy !== 0;
+
+    // Se o user mexer no avatar enquanto a câmera tá deslocada (panning), volta a seguir.
+    if (this.isMoving && !this.cameraFollowing) {
+      this.recenterCamera();
+    }
 
     if (this.isMoving) {
       const dx = vx * SPEED * dt;

@@ -125,6 +125,9 @@ export default function App() {
   // Toast efêmero — usado pra confirmação de claim/release e mensagens de erro do server
   const [deskToast, setDeskToast] = useState<{ text: string; tone: "info" | "error" } | null>(null);
 
+  // === Câmera (pan com botão direito) ===
+  const [cameraFollowing, setCameraFollowing] = useState(true);
+
   // === Sidebar de usuários online ===
   const [sidebarOpen, setSidebarOpen] = useState(false);
   interface OnlinePlayer {
@@ -261,6 +264,9 @@ export default function App() {
           });
           spatialRef.current.updateVolumes(myPos, mapped);
         };
+
+        // Câmera (pan com botão direito)
+        scene.onCameraFollowingChange = (following) => setCameraFollowing(following);
 
         // Mesas: hint de proximidade + toasts de claim/release/erro
         scene.onNearbyDeskChange = (info) => setNearbyDesk(info);
@@ -790,7 +796,15 @@ export default function App() {
         display: "flex", flexDirection: "column", gap: 8, zIndex: 10,
       }} />
 
-      <div style={hintStyle}>WASD/setas • chegue perto pra conversar • aproxime da TV pra ver apresentações</div>
+      <div style={hintStyle}>
+        WASD/setas pra mover • <kbd style={kbdStyle}>botão direito</kbd> arrasta a câmera • <kbd style={kbdStyle}>C</kbd> centraliza
+      </div>
+
+      {!cameraFollowing && (
+        <div style={cameraHintStyle}>
+          Câmera deslocada — aperte <kbd style={kbdStyle}>C</kbd> ou mova com <kbd style={kbdStyle}>WASD</kbd> pra voltar
+        </div>
+      )}
 
       {nearbyDesk && (
         <div style={deskHintStyle}>
@@ -1057,6 +1071,12 @@ const deskHintStyle: React.CSSProperties = {
   background: "#1e293bee", border: "1px solid #fbbf24",
   borderRadius: 8, padding: "6px 12px",
   fontSize: 13, zIndex: 12,
+};
+const cameraHintStyle: React.CSSProperties = {
+  position: "absolute", top: 80, left: 16,
+  background: "#1e293bee", border: "1px solid #60a5fa",
+  borderRadius: 8, padding: "6px 12px",
+  fontSize: 12, zIndex: 12, maxWidth: 280,
 };
 const kbdStyle: React.CSSProperties = {
   display: "inline-block",
