@@ -128,7 +128,14 @@ export class OfficeRoom extends Room<OfficeState> {
     };
   }
 
-  onJoin(client: Client, _options: JoinOptions, auth: AuthData) {
+  onJoin(client: Client, _options: JoinOptions, auth?: AuthData) {
+    // auth é tipado como opcional pra bater com a assinatura do Colyseus,
+    // mas na prática só chega aqui se onAuth retornou — então fail-fast se faltar.
+    if (!auth) {
+      console.error(`[OfficeRoom] ${client.sessionId} entrou sem auth — bug?`);
+      client.leave();
+      return;
+    }
     console.log(`[OfficeRoom] ${client.sessionId} entrou (user=${auth.email})`);
 
     // Anexa dados de auth na conexão pra reuso em onMessage/onLeave
