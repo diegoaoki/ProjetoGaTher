@@ -20,6 +20,10 @@ const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
 
 const app = express();
 
+// Railway é proxy reverso e injeta X-Forwarded-For. Confiar em 1 hop pro
+// express-rate-limit identificar IP real do client (senão todo mundo bate no mesmo limite).
+app.set("trust proxy", 1);
+
 app.use(
   cors({
     origin: allowedOrigins.length > 0 ? allowedOrigins : true,
