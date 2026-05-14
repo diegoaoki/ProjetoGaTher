@@ -25,13 +25,12 @@ const SPEED = 180;
 const SYNC_INTERVAL = 50;
 const WORLD_W = 1024;
 const WORLD_H = 1024;
-const PLAYER_HALF = 12; // raio de colisão
+const PLAYER_HALF = 12;
 
 export class OfficeScene extends Phaser.Scene {
   private room!: Room;
   private myId!: string;
 
-  // Aparência do meu avatar (vindo do localStorage / tela de customização)
   private myBodyColor = "#4ade80";
   private myHairColor = "#3b2c20";
 
@@ -52,10 +51,10 @@ export class OfficeScene extends Phaser.Scene {
 
   private layout = getDefaultLayout();
 
-  // TV de apresentação
   private tvSprite?: Phaser.GameObjects.Image;
-  private tvScreen?: Phaser.GameObjects.Rectangle; // overlay quando ativa
-  private tvVideoDom?: Phaser.GameObjects.DOMElement; // wrapper do <video> dentro do canvas
+  private tvScreen?: Phaser.GameObjects.Rectangle;
+  private tvVideoDom?: Phaser.GameObjects.DOMElement;
+  private tvVideoElement?: HTMLVideoElement; // referência direta ao <video> dentro do DOM
   private tvX = 0;
   private tvY = 0;
   private currentZone: string | null = null;
@@ -85,7 +84,6 @@ export class OfficeScene extends Phaser.Scene {
   create() {
     createFloorTextures(this);
     createFurnitureTextures(this);
-
     this.drawFloor();
     this.drawFurniture();
     this.setupStateListeners();
@@ -107,34 +105,50 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   /**
-   * Mostra um <video> HTML como tela da TV.
-   * Chamado pelo App quando alguém começa a compartilhar tela.
+   * Mostra um MediaStream como tela da TV.
+   *
+   * IMPORTANTE: recebemos o MediaStream diretamente (não o elemento <video>)
+   * pra evitar problemas de cloneNode que não copia srcObject.
    */
-  public showScreenShareOnTV(videoElement: HTMLVideoElement) {
-    if (!this.tvSprite) return;
-
-    // Configura o video element pra encaixar na tela da TV
-    videoElement.style.position = "absolute";
-    videoElement.style.width = "136px"; // tela da TV ~68px lógicos * 2
-    videoElement.style.height = "52px";
-    videoElement.style.objectFit = "contain";
-    videoElement.style.background = "#000";
-    videoElement.style.pointerEvents = "none";
-
-    // Remove DOM anterior se houver
-    if (this.tvVideoDom) {
-      this.tvVideoDom.destroy();
-      this.tvVideoDom = undefined;
+  public showScreenShareOnTV(stream: MediaStream) {
+    if (!this.tvSprite) {
+      console.warn("[scene] TV sprite não encontrado");
+      return;
     }
 
-    // Adiciona como DOMElement do Phaser, posicionado na tela da TV
-    // Tela do TV é centrada em (tvX, tvY-13) aprox
-    const dom = this.add.dom(this.tvX, this.tvY - 14, videoElement);
+    // Remove qualquer vídeo anterior
+    this.hideScreenShareFromTV();
+
+    // Cria novo <video> e anexa o stream
+    const videoEl = document.createElement("video");
+    videoEl.srcObject = stream;
+    videoEl.autoplay = true;
+    videoEl.muted = true;
+    videoEl.playsInline = true;
+    videoEl.style.width = "136px";
+    videoEl.style.height = "52px";
+    videoEl.style.objectFit = "contain";
+    videoEl.style.background = "#000";
+    videoEl.style.pointerEvents = "none";
+    videoEl.style.display = "block";
+
+    // Força play (alguns browsers bloqueiam autoplay)
+    videoEl.play().catch((err) => {
+      console.warn("[scene] play() na TV falhou:", err);
+    });
+
+    this.tvVideoElement = videoEl;
+
+    // Adiciona como DOMElement do Phaser na posição da TV
+    const dom = this.add.dom(this.tvX, this.tvY - 14, videoEl);
     dom.setDepth(this.tvY + 1);
     this.tvVideoDom = dom;
 
-    // Pisca o LED da TV em verde (overlay)
-    if (this.tvScreen) this.tvScreen.destroy();
+    // LED indicador verde piscando
+    if (this.tvScreen) {
+      this.tweens.killTweensOf(this.tvScreen);
+      this.tvScreen.destroy();
+    }
     const ledX = this.tvX + 30;
     const ledY = this.tvY + 4;
     this.tvScreen = this.add.rectangle(ledX, ledY, 4, 4, 0x16a34a);
@@ -149,6 +163,10 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   public hideScreenShareFromTV() {
+    if (this.tvVideoElement) {
+      this.tvVideoElement.srcObject = null;
+      this.tvVideoElement = undefined;
+    }
     if (this.tvVideoDom) {
       this.tvVideoDom.destroy();
       this.tvVideoDom = undefined;
@@ -223,7 +241,6 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   private createMyAvatar(player: any) {
-    // Usa as cores customizadas que vieram do init()
     this.myTextureKey = `avatar_${this.myBodyColor}_${this.myHairColor}`;
     createAvatarTexture(this, this.myTextureKey, this.myBodyColor, this.myHairColor);
     createAvatarAnimations(this, this.myTextureKey);
@@ -251,7 +268,6 @@ export class OfficeScene extends Phaser.Scene {
 
     this.mySprite.play(`${this.myTextureKey}_down_idle`);
 
-    // Manda minhas cores pro server pra propagar aos outros
     this.room.send("appearance", {
       bodyColor: this.myBodyColor,
       hairColor: this.myHairColor,
@@ -259,7 +275,6 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   private createRemoteAvatar(sessionId: string, player: any) {
-    // Lê cor do estado (vem do servidor). Fallback pra color/random se cliente antigo.
     const bodyColor = player.color || "#60a5fa";
     const hairColor = player.hairColor || "#3b2c20";
 
@@ -295,30 +310,19 @@ export class OfficeScene extends Phaser.Scene {
     });
   }
 
-  /**
-   * Tenta mover pra (nx, ny). Se colidir, tenta deslizar nos eixos
-   * separadamente (movimento mais natural: bate na parede mas continua andando paralelo).
-   */
   private tryMove(currentX: number, currentY: number, dx: number, dy: number): { x: number; y: number } {
     const nextX = currentX + dx;
     const nextY = currentY + dy;
 
-    // Tenta movimento completo
     if (!checkCollision(nextX, nextY, PLAYER_HALF, this.layout)) {
       return { x: nextX, y: nextY };
     }
-
-    // Tenta só X
     if (dx !== 0 && !checkCollision(nextX, currentY, PLAYER_HALF, this.layout)) {
       return { x: nextX, y: currentY };
     }
-
-    // Tenta só Y
     if (dy !== 0 && !checkCollision(currentX, nextY, PLAYER_HALF, this.layout)) {
       return { x: currentX, y: nextY };
     }
-
-    // Bloqueado total
     return { x: currentX, y: currentY };
   }
 
@@ -346,19 +350,10 @@ export class OfficeScene extends Phaser.Scene {
     if (this.isMoving) {
       const dx = vx * SPEED * dt;
       const dy = vy * SPEED * dt;
-
       const moved = this.tryMove(this.myContainer.x, this.myContainer.y, dx, dy);
-
-      // Clamp ao mundo
       this.myContainer.x = Phaser.Math.Clamp(moved.x, PLAYER_HALF, WORLD_W - PLAYER_HALF);
       this.myContainer.y = Phaser.Math.Clamp(moved.y, PLAYER_HALF, WORLD_H - PLAYER_HALF);
       this.myContainer.setDepth(this.myContainer.y);
-
-      // Se não conseguiu mover nada, marca como parado pra animação
-      if (Math.abs(moved.x - (this.myContainer.x - 0)) < 0.01 &&
-          Math.abs(this.myContainer.x - moved.x) > 100) {
-        // edge case, ignora
-      }
     }
 
     if (newDir !== this.myDirection || this.isMoving !== wasMoving) {
@@ -378,7 +373,6 @@ export class OfficeScene extends Phaser.Scene {
       });
     }
 
-    // Detecta mudança de zona (presentation)
     const zone = getCurrentZone(this.myContainer.x, this.myContainer.y, this.layout);
     const zoneId = zone?.id || null;
     if (zoneId !== this.currentZone) {
@@ -386,12 +380,10 @@ export class OfficeScene extends Phaser.Scene {
       this.onZoneChange?.(zoneId);
     }
 
-    // Interpolação + animação dos remotos
     const lerp = 0.2;
     this.remotePlayers.forEach((rp) => {
       const prevX = rp.container.x;
       const prevY = rp.container.y;
-
       rp.container.x = Phaser.Math.Linear(rp.container.x, rp.targetX, lerp);
       rp.container.y = Phaser.Math.Linear(rp.container.y, rp.targetY, lerp);
       rp.container.setDepth(rp.container.y);

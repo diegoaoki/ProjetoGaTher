@@ -28,7 +28,6 @@ function resolveHttpUrl(): string {
 const SERVER_URL = resolveServerUrl();
 const HTTP_URL = resolveHttpUrl();
 
-// Paletas de cores pra avatar
 const SHIRT_COLORS = [
   "#4ade80", "#60a5fa", "#f472b6", "#fbbf24",
   "#a78bfa", "#34d399", "#fb7185", "#22d3ee",
@@ -47,6 +46,11 @@ interface RemoteVideo {
   identity: string;
   element: HTMLVideoElement;
   type: "camera" | "screen";
+}
+
+interface ActiveScreenShare {
+  identity: string;
+  stream: MediaStream;
 }
 
 const STORAGE_KEY = "virtual-office-profile-v1";
@@ -93,12 +97,10 @@ export default function App() {
   const [camOn, setCamOn] = useState(true);
   const [screenOn, setScreenOn] = useState(false);
   const [audioStatus, setAudioStatus] = useState("");
-  const [inMeetingZone, setInMeetingZone] = useState(false);
   const [remoteVideos, setRemoteVideos] = useState<RemoteVideo[]>([]);
-  const [fullscreenVideo, setFullscreenVideo] = useState<HTMLVideoElement | null>(null);
-  const [activeScreenShare, setActiveScreenShare] = useState<{ identity: string; element: HTMLVideoElement } | null>(null);
+  const [activeScreenShare, setActiveScreenShare] = useState<ActiveScreenShare | null>(null);
+  const [fullscreenStream, setFullscreenStream] = useState<MediaStream | null>(null);
 
-  // Inicializa Phaser quando conectado
   useEffect(() => {
     if (conn !== "connected" || !roomRef.current || !containerRef.current) return;
     if (gameRef.current) return;
@@ -126,7 +128,7 @@ export default function App() {
         physics: { default: "arcade" },
         render: { antialias: true, pixelArt: false, powerPreference: "high-performance" },
         fps: { target: 60, forceSetTimeOut: false },
-        dom: { createContainer: true }, // necessário pra DOMElement (TV)
+        dom: { createContainer: true },
       });
 
       game.scene.start("OfficeScene", {
@@ -154,10 +156,6 @@ export default function App() {
           });
           spatialRef.current.updateVolumes(myPos, mapped);
         };
-
-        scene.onZoneChange = (zone) => {
-          setInMeetingZone(zone === "meeting-area");
-        };
       }, 100);
     };
 
@@ -171,7 +169,6 @@ export default function App() {
       return;
     }
 
-    // Salva preferências
     saveProfile({ name: name.trim(), bodyColor, hairColor });
 
     setConn("connecting");
@@ -224,6 +221,7 @@ export default function App() {
       spatial.onError = (msg) => setAudioStatus("⚠ " + msg);
       spatial.onPeerLeft = (identity) => {
         setRemoteVideos((vs) => vs.filter((v) => v.identity !== identity));
+        setActiveScreenShare((cur) => (cur?.identity === identity ? null : cur));
       };
 
       spatial.onCameraTrack = (identity, element) => {
@@ -238,20 +236,25 @@ export default function App() {
 
       spatial.onScreenShareStarted = (identity, element) => {
         console.log("[app] screen share começou:", identity);
-        setActiveScreenShare({ identity, element });
-        // Coloca na TV do mapa
+        // Extrai o MediaStream — é o que precisamos pra criar novos <video> sem clonar
+        const stream = element.srcObject as MediaStream;
+        if (!stream) {
+          console.warn("[app] screen share sem stream");
+          return;
+        }
+        setActiveScreenShare({ identity, stream });
+
+        // Mostra na TV do mapa (passa o stream, não o elemento)
         if (sceneRef.current) {
-          sceneRef.current.showScreenShareOnTV(element.cloneNode(true) as HTMLVideoElement);
+          sceneRef.current.showScreenShareOnTV(stream);
         }
       };
 
       spatial.onScreenShareStopped = (identity) => {
         console.log("[app] screen share parou:", identity);
         setActiveScreenShare((cur) => (cur?.identity === identity ? null : cur));
-        if (sceneRef.current) {
-          sceneRef.current.hideScreenShareFromTV();
-        }
-        setFullscreenVideo(null);
+        if (sceneRef.current) sceneRef.current.hideScreenShareFromTV();
+        setFullscreenStream(null);
       };
 
       spatial.onPeerSpeaking = (identity, speaking) => {
@@ -273,7 +276,6 @@ export default function App() {
     }
   }
 
-  // Anexa vídeos remotos (só câmeras na barra lateral)
   useEffect(() => {
     if (!videoContainerRef.current) return;
     const c = videoContainerRef.current;
@@ -309,20 +311,33 @@ export default function App() {
     return () => clearTimeout(t);
   }, [conn, camOn]);
 
-  // Fullscreen video player
+  // Modal fullscreen — cria seu próprio video element com o stream
   useEffect(() => {
-    if (!fullscreenVideoRef.current || !fullscreenVideo) return;
-    fullscreenVideoRef.current.innerHTML = "";
-    const clone = fullscreenVideo.cloneNode(true) as HTMLVideoElement;
-    clone.style.width = "100%";
-    clone.style.height = "100%";
-    clone.style.objectFit = "contain";
-    clone.autoplay = true;
-    clone.muted = true;
-    // Pra autoplay funcionar em alguns browsers depois de clone
-    clone.srcObject = fullscreenVideo.srcObject;
-    fullscreenVideoRef.current.appendChild(clone);
-  }, [fullscreenVideo]);
+    if (!fullscreenVideoRef.current || !fullscreenStream) return;
+    const wrap = fullscreenVideoRef.current;
+    wrap.innerHTML = "";
+
+    const video = document.createElement("video");
+    video.srcObject = fullscreenStream;
+    video.autoplay = true;
+    video.muted = true;
+    video.playsInline = true;
+    video.controls = false;
+    video.style.width = "100%";
+    video.style.height = "100%";
+    video.style.objectFit = "contain";
+    video.style.background = "#000";
+
+    wrap.appendChild(video);
+
+    // Força play
+    video.play().catch((err) => console.warn("[fullscreen] play falhou:", err));
+
+    return () => {
+      video.srcObject = null;
+      wrap.innerHTML = "";
+    };
+  }, [fullscreenStream]);
 
   function cleanupGame() {
     spatialRef.current?.disconnect();
@@ -331,7 +346,7 @@ export default function App() {
     gameRef.current = null;
     setRemoteVideos([]);
     setActiveScreenShare(null);
-    setFullscreenVideo(null);
+    setFullscreenStream(null);
   }
 
   function disconnect() {
@@ -370,7 +385,6 @@ export default function App() {
     };
   }, []);
 
-  // Preview do avatar na tela de customização
   const avatarPreviewRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
     if (conn === "connected") return;
@@ -387,7 +401,6 @@ export default function App() {
             Customize seu avatar e entre
           </p>
 
-          {/* Preview do avatar */}
           <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
             <canvas
               ref={avatarPreviewRef}
@@ -424,8 +437,7 @@ export default function App() {
                 key={c}
                 onClick={() => setBodyColor(c)}
                 style={{
-                  ...swatchStyle,
-                  background: c,
+                  ...swatchStyle, background: c,
                   outline: bodyColor === c ? "2px solid #fff" : "none",
                   outlineOffset: 2,
                 }}
@@ -441,8 +453,7 @@ export default function App() {
                 key={c}
                 onClick={() => setHairColor(c)}
                 style={{
-                  ...swatchStyle,
-                  background: c,
+                  ...swatchStyle, background: c,
                   outline: hairColor === c ? "2px solid #fff" : "none",
                   outlineOffset: 2,
                 }}
@@ -478,14 +489,13 @@ export default function App() {
         {audioStatus && <div style={{ fontSize: 11, opacity: 0.8, marginTop: 6, color: "#fbbf24" }}>{audioStatus}</div>}
       </div>
 
-      {/* Indicador de zona de apresentação + botão expandir */}
       {activeScreenShare && (
         <div style={zoneIndicatorStyle}>
           <div style={{ fontSize: 12, opacity: 0.8 }}>
             🖥️ {activeScreenShare.identity.split("__")[0]} está compartilhando tela
           </div>
           <button
-            onClick={() => setFullscreenVideo(activeScreenShare.element)}
+            onClick={() => setFullscreenStream(activeScreenShare.stream)}
             style={{ ...buttonStyle, marginTop: 6, padding: "6px 10px", fontSize: 12 }}
           >
             Expandir em tela cheia
@@ -506,15 +516,14 @@ export default function App() {
 
       <div style={hintStyle}>WASD/setas • chegue perto pra conversar • aproxime da TV pra ver apresentações</div>
 
-      {/* Modal fullscreen */}
-      {fullscreenVideo && (
-        <div style={modalStyle} onClick={() => setFullscreenVideo(null)}>
+      {fullscreenStream && (
+        <div style={modalStyle} onClick={() => setFullscreenStream(null)}>
           <div ref={fullscreenVideoRef} style={{
             width: "90vw", height: "85vh",
             background: "#000", borderRadius: 8, overflow: "hidden",
           }} onClick={(e) => e.stopPropagation()} />
           <button
-            onClick={() => setFullscreenVideo(null)}
+            onClick={() => setFullscreenStream(null)}
             style={{ position: "absolute", top: 20, right: 20, ...iconBtnStyle(false), fontSize: 16, padding: "8px 14px" }}
           >
             ✕ Fechar
@@ -525,7 +534,6 @@ export default function App() {
   );
 }
 
-/** Desenha um preview simplificado do avatar no canvas */
 function drawAvatarPreview(canvas: HTMLCanvasElement, bodyColor: string, hairColor: string) {
   const ctx = canvas.getContext("2d");
   if (!ctx) return;
@@ -542,36 +550,19 @@ function drawAvatarPreview(canvas: HTMLCanvasElement, bodyColor: string, hairCol
     ctx.fillRect(x * SCALE, y * SCALE, SCALE, SCALE);
   };
 
-  // Cabelo
-  for (let x = 5; x < 11; x++) {
-    px(x, 2, hairColor);
-    px(x, 3, hairColor);
-  }
-  px(4, 3, hairColor);
-  px(11, 3, hairColor);
-  // Rosto
+  for (let x = 5; x < 11; x++) { px(x, 2, hairColor); px(x, 3, hairColor); }
+  px(4, 3, hairColor); px(11, 3, hairColor);
   for (let x = 5; x < 11; x++) for (let y = 4; y < 7; y++) px(x, y, skin);
-  px(6, 5, outline);
-  px(9, 5, outline);
-  // Corpo
+  px(6, 5, outline); px(9, 5, outline);
   for (let y = 7; y < 13; y++) for (let x = 4; x < 12; x++) px(x, y, bodyColor);
-  for (let y = 8; y < 12; y++) {
-    px(3, y, bodyColor);
-    px(12, y, bodyColor);
-  }
-  px(3, 12, skin);
-  px(12, 12, skin);
-  // Pernas
+  for (let y = 8; y < 12; y++) { px(3, y, bodyColor); px(12, y, bodyColor); }
+  px(3, 12, skin); px(12, 12, skin);
   for (let y = 13; y < 17; y++) {
-    px(5, y, pants); px(6, y, pants);
-    px(9, y, pants); px(10, y, pants);
+    px(5, y, pants); px(6, y, pants); px(9, y, pants); px(10, y, pants);
   }
-  // Sapatos
   for (let x = 5; x < 7; x++) px(x, 17, shoes);
   for (let x = 9; x < 11; x++) px(x, 17, shoes);
 }
-
-// ============ Estilos ============
 
 const overlayStyle: React.CSSProperties = {
   width: "100vw", height: "100vh",
@@ -579,60 +570,45 @@ const overlayStyle: React.CSSProperties = {
   background: "linear-gradient(135deg, #0f172a, #1e293b)",
   overflowY: "auto",
 };
-
 const cardStyle: React.CSSProperties = {
-  background: "#1e293b",
-  border: "1px solid #334155",
+  background: "#1e293b", border: "1px solid #334155",
   borderRadius: 12, padding: 28, width: 380,
   boxShadow: "0 20px 50px rgba(0,0,0,0.4)",
 };
-
 const labelStyle: React.CSSProperties = { display: "block", fontSize: 13, marginBottom: 6, marginTop: 12, opacity: 0.8 };
-
 const inputStyle: React.CSSProperties = {
   width: "100%", padding: "10px 12px",
   borderRadius: 8, border: "1px solid #334155",
   background: "#0f172a", color: "#e2e8f0",
   fontSize: 14, outline: "none",
 };
-
 const buttonStyle: React.CSSProperties = {
   width: "100%", padding: "10px 16px",
   borderRadius: 8, border: "none",
   background: "#4ade80", color: "#052e16",
   fontWeight: 600, fontSize: 14, cursor: "pointer",
 };
-
 const paletteStyle: React.CSSProperties = {
-  display: "grid",
-  gridTemplateColumns: "repeat(6, 1fr)",
-  gap: 6,
-  marginBottom: 4,
+  display: "grid", gridTemplateColumns: "repeat(6, 1fr)",
+  gap: 6, marginBottom: 4,
 };
-
 const swatchStyle: React.CSSProperties = {
-  width: "100%",
-  aspectRatio: "1",
-  borderRadius: 6,
-  border: "1px solid #334155",
-  cursor: "pointer",
-  padding: 0,
+  width: "100%", aspectRatio: "1",
+  borderRadius: 6, border: "1px solid #334155",
+  cursor: "pointer", padding: 0,
 };
-
 const iconBtnStyle = (active: boolean): React.CSSProperties => ({
   padding: "6px 10px", borderRadius: 6, border: "none",
   background: active ? "#334155" : "#1e293b",
   color: "#e2e8f0", fontSize: 14, cursor: "pointer",
   opacity: active ? 1 : 0.6,
 });
-
 const hudStyle: React.CSSProperties = {
   position: "absolute", top: 16, left: 16,
   background: "#1e293bdd", border: "1px solid #334155",
   borderRadius: 8, padding: "10px 14px",
   fontSize: 13, zIndex: 10,
 };
-
 const hintStyle: React.CSSProperties = {
   position: "absolute", bottom: 16, left: "50%",
   transform: "translateX(-50%)",
@@ -640,7 +616,6 @@ const hintStyle: React.CSSProperties = {
   borderRadius: 8, padding: "8px 14px",
   fontSize: 12, opacity: 0.8, zIndex: 10,
 };
-
 const zoneIndicatorStyle: React.CSSProperties = {
   position: "absolute", top: 16, left: "50%",
   transform: "translateX(-50%)",
@@ -648,7 +623,6 @@ const zoneIndicatorStyle: React.CSSProperties = {
   borderRadius: 8, padding: "10px 16px",
   fontSize: 13, zIndex: 15, textAlign: "center",
 };
-
 const modalStyle: React.CSSProperties = {
   position: "fixed", inset: 0,
   background: "#000c", zIndex: 100,
