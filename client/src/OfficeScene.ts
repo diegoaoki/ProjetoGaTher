@@ -449,9 +449,7 @@ export class OfficeScene extends Phaser.Scene {
 
       player.onChange(() => {
         if (sessionId === this.myId) {
-          // Se o server mexeu na minha posição (teleport autoritativo), bate
-          // a posição visual. Só aplica quando o delta é GRANDE — pequenos
-          // jitters do server vs local seriam noise.
+          // Teleporte server-autoritativo: bate posição visual se delta grande
           if (!this.myContainer) return;
           const dx = player.x - this.myContainer.x;
           const dy = player.y - this.myContainer.y;
@@ -460,6 +458,10 @@ export class OfficeScene extends Phaser.Scene {
             this.myContainer.y = player.y;
             this.myContainer.setDepth(player.y);
           }
+          // Mudança de aparência (modal 🎨) → recria texture do meu sprite
+          if (player.color !== this.myBodyColor || player.hairColor !== this.myHairColor) {
+            this.refreshMyAvatarTexture(player.color, player.hairColor);
+          }
           return;
         }
         const rp = this.remotePlayers.get(sessionId);
@@ -467,6 +469,10 @@ export class OfficeScene extends Phaser.Scene {
           rp.targetX = player.x;
           rp.targetY = player.y;
           rp.direction = player.direction || "down";
+          // Mudança de aparência de outro player → recria texture do sprite dele
+          if (rp.bodyColor !== player.color || rp.hairColor !== player.hairColor) {
+            this.refreshRemoteAvatarTexture(rp, player.color, player.hairColor);
+          }
         }
       });
     });
@@ -649,6 +655,41 @@ export class OfficeScene extends Phaser.Scene {
     }
     // Fallback absoluto: centro do mapa
     return { x: WORLD_W / 2, y: WORLD_H / 2 };
+  }
+
+  /**
+   * Substitui a texture do meu avatar quando troco cores (modal 🎨).
+   * Cria texture+animações novas se ainda não existem pra essa combinação.
+   */
+  private refreshMyAvatarTexture(bodyColor: string, hairColor: string) {
+    if (!this.mySprite) return;
+    this.myBodyColor = bodyColor;
+    this.myHairColor = hairColor;
+    const newKey = `avatar_${bodyColor}_${hairColor}`;
+    if (!this.textures.exists(newKey)) {
+      createAvatarTexture(this, newKey, bodyColor, hairColor);
+      createAvatarAnimations(this, newKey);
+    }
+    this.myTextureKey = newKey;
+    const anim = this.isMoving ? "walk" : "idle";
+    const animKey = `${newKey}_${this.myDirection}_${anim}`;
+    if (this.anims.exists(animKey)) this.mySprite.play(animKey, true);
+    else this.mySprite.setTexture(newKey, 0);
+  }
+
+  /** Mesma lógica pra peers remotos quando mudam aparência. */
+  private refreshRemoteAvatarTexture(rp: RemotePlayer, bodyColor: string, hairColor: string) {
+    rp.bodyColor = bodyColor;
+    rp.hairColor = hairColor;
+    const newKey = `avatar_${bodyColor}_${hairColor}`;
+    if (!this.textures.exists(newKey)) {
+      createAvatarTexture(this, newKey, bodyColor, hairColor);
+      createAvatarAnimations(this, newKey);
+    }
+    rp.textureKey = newKey;
+    const animKey = `${newKey}_${rp.direction}_idle`;
+    if (this.anims.exists(animKey)) rp.sprite.play(animKey, true);
+    else rp.sprite.setTexture(newKey, 0);
   }
 
   private createRemoteAvatar(sessionId: string, player: any) {
