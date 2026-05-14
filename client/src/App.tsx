@@ -136,6 +136,15 @@ export default function App() {
   }
   const [onlinePlayers, setOnlinePlayers] = useState<OnlinePlayer[]>([]);
 
+  // === Convites ===
+  const [incomingInvite, setIncomingInvite] = useState<{ fromSessionId: string; fromName: string } | null>(null);
+  const [socialToast, setSocialToast] = useState<{ text: string; tone: "info" | "error" } | null>(null);
+  useEffect(() => {
+    if (!socialToast) return;
+    const t = setTimeout(() => setSocialToast(null), 3000);
+    return () => clearTimeout(t);
+  }, [socialToast]);
+
   useEffect(() => {
     if (!deskToast) return;
     const t = setTimeout(() => setDeskToast(null), 2500);
@@ -330,6 +339,27 @@ export default function App() {
         setConn("idle");
         setErrorMsg("Desconectado do servidor");
         cleanupGame();
+      });
+
+      // Listeners de convites/teleporte do server
+      room.onMessage("invite:received", (msg: { fromSessionId: string; fromName: string }) => {
+        // Segundo convite enquanto há um pendente: substitui (avisa via toast)
+        setIncomingInvite((prev) => {
+          if (prev) setSocialToast({ text: `Novo convite de ${msg.fromName} (substituiu anterior)`, tone: "info" });
+          return msg;
+        });
+      });
+      room.onMessage("invite:response", (msg: { fromName: string; accepted: boolean }) => {
+        setSocialToast({
+          text: msg.accepted ? `${msg.fromName} aceitou seu convite` : `${msg.fromName} recusou`,
+          tone: msg.accepted ? "info" : "error",
+        });
+      });
+      room.onMessage("invite:error", (msg: { error: string }) => {
+        setSocialToast({ text: msg?.error || "Falha no convite", tone: "error" });
+      });
+      room.onMessage("teleport:error", (msg: { error: string }) => {
+        setSocialToast({ text: msg?.error || "Falha no teleporte", tone: "error" });
       });
 
       setAudioStatus("Obtendo token de áudio...");
@@ -667,6 +697,15 @@ export default function App() {
           <button onClick={toggleCam} style={iconBtnStyle(camOn)} title="Câmera">{camOn ? "📹" : "🚫"}</button>
           <button onClick={toggleScreen} style={iconBtnStyle(screenOn)} title="Compartilhar tela">{screenOn ? "🛑" : "🖥️"}</button>
           <button onClick={() => setSidebarOpen((v) => !v)} style={iconBtnStyle(sidebarOpen)} title="Quem está online">👥</button>
+          {myDeskId && (
+            <button
+              onClick={() => roomRef.current?.send("teleport:to-desk", { deskId: myDeskId })}
+              style={iconBtnStyle(false)}
+              title={`Ir pra mesa ${labelOf(myDeskId)}`}
+            >
+              📍
+            </button>
+          )}
           <button onClick={() => setEditingAvatar(true)} style={iconBtnStyle(false)} title="Editar avatar">🎨</button>
           {session.user.isAdmin && (
             <button onClick={() => setAdminOpen(true)} style={iconBtnStyle(false)} title="Painel de administração">🛡️</button>
@@ -697,6 +736,27 @@ export default function App() {
                     {p.name}
                     {p.isMe && <span style={youBadgeStyle}>você</span>}
                   </div>
+                  {!p.isMe && (
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <button
+                        onClick={() => roomRef.current?.send("teleport:to-player", { targetSessionId: p.sessionId })}
+                        style={sidebarActionBtn}
+                        title={`Ir até ${p.name}`}
+                      >
+                        📍
+                      </button>
+                      <button
+                        onClick={() => {
+                          roomRef.current?.send("invite", { targetSessionId: p.sessionId });
+                          setSocialToast({ text: `Convite enviado pra ${p.name}`, tone: "info" });
+                        }}
+                        style={sidebarActionBtn}
+                        title={`Convidar ${p.name}`}
+                      >
+                        👋
+                      </button>
+                    </div>
+                  )}
                 </div>
               ))}
           </div>
@@ -745,6 +805,50 @@ export default function App() {
       {deskToast && (
         <div style={{ ...deskToastStyle, borderColor: deskToast.tone === "error" ? "#f87171" : "#4ade80" }}>
           {deskToast.text}
+        </div>
+      )}
+
+      {socialToast && (
+        <div style={{ ...socialToastStyle, borderColor: socialToast.tone === "error" ? "#f87171" : "#60a5fa" }}>
+          {socialToast.text}
+        </div>
+      )}
+
+      {incomingInvite && (
+        <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+          <div style={{ ...cardStyle, width: 360 }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ margin: "0 0 8px", fontSize: 20 }}>👋 Convite recebido</h2>
+            <p style={{ margin: "0 0 18px", fontSize: 14 }}>
+              <strong>{incomingInvite.fromName}</strong> está te chamando.
+              Se aceitar, você teletransporta pra perto dele(a).
+            </p>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => {
+                  roomRef.current?.send("invite:respond", {
+                    fromSessionId: incomingInvite.fromSessionId,
+                    accepted: false,
+                  });
+                  setIncomingInvite(null);
+                }}
+                style={{ ...buttonStyle, background: "#334155", color: "#e2e8f0" }}
+              >
+                Recusar
+              </button>
+              <button
+                onClick={() => {
+                  roomRef.current?.send("invite:respond", {
+                    fromSessionId: incomingInvite.fromSessionId,
+                    accepted: true,
+                  });
+                  setIncomingInvite(null);
+                }}
+                style={buttonStyle}
+              >
+                Aceitar
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -1004,4 +1108,17 @@ const sidebarRowStyle: React.CSSProperties = {
 const youBadgeStyle: React.CSSProperties = {
   marginLeft: 6, background: "#0e7490", color: "#fff",
   fontSize: 10, padding: "1px 6px", borderRadius: 4, fontWeight: 600,
+};
+const sidebarActionBtn: React.CSSProperties = {
+  background: "#334155", border: "none",
+  color: "#e2e8f0", fontSize: 12, cursor: "pointer",
+  padding: "2px 6px", borderRadius: 4,
+};
+const socialToastStyle: React.CSSProperties = {
+  position: "absolute", top: "12%", left: "50%",
+  transform: "translateX(-50%)",
+  background: "#1e293bee", border: "1px solid #60a5fa",
+  borderRadius: 8, padding: "10px 16px",
+  fontSize: 13, zIndex: 20, textAlign: "center",
+  boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
 };

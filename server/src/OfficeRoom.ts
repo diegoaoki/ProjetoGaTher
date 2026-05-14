@@ -22,6 +22,23 @@ interface DeskClaimMessage {
   deskId: string;
 }
 
+interface TeleportToPlayerMessage {
+  targetSessionId: string;
+}
+
+interface TeleportToDeskMessage {
+  deskId: string;
+}
+
+interface InviteMessage {
+  targetSessionId: string;
+}
+
+interface InviteResponseMessage {
+  fromSessionId: string;
+  accepted: boolean;
+}
+
 interface JoinOptions {
   token?: string;
 }
@@ -141,6 +158,19 @@ export class OfficeRoom extends Room<OfficeState> {
     );
     this.onMessage<DeskClaimMessage>("desk:release", (client, msg) =>
       this.handleDeskRelease(client, msg)
+    );
+
+    this.onMessage<TeleportToPlayerMessage>("teleport:to-player", (client, msg) =>
+      this.handleTeleportToPlayer(client, msg)
+    );
+    this.onMessage<TeleportToDeskMessage>("teleport:to-desk", (client, msg) =>
+      this.handleTeleportToDesk(client, msg)
+    );
+    this.onMessage<InviteMessage>("invite", (client, msg) =>
+      this.handleInvite(client, msg)
+    );
+    this.onMessage<InviteResponseMessage>("invite:respond", (client, msg) =>
+      this.handleInviteRespond(client, msg)
     );
   }
 
@@ -327,6 +357,133 @@ export class OfficeRoom extends Room<OfficeState> {
     }
     // userId é só pra log / sanity — a query já filtra pela PK desk_id
     void userId;
+  }
+
+  // ============================================================
+  //  Teletransporte (server-autoritativo)
+  //  Cliente nunca manda coordenadas grandes; só pede.
+  //  Server decide a posição e escreve direto no state.
+  // ============================================================
+
+  private TELEPORT_OFFSET = 40; // px ao lado do alvo, pra não ficar em cima
+
+  private handleTeleportToPlayer(client: Client, msg: TeleportToPlayerMessage) {
+    const me = this.state.players.get(client.sessionId);
+    if (!me) return;
+
+    const targetSessionId = String(msg?.targetSessionId || "");
+    if (!targetSessionId || targetSessionId === client.sessionId) return;
+
+    const target = this.state.players.get(targetSessionId);
+    if (!target) {
+      client.send("teleport:error", { error: "Usuário não encontrado" });
+      return;
+    }
+
+    const pos = this.pickSpotNear(target.x, target.y);
+    me.x = pos.x;
+    me.y = pos.y;
+    // direction permanece — não muda pra onde tá olhando
+  }
+
+  private handleTeleportToDesk(client: Client, msg: TeleportToDeskMessage) {
+    const auth = client.userData as AuthData | undefined;
+    const me = this.state.players.get(client.sessionId);
+    if (!auth || !me) return;
+
+    const deskId = String(msg?.deskId || "");
+    const deskInfo = getDeskById(deskId);
+    if (!deskInfo) {
+      client.send("teleport:error", { error: "Mesa inválida" });
+      return;
+    }
+
+    // Permite só se a mesa é sua (ou ninguém é dono — caso raro)
+    const stateDesk = this.state.desks.get(deskId);
+    if (stateDesk && stateDesk.ownerId !== auth.userId) {
+      client.send("teleport:error", { error: `Mesa é de ${stateDesk.ownerName}` });
+      return;
+    }
+
+    const seat = getSeatPosition(deskInfo);
+    me.x = seat.x;
+    me.y = seat.y;
+  }
+
+  /** Escolhe um ponto ao lado do alvo (4 direções, picka primeira sem colisão simples). */
+  private pickSpotNear(tx: number, ty: number): { x: number; y: number } {
+    // 4 offsets simples; assume que o teleport_offset é maior que o avatar
+    const candidates = [
+      { x: tx + this.TELEPORT_OFFSET, y: ty },
+      { x: tx - this.TELEPORT_OFFSET, y: ty },
+      { x: tx, y: ty + this.TELEPORT_OFFSET },
+      { x: tx, y: ty - this.TELEPORT_OFFSET },
+    ];
+    // Servidor não tem layout de colisão; cliente faz unstuck se necessário.
+    // Por enquanto pega o primeiro dentro do mundo.
+    for (const c of candidates) {
+      if (c.x > 20 && c.x < this.state.worldWidth - 20 && c.y > 20 && c.y < this.state.worldHeight - 20) {
+        return c;
+      }
+    }
+    return { x: tx, y: ty };
+  }
+
+  // ============================================================
+  //  Convites (fluxo: A convida B → B aceita/recusa → A recebe resposta)
+  // ============================================================
+
+  private handleInvite(client: Client, msg: InviteMessage) {
+    const me = this.state.players.get(client.sessionId);
+    if (!me) return;
+    const targetSessionId = String(msg?.targetSessionId || "");
+    if (!targetSessionId || targetSessionId === client.sessionId) return;
+
+    const target = this.state.players.get(targetSessionId);
+    if (!target) {
+      client.send("invite:error", { error: "Usuário não está mais online" });
+      return;
+    }
+
+    // Acha o cliente do target pra mandar a mensagem direta
+    const targetClient = this.clients.find((c) => c.sessionId === targetSessionId);
+    if (!targetClient) {
+      client.send("invite:error", { error: "Usuário não está mais online" });
+      return;
+    }
+
+    targetClient.send("invite:received", {
+      fromSessionId: client.sessionId,
+      fromName: me.name,
+    });
+  }
+
+  private handleInviteRespond(client: Client, msg: InviteResponseMessage) {
+    const responder = this.state.players.get(client.sessionId);
+    if (!responder) return;
+
+    const fromSessionId = String(msg?.fromSessionId || "");
+    const accepted = !!msg?.accepted;
+    if (!fromSessionId) return;
+
+    const inviter = this.state.players.get(fromSessionId);
+    const inviterClient = this.clients.find((c) => c.sessionId === fromSessionId);
+
+    // Notifica o convidador (se ainda online)
+    if (inviterClient) {
+      inviterClient.send("invite:response", {
+        fromSessionId: client.sessionId,
+        fromName: responder.name,
+        accepted,
+      });
+    }
+
+    // Se aceito, teletransporta o convidado pra perto do convidador (server-autoritativo)
+    if (accepted && inviter) {
+      const pos = this.pickSpotNear(inviter.x, inviter.y);
+      responder.x = pos.x;
+      responder.y = pos.y;
+    }
   }
 }
 

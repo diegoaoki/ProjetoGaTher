@@ -178,12 +178,16 @@ npm run build      # build de produção
 - **Sincronização de cor**: quando user troca `bodyColor` via modal 🎨, o snapshot em `desk_reservations` é atualizado pra outros verem a cor nova no outline da mesa.
 - Visual no Phaser: retângulo com stroke da cor do dono em volta da mesa + label com nome.
 
-### Convites entre usuários
-- Sidebar mostra usuários online com botões `📍 ir até` e `👋 convidar`
-- "Ir até" = teletransporte instantâneo (cliente envia move com delta grande, server aceita)
-- "Convidar" = mensagem custom `invite` → server propaga `inviteReceived` ao destinatário
-- Modal de aceitar/recusar → resposta volta como toast pro convidador
-- Se aceito, convidado teletransporta pro convidador automaticamente
+### Sidebar online + convites + teletransporte (Fase 6b parte 2)
+- Botão **👥** no HUD abre sidebar lateral listando todos os players conectados (state.players do Colyseus).
+- Cada row da sidebar mostra avatar mini (canvas pixel-art 24×30) + nome + badge "você" pro próprio. Atualiza em tempo real via `onAdd/onChange/onRemove`.
+- **📍 ir até** (botão na row): envia `teleport:to-player`. **Server-autoritativo** — ele lê posição do alvo e escreve direto no state. Cliente NUNCA manda delta grande (MAX_DELTA segue 100).
+- **📍 minha mesa** (botão no HUD, condicional): aparece se `myDeskId` existe. Envia `teleport:to-desk`.
+- **👋 convidar** (botão na row): envia `invite` → server propaga `invite:received` pro alvo.
+- Modal "Aceitar/Recusar" abre pro convidado. Resposta vai como `invite:respond` → server propaga `invite:response` pro convidador (toast).
+- **Se aceito**, server teletransporta o convidado pra perto do convidador (offset 40px no eixo).
+- Segundo convite enquanto há um pendente substitui o anterior (toast avisa).
+- Mensagens de erro: `invite:error`, `teleport:error` — ambas viram toast no client.
 
 ### Tela compartilhada
 - Botão 🖥️ → `setScreenShareEnabled(true)` no LiveKit
@@ -211,7 +215,7 @@ npm run build      # build de produção
 🚧 **Fase 5 — Produtividade** (ainda NÃO implementada no código): claim de mesas, sidebar online, convites, teletransporte. CLAUDE.md histórico marcava como ✅ mas o código atual não tem o sistema de `Desk`/claim/invite — fica pra próxima.
 ✅ **Fase 6a — Auth + perfil persistido**: email+senha (bcrypt), JWT, Postgres no Railway via Drizzle, customização salva no server.
 ✅ **Fase 6b (parte 1) — Mesas reserváveis com persistência**: tecla E reserva/libera, mesa fica do dono mesmo offline, spawna na mesa reservada ao entrar.
-🚧 **Fase 6b (parte 2) — Sidebar online + convites + teletransporte**: lista de usuários online no HUD, "👋 convidar" e "📍 ir até". Teletransporte server-autoritativo.
+✅ **Fase 6b (parte 2) — Sidebar online + convites + teletransporte**: botão 👥 abre sidebar, cada usuário tem 📍 (ir até) e 👋 (convidar). Teletransporte server-autoritativo. Botão 📍 'minha mesa' no HUD se você tem reserva.
 🚧 **Depois — Salas isoladas**: zonas que bloqueiam áudio externo (paredes que isolam)
 🚧 **Backlog**: chat de texto, esqueci-a-senha (precisa SMTP), mapa "inspirado" no print profissional do Gather, mobile responsivo, editor de mapas
 
