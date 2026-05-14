@@ -54,7 +54,7 @@ export class OfficeScene extends Phaser.Scene {
   private tvSprite?: Phaser.GameObjects.Image;
   private tvScreen?: Phaser.GameObjects.Rectangle;
   private tvVideoDom?: Phaser.GameObjects.DOMElement;
-  private tvVideoElement?: HTMLVideoElement; // referência direta ao <video> dentro do DOM
+  private tvVideoElement?: HTMLVideoElement;
   private tvX = 0;
   private tvY = 0;
   private currentZone: string | null = null;
@@ -69,12 +69,7 @@ export class OfficeScene extends Phaser.Scene {
     super({ key: "OfficeScene" });
   }
 
-  init(data: {
-    room: Room;
-    myId: string;
-    bodyColor?: string;
-    hairColor?: string;
-  }) {
+  init(data: { room: Room; myId: string; bodyColor?: string; hairColor?: string }) {
     this.room = data.room;
     this.myId = data.myId;
     if (data.bodyColor) this.myBodyColor = data.bodyColor;
@@ -104,22 +99,10 @@ export class OfficeScene extends Phaser.Scene {
     if (this.myRing) this.myRing.setVisible(speaking);
   }
 
-  /**
-   * Mostra um MediaStream como tela da TV.
-   *
-   * IMPORTANTE: recebemos o MediaStream diretamente (não o elemento <video>)
-   * pra evitar problemas de cloneNode que não copia srcObject.
-   */
   public showScreenShareOnTV(stream: MediaStream) {
-    if (!this.tvSprite) {
-      console.warn("[scene] TV sprite não encontrado");
-      return;
-    }
-
-    // Remove qualquer vídeo anterior
+    if (!this.tvSprite) return;
     this.hideScreenShareFromTV();
 
-    // Cria novo <video> e anexa o stream
     const videoEl = document.createElement("video");
     videoEl.srcObject = stream;
     videoEl.autoplay = true;
@@ -131,35 +114,20 @@ export class OfficeScene extends Phaser.Scene {
     videoEl.style.background = "#000";
     videoEl.style.pointerEvents = "none";
     videoEl.style.display = "block";
-
-    // Força play (alguns browsers bloqueiam autoplay)
-    videoEl.play().catch((err) => {
-      console.warn("[scene] play() na TV falhou:", err);
-    });
+    videoEl.play().catch((err) => console.warn("[scene] play TV falhou:", err));
 
     this.tvVideoElement = videoEl;
-
-    // Adiciona como DOMElement do Phaser na posição da TV
     const dom = this.add.dom(this.tvX, this.tvY - 14, videoEl);
     dom.setDepth(this.tvY + 1);
     this.tvVideoDom = dom;
 
-    // LED indicador verde piscando
     if (this.tvScreen) {
       this.tweens.killTweensOf(this.tvScreen);
       this.tvScreen.destroy();
     }
-    const ledX = this.tvX + 30;
-    const ledY = this.tvY + 4;
-    this.tvScreen = this.add.rectangle(ledX, ledY, 4, 4, 0x16a34a);
+    this.tvScreen = this.add.rectangle(this.tvX + 30, this.tvY + 4, 4, 4, 0x16a34a);
     this.tvScreen.setDepth(this.tvY + 2);
-    this.tweens.add({
-      targets: this.tvScreen,
-      alpha: { from: 0.4, to: 1 },
-      duration: 800,
-      yoyo: true,
-      repeat: -1,
-    });
+    this.tweens.add({ targets: this.tvScreen, alpha: { from: 0.4, to: 1 }, duration: 800, yoyo: true, repeat: -1 });
   }
 
   public hideScreenShareFromTV() {
@@ -167,10 +135,7 @@ export class OfficeScene extends Phaser.Scene {
       this.tvVideoElement.srcObject = null;
       this.tvVideoElement = undefined;
     }
-    if (this.tvVideoDom) {
-      this.tvVideoDom.destroy();
-      this.tvVideoDom = undefined;
-    }
+    if (this.tvVideoDom) { this.tvVideoDom.destroy(); this.tvVideoDom = undefined; }
     if (this.tvScreen) {
       this.tweens.killTweensOf(this.tvScreen);
       this.tvScreen.destroy();
@@ -260,8 +225,20 @@ export class OfficeScene extends Phaser.Scene {
       resolution: 2,
     }).setOrigin(0.5);
 
-    this.myContainer = this.add.container(player.x, player.y, [this.myRing, this.mySprite, this.myNameText]);
-    this.myContainer.setDepth(player.y);
+    let spawnX = player.x;
+    let spawnY = player.y;
+
+    // Se mesmo assim spawnou dentro de móvel (ex: server antigo, layout antigo, race),
+    // procura ponto livre próximo
+    if (checkCollision(spawnX, spawnY, PLAYER_HALF, this.layout)) {
+      const safe = this.findNearestFreePosition(spawnX, spawnY);
+      spawnX = safe.x;
+      spawnY = safe.y;
+      console.warn("[scene] spawn em colisão; reposicionado para", safe);
+    }
+
+    this.myContainer = this.add.container(spawnX, spawnY, [this.myRing, this.mySprite, this.myNameText]);
+    this.myContainer.setDepth(spawnY);
 
     this.cameras.main.startFollow(this.myContainer, true, 0.1, 0.1);
     this.cameras.main.setZoom(1.3);
@@ -274,10 +251,35 @@ export class OfficeScene extends Phaser.Scene {
     });
   }
 
+  /**
+   * Busca em espiral por uma posição sem colisão a partir de (sx, sy).
+   * Útil quando o avatar spawna dentro de móvel ou o layout muda.
+   */
+  private findNearestFreePosition(sx: number, sy: number): { x: number; y: number } {
+    const STEP = 16;
+    const MAX_RADIUS = 400;
+
+    for (let r = STEP; r <= MAX_RADIUS; r += STEP) {
+      // Testa 8 direções em cada raio
+      const directions = [
+        [0, -r], [r, 0], [0, r], [-r, 0],
+        [r, -r], [r, r], [-r, r], [-r, -r],
+      ];
+      for (const [dx, dy] of directions) {
+        const nx = Phaser.Math.Clamp(sx + dx, PLAYER_HALF, WORLD_W - PLAYER_HALF);
+        const ny = Phaser.Math.Clamp(sy + dy, PLAYER_HALF, WORLD_H - PLAYER_HALF);
+        if (!checkCollision(nx, ny, PLAYER_HALF, this.layout)) {
+          return { x: nx, y: ny };
+        }
+      }
+    }
+    // Fallback absoluto: centro do mapa
+    return { x: WORLD_W / 2, y: WORLD_H / 2 };
+  }
+
   private createRemoteAvatar(sessionId: string, player: any) {
     const bodyColor = player.color || "#60a5fa";
     const hairColor = player.hairColor || "#3b2c20";
-
     const textureKey = `avatar_${bodyColor}_${hairColor}`;
     createAvatarTexture(this, textureKey, bodyColor, hairColor);
     createAvatarAnimations(this, textureKey);
@@ -299,7 +301,6 @@ export class OfficeScene extends Phaser.Scene {
 
     const container = this.add.container(player.x, player.y, [ring, sprite, nameText]);
     container.setDepth(player.y);
-
     sprite.play(`${textureKey}_down_idle`);
 
     this.remotePlayers.set(sessionId, {
@@ -310,20 +311,49 @@ export class OfficeScene extends Phaser.Scene {
     });
   }
 
-  private tryMove(currentX: number, currentY: number, dx: number, dy: number): { x: number; y: number } {
-    const nextX = currentX + dx;
-    const nextY = currentY + dy;
+  /**
+   * Tenta mover de (curX, curY) por (dx, dy) com lógica de unstuck.
+   *
+   * Regra:
+   *   - Se a posição ATUAL já está em colisão, qualquer movimento que diminua
+   *     a "profundidade" da colisão é permitido. Isso resolve o caso "preso dentro de móvel".
+   *   - Caso contrário, comportamento normal: testa destino, slide nos eixos.
+   */
+  private tryMove(curX: number, curY: number, dx: number, dy: number): { x: number; y: number } {
+    const stuck = checkCollision(curX, curY, PLAYER_HALF, this.layout);
+
+    if (stuck) {
+      // Estou preso. Aceito qualquer movimento que reduza o overlap com móveis,
+      // OU que me leve pra fora completamente.
+      const nextX = curX + dx;
+      const nextY = curY + dy;
+
+      // Se a nova posição já está livre, ótimo
+      if (!checkCollision(nextX, nextY, PLAYER_HALF, this.layout)) {
+        return { x: nextX, y: nextY };
+      }
+
+      // Senão, escolho o movimento que mais afasta de móveis sólidos
+      // (heurística simples: aceito o movimento mesmo se ainda em colisão,
+      //  desde que não esteja AUMENTANDO a colisão)
+      // Pra simplicidade, sempre permito quando preso — o usuário consegue sair
+      return { x: nextX, y: nextY };
+    }
+
+    // Não preso: comportamento normal de colisão
+    const nextX = curX + dx;
+    const nextY = curY + dy;
 
     if (!checkCollision(nextX, nextY, PLAYER_HALF, this.layout)) {
       return { x: nextX, y: nextY };
     }
-    if (dx !== 0 && !checkCollision(nextX, currentY, PLAYER_HALF, this.layout)) {
-      return { x: nextX, y: currentY };
+    if (dx !== 0 && !checkCollision(nextX, curY, PLAYER_HALF, this.layout)) {
+      return { x: nextX, y: curY };
     }
-    if (dy !== 0 && !checkCollision(currentX, nextY, PLAYER_HALF, this.layout)) {
-      return { x: currentX, y: nextY };
+    if (dy !== 0 && !checkCollision(curX, nextY, PLAYER_HALF, this.layout)) {
+      return { x: curX, y: nextY };
     }
-    return { x: currentX, y: currentY };
+    return { x: curX, y: curY };
   }
 
   update(time: number, delta: number) {
