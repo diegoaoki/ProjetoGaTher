@@ -23,7 +23,6 @@ interface RemotePeer {
   cameraElement?: HTMLVideoElement;
   screenElement?: HTMLVideoElement;
   isSpeaking: boolean;
-  // Timer pra "stopped" pendente que pode ser cancelado por novo "started"
   screenStopTimer?: number;
 }
 
@@ -48,8 +47,13 @@ export class SpatialAudio {
     this.nearRadius = opts.hearingNearRadius ?? 150;
     this.farRadius = opts.hearingFarRadius ?? 400;
 
+    // adaptiveStream: false — o LiveKit ajusta resolução baseado no tamanho do
+    // elemento <video>. Como mostramos screen share em uma TV pequena no mapa,
+    // ele cai pra 2x2 pixels. Desligado, sempre recebemos qualidade total.
+    //
+    // dynacast: true — ainda otimiza simulcast, só não mexe na resolução por elemento.
     this.room = new Room({
-      adaptiveStream: true,
+      adaptiveStream: false,
       dynacast: true,
     });
 
@@ -145,18 +149,14 @@ export class SpatialAudio {
         el.style.objectFit = "contain";
         el.style.background = "#000";
 
-        // Se havia um "stop" pendente, cancela — é só uma re-subscription
         if (peer.screenStopTimer) {
           console.log("[spatial] re-subscribe rápido de screen share, cancelando stop");
           clearTimeout(peer.screenStopTimer);
           peer.screenStopTimer = undefined;
-
-          // Atualiza o elemento mas NÃO dispara "started" de novo (UI mantém o stream antigo brevemente)
           peer.screenElement?.remove();
           peer.screenElement = el;
           this.onScreenShareStarted?.(participant.identity, el);
         } else {
-          // Primeira vez (ou após stop confirmado)
           peer.screenElement = el;
           this.onScreenShareStarted?.(participant.identity, el);
         }
@@ -177,12 +177,9 @@ export class SpatialAudio {
       peer.audioElement = undefined;
     } else if (track.kind === Track.Kind.Video) {
       if (track.source === Track.Source.ScreenShare) {
-        // DEBOUNCE: aguarda um tempo antes de confirmar "stopped"
-        // Se vier um novo "subscribed" antes do timer disparar, o stop é cancelado
         if (peer.screenStopTimer) clearTimeout(peer.screenStopTimer);
 
         peer.screenStopTimer = window.setTimeout(() => {
-          console.log("[spatial] screen share stop confirmado:", participant.identity);
           peer.screenElement?.remove();
           peer.screenElement = undefined;
           peer.screenStopTimer = undefined;
