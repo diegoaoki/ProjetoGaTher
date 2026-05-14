@@ -70,9 +70,14 @@ export function getDefaultLayout(): OfficeLayoutData {
   addItem("plant", 750, 770, 3);
   addItem("plant", 870, 770, 3);
 
-  // Whiteboard + TV de apresentação (área de reunião superior esquerda)
+  // Whiteboard (mantido)
   addItem("whiteboard", 120, 130, 0);
-  addItem("tv", 260, 130, 0, "tv"); // TV ao lado do whiteboard
+
+  // TV de apresentação — removida do escritório aberto (ficou estranho aqui).
+  // Sprite + lógica de screen share (OfficeScene.showScreenShareOnTV / hideScreenShareFromTV)
+  // estão mantidos pra reusar quando criarmos salas de reunião isoladas.
+  // Pra reativar: descomenta a linha abaixo e a zona 'presentation' lá em baixo.
+  // addItem("tv", 260, 130, 0, "tv");
 
   // Estantes
   addItem("bookshelf", 80, 460, 1);
@@ -88,13 +93,13 @@ export function getDefaultLayout(): OfficeLayoutData {
     height: 1024,
     floorRegions: [
       { x: 720, y: 760, w: 220, h: 160, type: "rug" },
-      { x: 60, y: 80, w: 340, h: 200, type: "rug" }, // área aumentada pra cobrir TV+whiteboard
+      { x: 60, y: 80, w: 340, h: 200, type: "rug" }, // tapete da área do whiteboard
     ],
     furniture: items,
-    zones: [
-      // Quem entra aqui vê a tela compartilhada na TV
-      { id: "meeting-area", x: 60, y: 80, w: 340, h: 280, tag: "presentation" },
-    ],
+    // Sem zonas ativas por enquanto. Quando reintroduzirmos a TV na sala de
+    // reunião, adiciona uma zone com tag "presentation" pra disparar o
+    // setScreenShareOnTV quando o player entrar na área.
+    zones: [],
   };
 }
 
