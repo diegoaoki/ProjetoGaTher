@@ -224,7 +224,20 @@ export class OfficeScene extends Phaser.Scene {
       }
 
       player.onChange(() => {
-        if (sessionId === this.myId) return;
+        if (sessionId === this.myId) {
+          // Se o server mexeu na minha posição (teleport autoritativo), bate
+          // a posição visual. Só aplica quando o delta é GRANDE — pequenos
+          // jitters do server vs local seriam noise.
+          if (!this.myContainer) return;
+          const dx = player.x - this.myContainer.x;
+          const dy = player.y - this.myContainer.y;
+          if (Math.abs(dx) > 50 || Math.abs(dy) > 50) {
+            this.myContainer.x = player.x;
+            this.myContainer.y = player.y;
+            this.myContainer.setDepth(player.y);
+          }
+          return;
+        }
         const rp = this.remotePlayers.get(sessionId);
         if (rp) {
           rp.targetX = player.x;

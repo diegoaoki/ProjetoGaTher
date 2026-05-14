@@ -337,8 +337,10 @@ export default function App() {
 
       room.onLeave(() => {
         setConn("idle");
-        setErrorMsg("Desconectado do servidor");
+        setErrorMsg("Desconectado do servidor — reconectando...");
         cleanupGame();
+        // Reseta a guarda pra o useEffect de auto-connect tentar de novo
+        autoConnectedRef.current = false;
       });
 
       // Listeners de convites/teleporte do server
