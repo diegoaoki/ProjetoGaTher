@@ -5,7 +5,7 @@ WORKDIR /app
 
 # Copia manifests primeiro pra aproveitar cache de layer
 COPY package*.json ./
-RUN npm ci --ignore-scripts
+RUN npm install --ignore-scripts
 
 COPY tsconfig.json ./
 COPY src ./src
@@ -21,7 +21,7 @@ ENV NODE_ENV=production
 
 # Só prod deps
 COPY package*.json ./
-RUN npm ci --omit=dev --ignore-scripts && npm cache clean --force
+RUN npm install --omit=dev --ignore-scripts && npm cache clean --force
 
 # Código compilado
 COPY --from=builder /app/dist ./dist
