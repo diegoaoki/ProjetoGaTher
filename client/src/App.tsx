@@ -141,6 +141,7 @@ export default function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   interface OnlinePlayer {
     sessionId: string;
+    userId: string;
     name: string;
     color: string;
     hairColor: string;
@@ -324,6 +325,7 @@ export default function App() {
       // Helper que converte um Player do schema pra nosso shape do React
       const toEntry = (sessionId: string, p: any): OnlinePlayer => ({
         sessionId,
+        userId: p.userId || "",
         name: p.name || "(sem nome)",
         color: p.color || "#4ade80",
         hairColor: p.hairColor || "#3b2c20",
@@ -441,16 +443,19 @@ export default function App() {
         }
         setActiveScreenShare({ identity, stream });
 
+        // Mostra preview clicável em cima do avatar do compartilhador
         if (sceneRef.current) {
-          sceneRef.current.showScreenShareOnTV(stream);
+          sceneRef.current.showScreenShareBalloon(identity, stream, () => {
+            setFullscreenStream(stream);
+          });
         }
       };
 
       spatial.onScreenShareStopped = (identity) => {
         console.log("[app] screen share parou:", identity);
         setActiveScreenShare((cur) => (cur?.identity === identity ? null : cur));
-        if (sceneRef.current) sceneRef.current.hideScreenShareFromTV();
-        setFullscreenStream(null);
+        if (sceneRef.current) sceneRef.current.hideScreenShareBalloon(identity);
+        setFullscreenStream((cur) => (cur ? null : cur));
       };
 
       spatial.onPeerSpeaking = (identity, speaking) => {
@@ -473,22 +478,30 @@ export default function App() {
   }
 
   useEffect(() => {
+    if (conn !== "connected") return; // container ainda não existe
     if (!videoContainerRef.current) return;
     const c = videoContainerRef.current;
     c.innerHTML = "";
     remoteVideos
       .filter((v) => v.type === "camera")
       .forEach((rv) => {
+        // Resolve userId → displayName via lista de players online; fallback pro UUID truncado
+        const userId = rv.identity.split("__")[0];
+        const player = onlinePlayers.find((p) => p.userId === userId);
+        const displayName = player?.name || userId.slice(0, 8);
+
         const wrap = document.createElement("div");
         wrap.style.cssText = "position:relative;border:2px solid #334155;border-radius:8px;overflow:hidden;background:#000;";
         const lbl = document.createElement("div");
-        lbl.textContent = rv.identity.split("__")[0];
+        lbl.textContent = displayName;
         lbl.style.cssText = "position:absolute;bottom:0;left:0;right:0;background:#000a;color:#fff;font-size:11px;padding:2px 6px;";
         wrap.appendChild(rv.element);
         wrap.appendChild(lbl);
         c.appendChild(wrap);
+        // Garante autoplay caso o browser tenha pausado o vídeo durante a transição
+        safePlay(rv.element);
       });
-  }, [remoteVideos]);
+  }, [remoteVideos, conn, onlinePlayers]);
 
   useEffect(() => {
     if (conn !== "connected" || !spatialRef.current || !localVideoRef.current) return;
@@ -793,20 +806,6 @@ export default function App() {
                 </div>
               ))}
           </div>
-        </div>
-      )}
-
-      {activeScreenShare && (
-        <div style={zoneIndicatorStyle}>
-          <div style={{ fontSize: 12, opacity: 0.8 }}>
-            🖥️ {activeScreenShare.identity.split("__")[0]} está compartilhando tela
-          </div>
-          <button
-            onClick={() => setFullscreenStream(activeScreenShare.stream)}
-            style={{ ...buttonStyle, marginTop: 6, padding: "6px 10px", fontSize: 12 }}
-          >
-            Expandir em tela cheia
-          </button>
         </div>
       )}
 

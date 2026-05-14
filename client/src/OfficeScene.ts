@@ -87,6 +87,13 @@ export class OfficeScene extends Phaser.Scene {
   private tvY = 0;
   private currentZone: string | null = null;
 
+  // Balões de screen share — um por peer que está compartilhando.
+  // Identity LiveKit (userId__timestamp) → { dom, video }
+  private screenBalloons = new Map<string, {
+    dom: Phaser.GameObjects.DOMElement;
+    video: HTMLVideoElement;
+  }>();
+
   public onPositionsUpdate?: (
     myInfo: { x: number; y: number; zoneId: string },
     peerInfo: Map<string, { x: number; y: number; zoneId: string }>
@@ -229,6 +236,68 @@ export class OfficeScene extends Phaser.Scene {
     this.tvScreen = this.add.rectangle(this.tvX + 30, this.tvY + 4, 4, 4, 0x16a34a);
     this.tvScreen.setDepth(this.tvY + 2);
     this.tweens.add({ targets: this.tvScreen, alpha: { from: 0.4, to: 1 }, duration: 800, yoyo: true, repeat: -1 });
+  }
+
+  /**
+   * Mostra um preview do screen share como balão em cima do avatar do compartilhador.
+   * Click no balão chama `onExpand` (pra abrir fullscreen no React).
+   */
+  public showScreenShareBalloon(identity: string, stream: MediaStream, onExpand: () => void) {
+    this.hideScreenShareBalloon(identity); // garante limpeza se já existe
+
+    const video = document.createElement("video");
+    video.srcObject = stream;
+    video.autoplay = true;
+    video.muted = true;
+    video.playsInline = true;
+    video.style.width = "140px";
+    video.style.height = "90px";
+    video.style.objectFit = "cover";
+    video.style.borderRadius = "8px";
+    video.style.border = "2px solid #4ade80";
+    video.style.background = "#000";
+    video.style.cursor = "pointer";
+    video.style.boxShadow = "0 4px 12px rgba(0,0,0,0.5)";
+    video.style.display = "block";
+    video.title = "Clique pra expandir";
+    video.addEventListener("click", (e) => {
+      e.stopPropagation();
+      onExpand();
+    });
+    video.play().catch((err) => {
+      if (err?.name !== "AbortError") console.warn("[balloon] play falhou:", err);
+    });
+
+    const pos = this.getAvatarPositionFor(identity);
+    const dom = this.add.dom(pos.x, pos.y - 80, video);
+    dom.setDepth(10000); // sempre por cima
+
+    this.screenBalloons.set(identity, { dom, video });
+  }
+
+  public hideScreenShareBalloon(identity: string) {
+    const b = this.screenBalloons.get(identity);
+    if (!b) return;
+    b.video.srcObject = null;
+    b.dom.destroy();
+    this.screenBalloons.delete(identity);
+  }
+
+  /** Resolve posição atual do avatar com base na identity do LiveKit. */
+  private getAvatarPositionFor(identity: string): { x: number; y: number } {
+    const userId = identity.split("__")[0];
+    const state: any = this.room.state;
+    let target: { x: number; y: number } | null = null;
+    state?.players?.forEach?.((p: any, sid: string) => {
+      if (p.userId !== userId) return;
+      if (sid === this.myId && this.myContainer) {
+        target = { x: this.myContainer.x, y: this.myContainer.y };
+      } else {
+        const rp = this.remotePlayers.get(sid);
+        if (rp) target = { x: rp.container.x, y: rp.container.y };
+      }
+    });
+    return target || { x: WORLD_W / 2, y: WORLD_H / 2 };
   }
 
   public hideScreenShareFromTV() {
@@ -690,6 +759,13 @@ export class OfficeScene extends Phaser.Scene {
     }
 
     this.updateNearestDesk();
+
+    // Atualiza posição dos balões de screen share pra acompanhar avatares
+    this.screenBalloons.forEach((b, identity) => {
+      const pos = this.getAvatarPositionFor(identity);
+      b.dom.x = pos.x;
+      b.dom.y = pos.y - 80;
+    });
   }
 
   /** Calcula a mesa mais próxima dentro do raio. Notifica App quando muda. */
