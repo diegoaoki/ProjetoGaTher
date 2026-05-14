@@ -125,6 +125,17 @@ export default function App() {
   // Toast efêmero — usado pra confirmação de claim/release e mensagens de erro do server
   const [deskToast, setDeskToast] = useState<{ text: string; tone: "info" | "error" } | null>(null);
 
+  // === Sidebar de usuários online ===
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  interface OnlinePlayer {
+    sessionId: string;
+    name: string;
+    color: string;
+    hairColor: string;
+    isMe: boolean;
+  }
+  const [onlinePlayers, setOnlinePlayers] = useState<OnlinePlayer[]>([]);
+
   useEffect(() => {
     if (!deskToast) return;
     const t = setTimeout(() => setDeskToast(null), 2500);
@@ -282,8 +293,38 @@ export default function App() {
 
       const state: any = room.state;
       setPlayerCount(state.players.size);
-      state.players.onAdd(() => setPlayerCount(state.players.size));
-      state.players.onRemove(() => setPlayerCount(state.players.size));
+
+      // Helper que converte um Player do schema pra nosso shape do React
+      const toEntry = (sessionId: string, p: any): OnlinePlayer => ({
+        sessionId,
+        name: p.name || "(sem nome)",
+        color: p.color || "#4ade80",
+        hairColor: p.hairColor || "#3b2c20",
+        isMe: sessionId === room.sessionId,
+      });
+
+      // Snapshot inicial dos players já no state quando entramos
+      const initial: OnlinePlayer[] = [];
+      state.players.forEach((p: any, sid: string) => initial.push(toEntry(sid, p)));
+      setOnlinePlayers(initial);
+
+      state.players.onAdd((p: any, sid: string) => {
+        setPlayerCount(state.players.size);
+        setOnlinePlayers((prev) => {
+          const without = prev.filter((x) => x.sessionId !== sid);
+          return [...without, toEntry(sid, p)];
+        });
+        // Listener pra mudanças de nome/cor (modal 🎨)
+        p.onChange?.(() => {
+          setOnlinePlayers((prev) =>
+            prev.map((x) => (x.sessionId === sid ? toEntry(sid, p) : x))
+          );
+        });
+      });
+      state.players.onRemove((_p: any, sid: string) => {
+        setPlayerCount(state.players.size);
+        setOnlinePlayers((prev) => prev.filter((x) => x.sessionId !== sid));
+      });
 
       room.onLeave(() => {
         setConn("idle");
@@ -625,6 +666,7 @@ export default function App() {
           <button onClick={toggleMic} style={iconBtnStyle(micOn)} title="Microfone">{micOn ? "🎤" : "🔇"}</button>
           <button onClick={toggleCam} style={iconBtnStyle(camOn)} title="Câmera">{camOn ? "📹" : "🚫"}</button>
           <button onClick={toggleScreen} style={iconBtnStyle(screenOn)} title="Compartilhar tela">{screenOn ? "🛑" : "🖥️"}</button>
+          <button onClick={() => setSidebarOpen((v) => !v)} style={iconBtnStyle(sidebarOpen)} title="Quem está online">👥</button>
           <button onClick={() => setEditingAvatar(true)} style={iconBtnStyle(false)} title="Editar avatar">🎨</button>
           {session.user.isAdmin && (
             <button onClick={() => setAdminOpen(true)} style={iconBtnStyle(false)} title="Painel de administração">🛡️</button>
@@ -633,6 +675,33 @@ export default function App() {
         </div>
         {audioStatus && <div style={{ fontSize: 11, opacity: 0.8, marginTop: 6, color: "#fbbf24" }}>{audioStatus}</div>}
       </div>
+
+      {sidebarOpen && (
+        <div style={sidebarStyle}>
+          <div style={sidebarHeaderStyle}>
+            <span><strong>{onlinePlayers.length}</strong> online</span>
+            <button onClick={() => setSidebarOpen(false)} style={sidebarCloseBtn} title="Fechar">✕</button>
+          </div>
+          <div style={sidebarListStyle}>
+            {onlinePlayers
+              .slice()
+              .sort((a, b) => {
+                if (a.isMe) return -1;
+                if (b.isMe) return 1;
+                return a.name.localeCompare(b.name);
+              })
+              .map((p) => (
+                <div key={p.sessionId} style={sidebarRowStyle}>
+                  <MiniAvatar bodyColor={p.color} hairColor={p.hairColor} />
+                  <div style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {p.name}
+                    {p.isMe && <span style={youBadgeStyle}>você</span>}
+                  </div>
+                </div>
+              ))}
+          </div>
+        </div>
+      )}
 
       {activeScreenShare && (
         <div style={zoneIndicatorStyle}>
@@ -753,6 +822,30 @@ export default function App() {
         </div>
       )}
     </div>
+  );
+}
+
+/** Avatar mini (24x30 px) renderizado em canvas — usado na sidebar */
+function MiniAvatar({ bodyColor, hairColor }: { bodyColor: string; hairColor: string }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    if (!ref.current) return;
+    drawAvatarPreview(ref.current, bodyColor, hairColor);
+  }, [bodyColor, hairColor]);
+  return (
+    <canvas
+      ref={ref}
+      width={64}
+      height={80}
+      style={{
+        imageRendering: "pixelated",
+        width: 24, height: 30,
+        background: "#0f172a",
+        borderRadius: 4,
+        border: "1px solid #334155",
+        flexShrink: 0,
+      }}
+    />
   );
 }
 
@@ -883,3 +976,32 @@ function labelOf(deskId: string): string {
   const m = /^desk-(\d+)$/.exec(deskId);
   return m ? m[1] : deskId;
 }
+
+const sidebarStyle: React.CSSProperties = {
+  position: "absolute", top: 16, left: 220,
+  background: "#1e293bee", border: "1px solid #334155",
+  borderRadius: 8, padding: 10,
+  width: 240, maxHeight: "70vh",
+  zIndex: 11, display: "flex", flexDirection: "column",
+  boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+};
+const sidebarHeaderStyle: React.CSSProperties = {
+  display: "flex", justifyContent: "space-between", alignItems: "center",
+  fontSize: 13, marginBottom: 10, paddingBottom: 8,
+  borderBottom: "1px solid #334155",
+};
+const sidebarCloseBtn: React.CSSProperties = {
+  background: "transparent", border: "none", color: "#94a3b8",
+  fontSize: 14, cursor: "pointer", padding: 0,
+};
+const sidebarListStyle: React.CSSProperties = {
+  overflowY: "auto", display: "flex", flexDirection: "column", gap: 6,
+};
+const sidebarRowStyle: React.CSSProperties = {
+  display: "flex", gap: 8, alignItems: "center",
+  padding: "4px 6px", borderRadius: 4, fontSize: 13,
+};
+const youBadgeStyle: React.CSSProperties = {
+  marginLeft: 6, background: "#0e7490", color: "#fff",
+  fontSize: 10, padding: "1px 6px", borderRadius: 4, fontWeight: 600,
+};
