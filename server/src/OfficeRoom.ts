@@ -368,46 +368,64 @@ export class OfficeRoom extends Room<OfficeState> {
   private TELEPORT_OFFSET = 40; // px ao lado do alvo, pra não ficar em cima
 
   private handleTeleportToPlayer(client: Client, msg: TeleportToPlayerMessage) {
-    const me = this.state.players.get(client.sessionId);
-    if (!me) return;
+    try {
+      console.log(`[teleport:to-player] de=${client.sessionId} msg=`, JSON.stringify(msg));
+      const me = this.state.players.get(client.sessionId);
+      if (!me) {
+        console.warn(`[teleport:to-player] me não está no state (sessionId=${client.sessionId})`);
+        return;
+      }
 
-    const targetSessionId = String(msg?.targetSessionId || "");
-    if (!targetSessionId || targetSessionId === client.sessionId) return;
+      const targetSessionId = String(msg?.targetSessionId || "");
+      if (!targetSessionId || targetSessionId === client.sessionId) {
+        console.warn(`[teleport:to-player] targetSessionId inválido: ${targetSessionId}`);
+        return;
+      }
 
-    const target = this.state.players.get(targetSessionId);
-    if (!target) {
-      client.send("teleport:error", { error: "Usuário não encontrado" });
-      return;
+      const target = this.state.players.get(targetSessionId);
+      if (!target) {
+        console.warn(`[teleport:to-player] target ${targetSessionId} não existe`);
+        client.send("teleport:error", { error: "Usuário não encontrado" });
+        return;
+      }
+
+      const pos = this.pickSpotNear(target.x, target.y);
+      me.x = pos.x;
+      me.y = pos.y;
+      console.log(`[teleport:to-player] ${me.name} -> perto de ${target.name} (${pos.x},${pos.y})`);
+    } catch (err) {
+      console.error("[teleport:to-player] EXCEPTION:", err);
     }
-
-    const pos = this.pickSpotNear(target.x, target.y);
-    me.x = pos.x;
-    me.y = pos.y;
-    // direction permanece — não muda pra onde tá olhando
   }
 
   private handleTeleportToDesk(client: Client, msg: TeleportToDeskMessage) {
-    const auth = client.userData as AuthData | undefined;
-    const me = this.state.players.get(client.sessionId);
-    if (!auth || !me) return;
+    try {
+      console.log(`[teleport:to-desk] de=${client.sessionId} msg=`, JSON.stringify(msg));
+      const auth = client.userData as AuthData | undefined;
+      const me = this.state.players.get(client.sessionId);
+      if (!auth || !me) return;
 
-    const deskId = String(msg?.deskId || "");
-    const deskInfo = getDeskById(deskId);
-    if (!deskInfo) {
-      client.send("teleport:error", { error: "Mesa inválida" });
-      return;
+      const deskId = String(msg?.deskId || "");
+      const deskInfo = getDeskById(deskId);
+      if (!deskInfo) {
+        client.send("teleport:error", { error: "Mesa inválida" });
+        return;
+      }
+
+      // Permite só se a mesa é sua (ou ninguém é dono — caso raro)
+      const stateDesk = this.state.desks.get(deskId);
+      if (stateDesk && stateDesk.ownerId !== auth.userId) {
+        client.send("teleport:error", { error: `Mesa é de ${stateDesk.ownerName}` });
+        return;
+      }
+
+      const seat = getSeatPosition(deskInfo);
+      me.x = seat.x;
+      me.y = seat.y;
+      console.log(`[teleport:to-desk] ${me.name} -> ${deskId} (${seat.x},${seat.y})`);
+    } catch (err) {
+      console.error("[teleport:to-desk] EXCEPTION:", err);
     }
-
-    // Permite só se a mesa é sua (ou ninguém é dono — caso raro)
-    const stateDesk = this.state.desks.get(deskId);
-    if (stateDesk && stateDesk.ownerId !== auth.userId) {
-      client.send("teleport:error", { error: `Mesa é de ${stateDesk.ownerName}` });
-      return;
-    }
-
-    const seat = getSeatPosition(deskInfo);
-    me.x = seat.x;
-    me.y = seat.y;
   }
 
   /** Escolhe um ponto ao lado do alvo (4 direções, picka primeira sem colisão simples). */
@@ -434,55 +452,75 @@ export class OfficeRoom extends Room<OfficeState> {
   // ============================================================
 
   private handleInvite(client: Client, msg: InviteMessage) {
-    const me = this.state.players.get(client.sessionId);
-    if (!me) return;
-    const targetSessionId = String(msg?.targetSessionId || "");
-    if (!targetSessionId || targetSessionId === client.sessionId) return;
+    try {
+      console.log(`[invite] de=${client.sessionId} msg=`, JSON.stringify(msg));
+      const me = this.state.players.get(client.sessionId);
+      if (!me) {
+        console.warn(`[invite] me não está no state`);
+        return;
+      }
+      const targetSessionId = String(msg?.targetSessionId || "");
+      if (!targetSessionId || targetSessionId === client.sessionId) {
+        console.warn(`[invite] targetSessionId inválido: ${targetSessionId}`);
+        return;
+      }
 
-    const target = this.state.players.get(targetSessionId);
-    if (!target) {
-      client.send("invite:error", { error: "Usuário não está mais online" });
-      return;
+      const target = this.state.players.get(targetSessionId);
+      if (!target) {
+        console.warn(`[invite] target ${targetSessionId} não existe no state`);
+        client.send("invite:error", { error: "Usuário não está mais online" });
+        return;
+      }
+
+      // Acha o cliente do target pra mandar a mensagem direta
+      const targetClient = this.clients.find((c) => c.sessionId === targetSessionId);
+      if (!targetClient) {
+        console.warn(`[invite] targetClient não encontrado em this.clients`);
+        client.send("invite:error", { error: "Usuário não está mais online" });
+        return;
+      }
+
+      targetClient.send("invite:received", {
+        fromSessionId: client.sessionId,
+        fromName: me.name,
+      });
+      console.log(`[invite] ${me.name} -> ${target.name} OK`);
+    } catch (err) {
+      console.error("[invite] EXCEPTION:", err);
     }
-
-    // Acha o cliente do target pra mandar a mensagem direta
-    const targetClient = this.clients.find((c) => c.sessionId === targetSessionId);
-    if (!targetClient) {
-      client.send("invite:error", { error: "Usuário não está mais online" });
-      return;
-    }
-
-    targetClient.send("invite:received", {
-      fromSessionId: client.sessionId,
-      fromName: me.name,
-    });
   }
 
   private handleInviteRespond(client: Client, msg: InviteResponseMessage) {
-    const responder = this.state.players.get(client.sessionId);
-    if (!responder) return;
+    try {
+      console.log(`[invite:respond] de=${client.sessionId} msg=`, JSON.stringify(msg));
+      const responder = this.state.players.get(client.sessionId);
+      if (!responder) return;
 
-    const fromSessionId = String(msg?.fromSessionId || "");
-    const accepted = !!msg?.accepted;
-    if (!fromSessionId) return;
+      const fromSessionId = String(msg?.fromSessionId || "");
+      const accepted = !!msg?.accepted;
+      if (!fromSessionId) return;
 
-    const inviter = this.state.players.get(fromSessionId);
-    const inviterClient = this.clients.find((c) => c.sessionId === fromSessionId);
+      const inviter = this.state.players.get(fromSessionId);
+      const inviterClient = this.clients.find((c) => c.sessionId === fromSessionId);
 
-    // Notifica o convidador (se ainda online)
-    if (inviterClient) {
-      inviterClient.send("invite:response", {
-        fromSessionId: client.sessionId,
-        fromName: responder.name,
-        accepted,
-      });
-    }
+      // Notifica o convidador (se ainda online)
+      if (inviterClient) {
+        inviterClient.send("invite:response", {
+          fromSessionId: client.sessionId,
+          fromName: responder.name,
+          accepted,
+        });
+      }
 
-    // Se aceito, teletransporta o convidado pra perto do convidador (server-autoritativo)
-    if (accepted && inviter) {
-      const pos = this.pickSpotNear(inviter.x, inviter.y);
-      responder.x = pos.x;
-      responder.y = pos.y;
+      // Se aceito, teletransporta o convidado pra perto do convidador (server-autoritativo)
+      if (accepted && inviter) {
+        const pos = this.pickSpotNear(inviter.x, inviter.y);
+        responder.x = pos.x;
+        responder.y = pos.y;
+      }
+      console.log(`[invite:respond] ${responder.name} accepted=${accepted}`);
+    } catch (err) {
+      console.error("[invite:respond] EXCEPTION:", err);
     }
   }
 }
