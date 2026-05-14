@@ -149,10 +149,16 @@ export class OfficeScene extends Phaser.Scene {
     this.cursors = this.input.keyboard!.createCursorKeys();
     this.wasd = this.input.keyboard!.addKeys("W,A,S,D") as any;
     this.keyE = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.E);
-    this.keyE.on("down", () => this.handleClaimKey());
+    this.keyE.on("down", () => {
+      if (isTypingInInput()) return;
+      this.handleClaimKey();
+    });
 
     // Tecla C: recentraliza câmera no avatar (volta a seguir)
-    this.input.keyboard!.addKey("C").on("down", () => this.recenterCamera());
+    this.input.keyboard!.addKey("C").on("down", () => {
+      if (isTypingInInput()) return;
+      this.recenterCamera();
+    });
 
     // Pan com botão direito do mouse — não interfere com cliques de UI nem com tecla E
     this.input.mouse?.disableContextMenu();
@@ -778,11 +784,17 @@ export class OfficeScene extends Phaser.Scene {
     let vx = 0, vy = 0;
     let newDir = this.myDirection;
 
-    if (this.cursors.left?.isDown || this.wasd.A.isDown) { vx = -1; newDir = "left"; }
-    else if (this.cursors.right?.isDown || this.wasd.D.isDown) { vx = 1; newDir = "right"; }
+    // Se o usuário está digitando em algum input HTML (chat, modal),
+    // ignora WASD/setas pra não mover o avatar com as letras digitadas.
+    const typing = isTypingInInput();
 
-    if (this.cursors.up?.isDown || this.wasd.W.isDown) { vy = -1; newDir = "up"; }
-    else if (this.cursors.down?.isDown || this.wasd.S.isDown) { vy = 1; newDir = "down"; }
+    if (!typing) {
+      if (this.cursors.left?.isDown || this.wasd.A.isDown) { vx = -1; newDir = "left"; }
+      else if (this.cursors.right?.isDown || this.wasd.D.isDown) { vx = 1; newDir = "right"; }
+
+      if (this.cursors.up?.isDown || this.wasd.W.isDown) { vy = -1; newDir = "up"; }
+      else if (this.cursors.down?.isDown || this.wasd.S.isDown) { vy = 1; newDir = "down"; }
+    }
 
     if (vx !== 0 && vy !== 0) {
       vx *= 0.7071;
@@ -939,4 +951,19 @@ function setEquals(a: Set<string>, b: Set<string>): boolean {
   if (a.size !== b.size) return false;
   for (const x of a) if (!b.has(x)) return false;
   return true;
+}
+
+/**
+ * Detecta se o usuário está digitando em algum input/textarea HTML.
+ * Usado pra desabilitar input do jogo (WASD/E/C) e evitar que digitar
+ * "casa" mova o avatar pra esquerda + reservar mesa + recentralizar câmera.
+ */
+function isTypingInInput(): boolean {
+  const el = document.activeElement;
+  if (!el) return false;
+  const tag = el.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA") return true;
+  // contentEditable também conta (chat com formatação no futuro)
+  if ((el as HTMLElement).isContentEditable) return true;
+  return false;
 }
