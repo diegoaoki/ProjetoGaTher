@@ -1,13 +1,12 @@
 {
   "name": "virtual-office-server",
-  "version": "0.1.0",
-  "description": "Servidor multiplayer authoritative com Colyseus para escritório virtual",
+  "version": "0.2.0",
+  "description": "Servidor multiplayer authoritative com Colyseus + token server LiveKit",
   "main": "dist/index.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js",
-    "postinstall": "npm run build || echo 'build skipped in dev'"
+    "start": "node dist/index.js"
   },
   "dependencies": {
     "@colyseus/core": "^0.15.0",
@@ -17,7 +16,8 @@
     "colyseus": "^0.15.0",
     "cors": "^2.8.5",
     "express": "^4.18.2",
-    "express-basic-auth": "^1.2.1"
+    "express-basic-auth": "^1.2.1",
+    "livekit-server-sdk": "^2.6.1"
   },
   "devDependencies": {
     "@types/cors": "^2.8.13",
