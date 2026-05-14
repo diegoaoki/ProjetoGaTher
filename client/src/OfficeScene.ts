@@ -87,12 +87,18 @@ export class OfficeScene extends Phaser.Scene {
   private tvY = 0;
   private currentZone: string | null = null;
 
-  // Balões de screen share — um por peer que está compartilhando.
-  // Identity LiveKit (userId__timestamp) → { dom, video }
-  private screenBalloons = new Map<string, {
+  // Balões de vídeo (câmera + screen share) flutuando em cima dos avatares.
+  // Chave: `${identity}|${kind}` onde kind = "camera" | "screen". Identity especial
+  // "__local__" representa o próprio jogador.
+  private videoBalloons = new Map<string, {
+    identity: string;     // identity do LiveKit ou "__local__"
+    kind: "camera" | "screen";
     dom: Phaser.GameObjects.DOMElement;
     video: HTMLVideoElement;
   }>();
+
+  // Configuração de visibilidade dos balões (mesma regra do áudio)
+  private readonly BALLOON_HEARING_RADIUS = 400;
 
   public onPositionsUpdate?: (
     myInfo: { x: number; y: number; zoneId: string },
@@ -239,52 +245,71 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   /**
-   * Mostra um preview do screen share como balão em cima do avatar do compartilhador.
-   * Click no balão chama `onExpand` (pra abrir fullscreen no React).
+   * Cria/atualiza um balão de vídeo (câmera ou screen share) acima de um avatar.
+   * - `identity` = identity do LiveKit (`userId__timestamp`) ou "__local__" pro próprio user.
+   * - `kind` = "camera" (pequeno, sem click) ou "screen" (maior, clicável).
+   * - `onClick` = só aplica em screen (opcional).
    */
-  public showScreenShareBalloon(identity: string, stream: MediaStream, onExpand: () => void) {
-    this.hideScreenShareBalloon(identity); // garante limpeza se já existe
+  public showVideoBalloon(
+    identity: string,
+    kind: "camera" | "screen",
+    element: HTMLVideoElement,
+    onClick?: () => void
+  ) {
+    this.hideVideoBalloon(identity, kind);
 
-    const video = document.createElement("video");
-    video.srcObject = stream;
-    video.autoplay = true;
-    video.muted = true;
-    video.playsInline = true;
-    video.style.width = "140px";
-    video.style.height = "90px";
-    video.style.objectFit = "cover";
-    video.style.borderRadius = "8px";
-    video.style.border = "2px solid #4ade80";
-    video.style.background = "#000";
-    video.style.cursor = "pointer";
-    video.style.boxShadow = "0 4px 12px rgba(0,0,0,0.5)";
-    video.style.display = "block";
-    video.title = "Clique pra expandir";
-    video.addEventListener("click", (e) => {
-      e.stopPropagation();
-      onExpand();
-    });
-    video.play().catch((err) => {
+    // Configurações visuais diferentes por tipo
+    const isScreen = kind === "screen";
+    element.style.width = isScreen ? "140px" : "100px";
+    element.style.height = isScreen ? "90px" : "70px";
+    element.style.objectFit = isScreen ? "contain" : "cover";
+    element.style.borderRadius = "8px";
+    element.style.border = isScreen ? "2px solid #4ade80" : "2px solid #60a5fa";
+    element.style.background = "#000";
+    element.style.boxShadow = "0 4px 12px rgba(0,0,0,0.5)";
+    element.style.display = "block";
+    element.muted = true;
+    element.playsInline = true;
+    if (isScreen && onClick) {
+      element.style.cursor = "pointer";
+      element.title = "Clique pra expandir";
+      element.addEventListener("click", (e) => {
+        e.stopPropagation();
+        onClick();
+      });
+    } else {
+      element.style.cursor = "default";
+    }
+    // Força play (autoplay pode falhar em alguns timings)
+    element.play().catch((err) => {
       if (err?.name !== "AbortError") console.warn("[balloon] play falhou:", err);
     });
 
+    // Posição inicial — update() reposiciona a cada frame
     const pos = this.getAvatarPositionFor(identity);
-    const dom = this.add.dom(pos.x, pos.y - 80, video);
-    dom.setDepth(10000); // sempre por cima
+    const offsetY = isScreen ? -100 : -50;
+    const dom = this.add.dom(pos.x, pos.y + offsetY, element);
+    dom.setDepth(10000);
 
-    this.screenBalloons.set(identity, { dom, video });
+    const key = `${identity}|${kind}`;
+    this.videoBalloons.set(key, { identity, kind, dom, video: element });
   }
 
-  public hideScreenShareBalloon(identity: string) {
-    const b = this.screenBalloons.get(identity);
+  public hideVideoBalloon(identity: string, kind: "camera" | "screen") {
+    const key = `${identity}|${kind}`;
+    const b = this.videoBalloons.get(key);
     if (!b) return;
     b.video.srcObject = null;
     b.dom.destroy();
-    this.screenBalloons.delete(identity);
+    this.videoBalloons.delete(key);
   }
 
-  /** Resolve posição atual do avatar com base na identity do LiveKit. */
-  private getAvatarPositionFor(identity: string): { x: number; y: number } {
+  /** Resolve posição atual do avatar do peer pela identity do LiveKit. */
+  private getAvatarPositionFor(identity: string): { x: number; y: number } | null {
+    if (identity === "__local__") {
+      if (this.myContainer) return { x: this.myContainer.x, y: this.myContainer.y };
+      return null;
+    }
     const userId = identity.split("__")[0];
     const state: any = this.room.state;
     let target: { x: number; y: number } | null = null;
@@ -297,7 +322,41 @@ export class OfficeScene extends Phaser.Scene {
         if (rp) target = { x: rp.container.x, y: rp.container.y };
       }
     });
-    return target || { x: WORLD_W / 2, y: WORLD_H / 2 };
+    return target;
+  }
+
+  /**
+   * Decide se o balão de um peer deve ser visível pro player local.
+   * Regra: mesma zona E dentro do farRadius. Replica a lógica do áudio.
+   * Pro próprio user (__local__), sempre visível.
+   */
+  private isPeerBalloonVisible(identity: string): boolean {
+    if (identity === "__local__") return true;
+    if (!this.myContainer) return false;
+
+    const userId = identity.split("__")[0];
+    const state: any = this.room.state;
+    let peerData: { x: number; y: number; zoneId: string } | null = null;
+
+    state?.players?.forEach?.((p: any, sid: string) => {
+      if (p.userId !== userId) return;
+      const rp = sid === this.myId ? null : this.remotePlayers.get(sid);
+      if (rp) {
+        peerData = { x: rp.container.x, y: rp.container.y, zoneId: p.zoneId || "open" };
+      }
+    });
+    if (!peerData) return false;
+
+    // Zona diferente → não vê (áudio isolado, então UX consistente)
+    const myZone = this.currentZone || "open";
+    if (peerData.zoneId !== myZone) return false;
+
+    // Distância > farRadius → não vê
+    const dx = peerData.x - this.myContainer.x;
+    const dy = peerData.y - this.myContainer.y;
+    if (dx * dx + dy * dy > this.BALLOON_HEARING_RADIUS * this.BALLOON_HEARING_RADIUS) return false;
+
+    return true;
   }
 
   public hideScreenShareFromTV() {
@@ -760,11 +819,23 @@ export class OfficeScene extends Phaser.Scene {
 
     this.updateNearestDesk();
 
-    // Atualiza posição dos balões de screen share pra acompanhar avatares
-    this.screenBalloons.forEach((b, identity) => {
-      const pos = this.getAvatarPositionFor(identity);
+    // Atualiza posição e visibilidade dos balões de vídeo
+    // Se ambos camera+screen existem pro mesmo peer, screen fica acima da camera.
+    this.videoBalloons.forEach((b) => {
+      const pos = this.getAvatarPositionFor(b.identity);
+      if (!pos) {
+        b.dom.setVisible(false);
+        return;
+      }
+      const visible = this.isPeerBalloonVisible(b.identity);
+      b.dom.setVisible(visible);
+      if (!visible) return;
+
+      // Empilhamento: screen mais alto que camera
+      const offsetY = b.kind === "screen" ? -110 : -55;
       b.dom.x = pos.x;
-      b.dom.y = pos.y - 80;
+      b.dom.y = pos.y + offsetY;
+      b.dom.setDepth(10000);
     });
   }
 

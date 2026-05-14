@@ -3,6 +3,7 @@ import {
   RoomEvent,
   RemoteParticipant,
   RemoteTrack,
+  LocalTrackPublication,
   Track,
   LocalParticipant,
   createLocalTracks,
@@ -39,8 +40,12 @@ export class SpatialAudio {
   public onPeerJoined?: (identity: string) => void;
   public onPeerLeft?: (identity: string) => void;
   public onCameraTrack?: (identity: string, element: HTMLVideoElement) => void;
+  public onCameraTrackEnded?: (identity: string) => void;
   public onScreenShareStarted?: (identity: string, element: HTMLVideoElement) => void;
   public onScreenShareStopped?: (identity: string) => void;
+  // Screen share LOCAL (eu mesmo) — pra mostrar balão em cima do meu avatar
+  public onLocalScreenShareStarted?: (element: HTMLVideoElement) => void;
+  public onLocalScreenShareStopped?: () => void;
   public onError?: (msg: string) => void;
 
   constructor(opts: SpatialAudioOptions) {
@@ -106,6 +111,21 @@ export class SpatialAudio {
           this.onPeerSpeaking?.(id, nowSpeaking);
         }
       });
+    });
+
+    // Local screen share: pra mostrar balão em cima do meu próprio avatar
+    this.room.on(RoomEvent.LocalTrackPublished, (pub: LocalTrackPublication) => {
+      if (pub.source === Track.Source.ScreenShare && pub.videoTrack) {
+        const el = pub.videoTrack.attach() as HTMLVideoElement;
+        el.muted = true;
+        el.playsInline = true;
+        this.onLocalScreenShareStarted?.(el);
+      }
+    });
+    this.room.on(RoomEvent.LocalTrackUnpublished, (pub: LocalTrackPublication) => {
+      if (pub.source === Track.Source.ScreenShare) {
+        this.onLocalScreenShareStopped?.();
+      }
     });
   }
 
@@ -188,6 +208,7 @@ export class SpatialAudio {
       } else {
         peer.cameraElement?.remove();
         peer.cameraElement = undefined;
+        this.onCameraTrackEnded?.(participant.identity);
       }
     }
   }

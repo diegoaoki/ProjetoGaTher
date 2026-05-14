@@ -53,12 +53,6 @@ const HAIR_COLORS = [
 type ConnState = "idle" | "connecting" | "connected" | "error";
 type AuthState = "checking" | "anonymous" | "authed";
 
-interface RemoteVideo {
-  identity: string;
-  element: HTMLVideoElement;
-  type: "camera" | "screen";
-}
-
 interface ActiveScreenShare {
   identity: string;
   stream: MediaStream;
@@ -78,7 +72,6 @@ function safePlay(video: HTMLVideoElement) {
 
 export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
-  const videoContainerRef = useRef<HTMLDivElement>(null);
   const localVideoRef = useRef<HTMLDivElement>(null);
   const fullscreenVideoRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
@@ -102,7 +95,6 @@ export default function App() {
   const [camOn, setCamOn] = useState(true);
   const [screenOn, setScreenOn] = useState(false);
   const [audioStatus, setAudioStatus] = useState("");
-  const [remoteVideos, setRemoteVideos] = useState<RemoteVideo[]>([]);
   const [activeScreenShare, setActiveScreenShare] = useState<ActiveScreenShare | null>(null);
   const [fullscreenStream, setFullscreenStream] = useState<MediaStream | null>(null);
 
@@ -420,42 +412,54 @@ export default function App() {
 
       spatial.onError = (msg) => setAudioStatus("⚠ " + msg);
       spatial.onPeerLeft = (identity) => {
-        setRemoteVideos((vs) => vs.filter((v) => v.identity !== identity));
+        // Limpa qualquer balão do peer que saiu
+        if (sceneRef.current) {
+          sceneRef.current.hideVideoBalloon(identity, "camera");
+          sceneRef.current.hideVideoBalloon(identity, "screen");
+        }
         setActiveScreenShare((cur) => (cur?.identity === identity ? null : cur));
       };
 
       spatial.onCameraTrack = (identity, element) => {
-        element.style.width = "160px";
-        element.style.height = "120px";
-        element.style.objectFit = "cover";
-        setRemoteVideos((vs) => [
-          ...vs.filter((v) => !(v.identity === identity && v.type === "camera")),
-          { identity, element, type: "camera" },
-        ]);
+        if (sceneRef.current) {
+          sceneRef.current.showVideoBalloon(identity, "camera", element);
+        }
+      };
+
+      spatial.onCameraTrackEnded = (identity) => {
+        if (sceneRef.current) sceneRef.current.hideVideoBalloon(identity, "camera");
       };
 
       spatial.onScreenShareStarted = (identity, element) => {
-        console.log("[app] screen share começou:", identity);
         const stream = element.srcObject as MediaStream;
-        if (!stream) {
-          console.warn("[app] screen share sem stream");
-          return;
-        }
+        if (!stream) return;
         setActiveScreenShare({ identity, stream });
-
-        // Mostra preview clicável em cima do avatar do compartilhador
         if (sceneRef.current) {
-          sceneRef.current.showScreenShareBalloon(identity, stream, () => {
+          sceneRef.current.showVideoBalloon(identity, "screen", element, () => {
             setFullscreenStream(stream);
           });
         }
       };
 
       spatial.onScreenShareStopped = (identity) => {
-        console.log("[app] screen share parou:", identity);
         setActiveScreenShare((cur) => (cur?.identity === identity ? null : cur));
-        if (sceneRef.current) sceneRef.current.hideScreenShareBalloon(identity);
+        if (sceneRef.current) sceneRef.current.hideVideoBalloon(identity, "screen");
         setFullscreenStream((cur) => (cur ? null : cur));
+      };
+
+      // Screen share LOCAL (eu mesmo) — balão em cima do meu avatar
+      spatial.onLocalScreenShareStarted = (element) => {
+        const stream = element.srcObject as MediaStream;
+        if (!stream) return;
+        if (sceneRef.current) {
+          sceneRef.current.showVideoBalloon("__local__", "screen", element, () => {
+            setFullscreenStream(stream);
+          });
+        }
+      };
+
+      spatial.onLocalScreenShareStopped = () => {
+        if (sceneRef.current) sceneRef.current.hideVideoBalloon("__local__", "screen");
       };
 
       spatial.onPeerSpeaking = (identity, speaking) => {
@@ -477,31 +481,6 @@ export default function App() {
     }
   }
 
-  useEffect(() => {
-    if (conn !== "connected") return; // container ainda não existe
-    if (!videoContainerRef.current) return;
-    const c = videoContainerRef.current;
-    c.innerHTML = "";
-    remoteVideos
-      .filter((v) => v.type === "camera")
-      .forEach((rv) => {
-        // Resolve userId → displayName via lista de players online; fallback pro UUID truncado
-        const userId = rv.identity.split("__")[0];
-        const player = onlinePlayers.find((p) => p.userId === userId);
-        const displayName = player?.name || userId.slice(0, 8);
-
-        const wrap = document.createElement("div");
-        wrap.style.cssText = "position:relative;border:2px solid #334155;border-radius:8px;overflow:hidden;background:#000;";
-        const lbl = document.createElement("div");
-        lbl.textContent = displayName;
-        lbl.style.cssText = "position:absolute;bottom:0;left:0;right:0;background:#000a;color:#fff;font-size:11px;padding:2px 6px;";
-        wrap.appendChild(rv.element);
-        wrap.appendChild(lbl);
-        c.appendChild(wrap);
-        // Garante autoplay caso o browser tenha pausado o vídeo durante a transição
-        safePlay(rv.element);
-      });
-  }, [remoteVideos, conn, onlinePlayers]);
 
   useEffect(() => {
     if (conn !== "connected" || !spatialRef.current || !localVideoRef.current) return;
@@ -550,7 +529,6 @@ export default function App() {
     spatialRef.current = null;
     gameRef.current?.destroy(true);
     gameRef.current = null;
-    setRemoteVideos([]);
     setActiveScreenShare(null);
     setFullscreenStream(null);
   }
@@ -815,10 +793,6 @@ export default function App() {
         background: "#000", zIndex: 10,
       }} />
 
-      <div ref={videoContainerRef} style={{
-        position: "absolute", top: 16, right: 16,
-        display: "flex", flexDirection: "column", gap: 8, zIndex: 10,
-      }} />
 
       <div style={hintStyle}>
         WASD/setas pra mover • <kbd style={kbdStyle}>botão direito</kbd> arrasta a câmera • <kbd style={kbdStyle}>C</kbd> centraliza
