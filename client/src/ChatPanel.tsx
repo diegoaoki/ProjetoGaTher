@@ -34,6 +34,33 @@ type Tab = "global" | "room" | "dm";
 export default function ChatPanel({
   httpUrl, token, myUserId, onlinePlayers, liveMessages, onSend, onClose, onChannelViewed,
 }: Props) {
+  /**
+   * Resolve userId → displayName com 3 níveis de fallback:
+   *  1. Nome fornecido (do server, vem em senderName/otherName)
+   *  2. Lista de online players (caso o user esteja conectado agora)
+   *  3. UUID truncado (último recurso)
+   *
+   * Também aprende com liveMessages: se alguém te mandou DM antes e ainda
+   * não está online, o nome dele foi enviado pelo server na payload — guarda
+   * isso pra reuso.
+   */
+  const learnedNames = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const m of liveMessages) {
+      if (m.senderId && m.senderName) map.set(m.senderId, m.senderName);
+    }
+    return map;
+  }, [liveMessages]);
+
+  function resolveName(userId: string, providedName?: string | null): string {
+    if (providedName && providedName.trim()) return providedName;
+    const online = onlinePlayers.find((p) => p.userId === userId);
+    if (online?.name) return online.name;
+    const learned = learnedNames.get(userId);
+    if (learned) return learned;
+    return userId.slice(0, 8);
+  }
+
   const [tab, setTab] = useState<Tab>("global");
   const [globalHistory, setGlobalHistory] = useState<ChatMessage[]>([]);
   const [dmHistory, setDmHistory] = useState<Map<string, ChatMessage[]>>(new Map());
@@ -188,7 +215,7 @@ export default function ChatPanel({
               onClick={() => setActiveDmUserId(c.userId)}
               style={dmListItem}
             >
-              <strong style={{ fontSize: 13 }}>{c.name}</strong>
+              <strong style={{ fontSize: 13 }}>{resolveName(c.userId, c.name)}</strong>
               <span style={dmLastMsg}>{c.lastContent.slice(0, 40)}</span>
             </button>
           ))}
@@ -213,9 +240,7 @@ export default function ChatPanel({
             <div style={dmHeaderStyle}>
               <button onClick={() => setActiveDmUserId(null)} style={backBtnStyle}>← voltar</button>
               <span style={{ fontSize: 13, fontWeight: 600 }}>
-                {knownDms.find((d) => d.userId === activeDmUserId)?.name ||
-                  onlinePlayers.find((p) => p.userId === activeDmUserId)?.name ||
-                  "Conversa"}
+                {resolveName(activeDmUserId, knownDms.find((d) => d.userId === activeDmUserId)?.name)}
               </span>
             </div>
           )}
@@ -234,7 +259,7 @@ export default function ChatPanel({
               return (
                 <div key={m.id} style={{ ...msgRowStyle, justifyContent: mine ? "flex-end" : "flex-start" }}>
                   <div style={{ ...msgBubbleStyle, background: mine ? "#2563eb" : "#334155" }}>
-                    {!mine && <div style={msgSenderStyle}>{m.senderName || m.senderId.slice(0, 8)}</div>}
+                    {!mine && <div style={msgSenderStyle}>{resolveName(m.senderId, m.senderName)}</div>}
                     <div style={msgContentStyle}>{m.content}</div>
                     <div style={msgTimeStyle}>{formatTime(m.createdAt)}</div>
                   </div>
