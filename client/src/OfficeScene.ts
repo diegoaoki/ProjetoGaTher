@@ -99,7 +99,7 @@ export class OfficeScene extends Phaser.Scene {
 
   // Raio de visibilidade dos balões em open space. Em salas isoladas
   // (mesma zona != "open"), sempre vê. Mesma regra do áudio.
-  private readonly BALLOON_HEARING_RADIUS = 100;
+  private readonly BALLOON_HEARING_RADIUS = 60;
 
   public onPositionsUpdate?: (
     myInfo: { x: number; y: number; zoneId: string },

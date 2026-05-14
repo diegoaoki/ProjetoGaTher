@@ -420,8 +420,8 @@ export default function App() {
         token,
         identity: session.profile.displayName,
         enableVideo: true,
-        hearingNearRadius: 40,   // 100% até 40px (encostado)
-        hearingFarRadius: 100,   // fade até 100px (~2 avatares), depois muta
+        hearingNearRadius: 25,   // 100% só super encostado (~1 avatar)
+        hearingFarRadius: 60,    // fade rápido — depois muta
       });
 
       spatial.onError = (msg) => setAudioStatus("⚠ " + msg);
@@ -526,9 +526,9 @@ export default function App() {
         const displayName = player?.name || userId.slice(0, 8);
 
         const wrap = document.createElement("div");
-        wrap.style.cssText = "position:relative;border:2px solid #334155;border-radius:8px;overflow:hidden;background:#000;";
-        card.element.style.width = "160px";
-        card.element.style.height = "120px";
+        wrap.style.cssText = "position:relative;border:1px solid #334155;border-radius:6px;overflow:hidden;background:#000;";
+        card.element.style.width = "120px";
+        card.element.style.height = "80px";
         card.element.style.objectFit = "cover";
         card.element.style.display = "block";
 
@@ -855,7 +855,8 @@ export default function App() {
 
       <div ref={cardsContainerRef} style={{
         position: "absolute", top: 16, right: 16,
-        display: "flex", flexDirection: "column", gap: 8, zIndex: 10,
+        display: visiblePeerIds.size > 0 ? "flex" : "none",
+        flexDirection: "column", gap: 4, zIndex: 10,
       }} />
 
 
