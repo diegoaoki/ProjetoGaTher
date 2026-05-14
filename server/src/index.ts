@@ -42,6 +42,13 @@ app.get("/", (_req, res) => {
     status: "ok",
     livekit: !!(process.env.LIVEKIT_API_KEY && process.env.LIVEKIT_API_SECRET),
     db: !!process.env.DATABASE_URL,
+    // Canário pra detectar deploys parciais: cada feature flag liga quando
+    // os schemas/endpoints correspondentes existem no código rodando.
+    features: {
+      auth: true,
+      admin: true,
+      desks: true,
+    },
     ts: Date.now(),
   });
 });

@@ -311,7 +311,17 @@ export class OfficeScene extends Phaser.Scene {
   private handleClaimKey() {
     if (!this.myContainer) return;
     const state: any = this.room.state;
-    if (!state?.desks) return; // server desatualizado
+    if (!state?.desks) {
+      console.warn("[desk] E pressionado mas state.desks ausente — server desatualizado. Rode `railway up`.");
+      this.onDeskError?.("Servidor desatualizado — mesas indisponíveis");
+      return;
+    }
+    console.log(
+      "[desk] E pressionado:",
+      "nearestDeskId=", this.nearestDeskId,
+      "myDeskId=", this.myDeskId,
+      "myUserId=", this.myUserId
+    );
     // Se está perto de uma mesa, age sobre ela. Senão, se tem mesa reservada, libera.
     if (this.nearestDeskId) {
       const desk = state.desks.get(this.nearestDeskId);
@@ -319,11 +329,15 @@ export class OfficeScene extends Phaser.Scene {
         this.room.send("desk:release", { deskId: this.nearestDeskId });
       } else if (!desk) {
         this.room.send("desk:claim", { deskId: this.nearestDeskId });
+      } else {
+        // Mesa de outra pessoa — avisa pro user
+        this.onDeskError?.(`Essa mesa é de ${desk.ownerName}`);
       }
-      // Se tem dono diferente, ignora — server avisaria com desk:error de qualquer jeito
     } else if (this.myDeskId) {
       // Não tá perto de nenhuma; libera a mesa atual se tiver
       this.room.send("desk:release", { deskId: this.myDeskId });
+    } else {
+      this.onDeskError?.("Chegue perto de uma mesa pra reservar");
     }
   }
 
