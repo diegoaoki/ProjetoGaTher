@@ -110,6 +110,9 @@ export default function App() {
   const [editError, setEditError] = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
 
+  // === Indicador de auto-save da tela de customização ===
+  const [profileSaveStatus, setProfileSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+
   // Auto-login: ao montar, tenta validar JWT salvo
   useEffect(() => {
     const token = getStoredToken();
@@ -425,6 +428,33 @@ export default function App() {
     else setScreenOn(false);
   }
 
+  // Auto-save na tela de customização (antes de entrar no escritório).
+  // Salva imediatamente no server pra não perder se o user recarregar.
+  async function selectAndSaveColor(field: "bodyColor" | "hairColor", value: string) {
+    if (field === "bodyColor") setBodyColor(value);
+    else setHairColor(value);
+
+    if (!session) return;
+    if (session.profile[field] === value) return; // sem mudança
+
+    setProfileSaveStatus("saving");
+    try {
+      const profile = await updateProfile(HTTP_URL, session.token, { [field]: value });
+      setSession((s) => (s ? { ...s, profile } : s));
+      setProfileSaveStatus("saved");
+      // volta pra idle depois de 1.5s pra não ficar verde permanente
+      setTimeout(() => setProfileSaveStatus((cur) => (cur === "saved" ? "idle" : cur)), 1500);
+    } catch (e: any) {
+      console.warn("[profile] auto-save falhou:", e);
+      setProfileSaveStatus("error");
+      if (e?.message?.toLowerCase()?.includes("401") || /sess/i.test(e?.message || "")) {
+        clearToken();
+        setSession(null);
+        setAuthState("anonymous");
+      }
+    }
+  }
+
   // Persiste aparência (e atualiza o player na sala se estiver conectado)
   async function saveAvatarEdit(newBody: string, newHair: string) {
     if (!session) return;
@@ -519,12 +549,17 @@ export default function App() {
             />
           </div>
 
-          <label style={labelStyle}>Camisa</label>
+          <label style={labelStyle}>
+            Camisa
+            {profileSaveStatus === "saving" && <span style={saveStatusStyle("saving")}>Salvando…</span>}
+            {profileSaveStatus === "saved" && <span style={saveStatusStyle("saved")}>✓ Salvo</span>}
+            {profileSaveStatus === "error" && <span style={saveStatusStyle("error")}>✕ Falha ao salvar</span>}
+          </label>
           <div style={paletteStyle}>
             {SHIRT_COLORS.map((c) => (
               <button
                 key={c}
-                onClick={() => setBodyColor(c)}
+                onClick={() => selectAndSaveColor("bodyColor", c)}
                 style={{
                   ...swatchStyle, background: c,
                   outline: bodyColor === c ? "2px solid #fff" : "none",
@@ -540,7 +575,7 @@ export default function App() {
             {HAIR_COLORS.map((c) => (
               <button
                 key={c}
-                onClick={() => setHairColor(c)}
+                onClick={() => selectAndSaveColor("hairColor", c)}
                 style={{
                   ...swatchStyle, background: c,
                   outline: hairColor === c ? "2px solid #fff" : "none",
@@ -552,19 +587,8 @@ export default function App() {
           </div>
 
           <button
-            onClick={async () => {
-              // Salva alterações de cor (se houver) antes de entrar
-              if (bodyColor !== session.profile.bodyColor || hairColor !== session.profile.hairColor) {
-                try {
-                  const profile = await updateProfile(HTTP_URL, session.token, { bodyColor, hairColor });
-                  setSession({ ...session, profile });
-                } catch (e) {
-                  // não bloqueia entrada — server tem o profile atual
-                }
-              }
-              connect();
-            }}
-            disabled={conn === "connecting"}
+            onClick={connect}
+            disabled={conn === "connecting" || profileSaveStatus === "saving"}
             style={{ ...buttonStyle, marginTop: 16 }}
           >
             {conn === "connecting" ? (audioStatus || "Conectando...") : "Entrar no escritório"}
@@ -779,3 +803,10 @@ const modalStyle: React.CSSProperties = {
   display: "flex", alignItems: "center", justifyContent: "center",
   cursor: "pointer",
 };
+const saveStatusStyle = (status: "saving" | "saved" | "error"): React.CSSProperties => ({
+  marginLeft: 8,
+  fontSize: 11,
+  fontWeight: 400,
+  color: status === "saved" ? "#4ade80" : status === "error" ? "#f87171" : "#fbbf24",
+  opacity: 0.9,
+});
