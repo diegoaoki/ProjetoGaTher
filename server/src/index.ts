@@ -6,12 +6,10 @@ import { WebSocketTransport } from "@colyseus/ws-transport";
 import { monitor } from "@colyseus/monitor";
 import basicAuth from "express-basic-auth";
 import { OfficeRoom } from "./OfficeRoom";
+import { createTokenRouter } from "./tokenRouter";
 
 const PORT = Number(process.env.PORT || 2567);
 
-// CORS: aceita uma lista separada por vírgula em ALLOWED_ORIGINS
-// Ex: "https://meu-app.vercel.app,https://staging.meu-app.com"
-// Se vazio, libera tudo (útil em dev).
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || "")
   .split(",")
   .map((o) => o.trim())
@@ -31,6 +29,7 @@ app.get("/", (_req, res) => {
   res.json({
     service: "virtual-office-server",
     status: "ok",
+    livekit: !!(process.env.LIVEKIT_API_KEY && process.env.LIVEKIT_API_SECRET),
     ts: Date.now(),
   });
 });
@@ -39,8 +38,10 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true, ts: Date.now() });
 });
 
-// Dashboard interno em /colyseus. Em produção, protegido por basic auth se
-// MONITOR_USER e MONITOR_PASS estiverem definidos. Em dev, aberto.
+// Endpoint pra gerar tokens do LiveKit
+app.use("/", createTokenRouter());
+
+// Dashboard /colyseus protegido
 if (process.env.MONITOR_USER && process.env.MONITOR_PASS) {
   app.use(
     "/colyseus",
@@ -67,6 +68,10 @@ gameServer.listen(PORT, "0.0.0.0").then(() => {
   console.log(
     `✓ Origens permitidas:`,
     allowedOrigins.length > 0 ? allowedOrigins : "(qualquer — dev mode)"
+  );
+  console.log(
+    `✓ LiveKit:`,
+    process.env.LIVEKIT_API_KEY ? "configurado" : "NÃO configurado (adicione LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET)"
   );
   if (process.env.MONITOR_USER) {
     console.log(`✓ Dashboard /colyseus protegido por basic auth`);
