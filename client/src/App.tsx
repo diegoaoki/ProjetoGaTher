@@ -420,8 +420,8 @@ export default function App() {
         token,
         identity: session.profile.displayName,
         enableVideo: true,
-        hearingNearRadius: 80,   // 100% até 80px (ao lado da pessoa)
-        hearingFarRadius: 200,   // fade até 200px (mesa vizinha) — depois muta
+        hearingNearRadius: 40,   // 100% até 40px (encostado)
+        hearingFarRadius: 100,   // fade até 100px (~2 avatares), depois muta
       });
 
       spatial.onError = (msg) => setAudioStatus("⚠ " + msg);
