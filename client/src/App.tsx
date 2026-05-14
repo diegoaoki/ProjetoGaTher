@@ -3,34 +3,22 @@ import Phaser from "phaser";
 import { Client, Room } from "colyseus.js";
 import { OfficeScene } from "./OfficeScene";
 
-/**
- * Resolve a URL do servidor de forma inteligente:
- *
- * 1. Se VITE_SERVER_URL estiver definida no build, usa ela (e ajusta o protocolo
- *    se preciso pra evitar mixed content).
- * 2. Caso contrário, em dev usa ws://localhost:2567.
- *
- * Regra do navegador: se a página é https, o WebSocket DEVE ser wss.
- */
 function resolveServerUrl(): string {
   const fromEnv = import.meta.env.VITE_SERVER_URL as string | undefined;
 
   if (fromEnv) {
-    // Se passaram https://... ou http://..., converte pra wss/ws
     let url = fromEnv.trim();
     if (url.startsWith("https://")) url = "wss://" + url.slice(8);
     else if (url.startsWith("http://")) url = "ws://" + url.slice(7);
 
-    // Se a página é HTTPS mas alguém configurou ws://, força wss:// pra evitar mixed content
     if (typeof window !== "undefined" && window.location.protocol === "https:" && url.startsWith("ws://")) {
       url = "wss://" + url.slice(5);
       console.warn("[ws] forçando wss:// pra evitar mixed content");
     }
 
-    return url.replace(/\/+$/, ""); // remove trailing slash
+    return url.replace(/\/+$/, "");
   }
 
-  // Default dev
   return "ws://localhost:2567";
 }
 
@@ -48,6 +36,57 @@ export default function App() {
   const [name, setName] = useState("");
   const [playerCount, setPlayerCount] = useState(0);
 
+  /**
+   * Inicializa o Phaser DEPOIS que o React renderizou o container.
+   * Roda quando 'conn' vira 'connected' (container já está no DOM com tamanho real).
+   * Esperar um requestAnimationFrame garante que o browser fez layout/reflow.
+   */
+  useEffect(() => {
+    if (conn !== "connected" || !roomRef.current || !containerRef.current) return;
+    if (gameRef.current) return; // já criado
+
+    const room = roomRef.current;
+    const container = containerRef.current;
+
+    // Garante que o container tem dimensões antes do Phaser inicializar
+    const initPhaser = () => {
+      // Pega tamanho real do container; fallback pro tamanho da viewport
+      const width = container.clientWidth || window.innerWidth;
+      const height = container.clientHeight || window.innerHeight;
+
+      const game = new Phaser.Game({
+        type: Phaser.AUTO,
+        parent: container,
+        width,
+        height,
+        backgroundColor: "#0f172a",
+        scale: {
+          mode: Phaser.Scale.RESIZE,
+          autoCenter: Phaser.Scale.CENTER_BOTH,
+          width: "100%",
+          height: "100%",
+        },
+        scene: [OfficeScene],
+        physics: { default: "arcade" },
+        render: { antialias: true, pixelArt: false, powerPreference: "high-performance" },
+        // Importante: desabilita FX que podem trigger o bug de framebuffer
+        fps: { target: 60, forceSetTimeOut: false },
+      });
+
+      game.scene.start("OfficeScene", { room, myId: room.sessionId });
+      gameRef.current = game;
+    };
+
+    // Pequeno delay garante que o layout do React já aconteceu
+    const id = requestAnimationFrame(() => {
+      requestAnimationFrame(initPhaser);
+    });
+
+    return () => {
+      cancelAnimationFrame(id);
+    };
+  }, [conn]);
+
   async function connect() {
     if (!name.trim()) {
       setErrorMsg("Digite seu nome");
@@ -63,31 +102,19 @@ export default function App() {
       roomRef.current = room;
 
       const state: any = room.state;
+      setPlayerCount(state.players.size);
       state.players.onAdd(() => setPlayerCount(state.players.size));
       state.players.onRemove(() => setPlayerCount(state.players.size));
 
       room.onLeave(() => {
         setConn("idle");
         setErrorMsg("Desconectado do servidor");
-        gameRef.current?.destroy(true);
-        gameRef.current = null;
+        if (gameRef.current) {
+          gameRef.current.destroy(true);
+          gameRef.current = null;
+        }
       });
 
-      const game = new Phaser.Game({
-        type: Phaser.AUTO,
-        parent: containerRef.current!,
-        backgroundColor: "#0f172a",
-        scale: {
-          mode: Phaser.Scale.RESIZE,
-          autoCenter: Phaser.Scale.CENTER_BOTH,
-        },
-        scene: [OfficeScene],
-        physics: { default: "arcade" },
-        render: { antialias: true, pixelArt: false },
-      });
-
-      game.scene.start("OfficeScene", { room, myId: room.sessionId });
-      gameRef.current = game;
       setConn("connected");
     } catch (e: any) {
       console.error(e);
@@ -98,8 +125,10 @@ export default function App() {
 
   function disconnect() {
     roomRef.current?.leave();
-    gameRef.current?.destroy(true);
-    gameRef.current = null;
+    if (gameRef.current) {
+      gameRef.current.destroy(true);
+      gameRef.current = null;
+    }
     setConn("idle");
   }
 
@@ -148,8 +177,19 @@ export default function App() {
   }
 
   return (
-    <div style={{ width: "100vw", height: "100vh", position: "relative" }}>
-      <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
+    <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
+      {/* Container do Phaser - dimensões explícitas evitam o bug de framebuffer */}
+      <div
+        ref={containerRef}
+        style={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
+          background: "#0f172a",
+        }}
+      />
 
       <div style={hudStyle}>
         <div><strong>{name}</strong></div>
@@ -224,6 +264,7 @@ const hudStyle: React.CSSProperties = {
   borderRadius: 8,
   padding: "10px 14px",
   fontSize: 13,
+  zIndex: 10,
 };
 
 const hintStyle: React.CSSProperties = {
@@ -237,4 +278,5 @@ const hintStyle: React.CSSProperties = {
   padding: "8px 14px",
   fontSize: 12,
   opacity: 0.8,
+  zIndex: 10,
 };
