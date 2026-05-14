@@ -242,23 +242,28 @@ export class OfficeScene extends Phaser.Scene {
       }
     });
 
-    // Listener de mesas reservadas
-    state.desks.onAdd((desk: any, deskId: string) => {
-      this.renderDeskOverlay(deskId, desk);
-      desk.onChange(() => this.renderDeskOverlay(deskId, desk));
-      if (desk.ownerId === this.myUserId) {
-        this.myDeskId = deskId;
-        this.onMyDeskChange?.(deskId);
-      }
-    });
+    // Listener de mesas reservadas — protegido contra server desatualizado
+    // que ainda não tem `desks` no schema (durante deploys parciais).
+    if (state.desks && typeof state.desks.onAdd === "function") {
+      state.desks.onAdd((desk: any, deskId: string) => {
+        this.renderDeskOverlay(deskId, desk);
+        desk.onChange(() => this.renderDeskOverlay(deskId, desk));
+        if (desk.ownerId === this.myUserId) {
+          this.myDeskId = deskId;
+          this.onMyDeskChange?.(deskId);
+        }
+      });
 
-    state.desks.onRemove((desk: any, deskId: string) => {
-      this.removeDeskOverlay(deskId);
-      if (this.myDeskId === deskId) {
-        this.myDeskId = null;
-        this.onMyDeskChange?.(null);
-      }
-    });
+      state.desks.onRemove((_desk: any, deskId: string) => {
+        this.removeDeskOverlay(deskId);
+        if (this.myDeskId === deskId) {
+          this.myDeskId = null;
+          this.onMyDeskChange?.(null);
+        }
+      });
+    } else {
+      console.warn("[scene] state.desks ausente — server desatualizado, mesas desabilitadas");
+    }
   }
 
   private renderDeskOverlay(deskId: string, desk: { ownerName: string; ownerColor: string }) {
@@ -305,9 +310,10 @@ export class OfficeScene extends Phaser.Scene {
 
   private handleClaimKey() {
     if (!this.myContainer) return;
+    const state: any = this.room.state;
+    if (!state?.desks) return; // server desatualizado
     // Se está perto de uma mesa, age sobre ela. Senão, se tem mesa reservada, libera.
     if (this.nearestDeskId) {
-      const state: any = this.room.state;
       const desk = state.desks.get(this.nearestDeskId);
       if (desk && desk.ownerId === this.myUserId) {
         this.room.send("desk:release", { deskId: this.nearestDeskId });
@@ -580,7 +586,7 @@ export class OfficeScene extends Phaser.Scene {
         this.onNearbyDeskChange?.(null);
       } else {
         const state: any = this.room.state;
-        const desk = state.desks.get(newId);
+        const desk = state?.desks?.get?.(newId);
         this.onNearbyDeskChange?.({
           deskId: newId,
           isMine: desk?.ownerId === this.myUserId,
