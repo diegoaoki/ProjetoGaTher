@@ -47,6 +47,20 @@ export async function initDb(): Promise<void> {
         value TEXT NOT NULL,
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+
+      CREATE TABLE IF NOT EXISTS messages (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        sender_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        channel_type VARCHAR(16) NOT NULL,
+        recipient_id UUID REFERENCES users(id) ON DELETE CASCADE,
+        content TEXT NOT NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS messages_global_idx ON messages (channel_type, created_at);
+      CREATE INDEX IF NOT EXISTS messages_dm_idx ON messages (sender_id, recipient_id, created_at);
+      -- Index complementar pra olhar DMs recebidas
+      CREATE INDEX IF NOT EXISTS messages_dm_recipient_idx ON messages (recipient_id, sender_id, created_at);
     `);
 
     // Migration automática: se a versão do layout de mesas mudou, limpa

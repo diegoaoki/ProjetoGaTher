@@ -47,9 +47,35 @@ export const deskReservations = pgTable("desk_reservations", {
   claimedAt: timestamp("claimed_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Mensagens de chat persistidas.
+ * - channelType="global": recipientId=NULL, visível por todos
+ * - channelType="dm": recipientId=outroUser, visível só pelos dois envolvidos
+ * - Sala/proximidade NÃO é persistida (efêmera, vive só no Colyseus)
+ */
+export const messages = pgTable(
+  "messages",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    senderId: uuid("sender_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    channelType: varchar("channel_type", { length: 16 }).notNull(),
+    recipientId: uuid("recipient_id").references(() => users.id, { onDelete: "cascade" }),
+    content: text("content").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    globalIdx: index("messages_global_idx").on(table.channelType, table.createdAt),
+    dmIdx: index("messages_dm_idx").on(table.senderId, table.recipientId, table.createdAt),
+  })
+);
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Profile = typeof profiles.$inferSelect;
 export type NewProfile = typeof profiles.$inferInsert;
 export type DeskReservation = typeof deskReservations.$inferSelect;
 export type NewDeskReservation = typeof deskReservations.$inferInsert;
+export type Message = typeof messages.$inferSelect;
+export type NewMessage = typeof messages.$inferInsert;

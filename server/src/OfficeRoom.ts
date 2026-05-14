@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { OfficeState, Player, Desk } from "./schema";
 import { verifyAuthToken } from "./auth/jwt";
 import { getDb } from "./db/client";
-import { profiles, users, deskReservations } from "./db/schema";
+import { profiles, users, deskReservations, messages } from "./db/schema";
 import { DESKS, getDeskById, getSeatPosition } from "./desks";
 
 interface MoveMessage {
@@ -37,6 +37,12 @@ interface InviteMessage {
 interface InviteResponseMessage {
   fromSessionId: string;
   accepted: boolean;
+}
+
+interface ChatSendMessage {
+  channelType: "global" | "dm" | "room";
+  recipientId?: string;  // userId, obrigatório pra DM
+  content: string;       // texto (max 2000 chars)
 }
 
 interface JoinOptions {
@@ -171,6 +177,10 @@ export class OfficeRoom extends Room<OfficeState> {
     );
     this.onMessage<InviteResponseMessage>("invite:respond", (client, msg) =>
       this.handleInviteRespond(client, msg)
+    );
+
+    this.onMessage<ChatSendMessage>("chat:send", (client, msg) =>
+      this.handleChatSend(client, msg)
     );
   }
 
@@ -521,6 +531,104 @@ export class OfficeRoom extends Room<OfficeState> {
       console.log(`[invite:respond] ${responder.name} accepted=${accepted}`);
     } catch (err) {
       console.error("[invite:respond] EXCEPTION:", err);
+    }
+  }
+
+  // ============================================================
+  //  Chat
+  //  - global: persiste em messages, broadcast pra todos
+  //  - dm: persiste, manda só pro target (e ecoa pro sender)
+  //  - room: efêmero (sem DB), manda só pros peers da mesma zona
+  // ============================================================
+
+  private async handleChatSend(client: Client, msg: ChatSendMessage) {
+    try {
+      const auth = client.userData as AuthData | undefined;
+      const sender = this.state.players.get(client.sessionId);
+      if (!auth || !sender) return;
+
+      const content = (msg?.content || "").trim();
+      if (!content) return;
+      if (content.length > 2000) {
+        client.send("chat:error", { error: "Mensagem muito longa (max 2000 caracteres)" });
+        return;
+      }
+
+      const channelType = msg?.channelType;
+      if (channelType !== "global" && channelType !== "dm" && channelType !== "room") {
+        client.send("chat:error", { error: "Tipo de canal inválido" });
+        return;
+      }
+
+      // === Sala / proximidade: efêmero, só broadcast filtrado ===
+      if (channelType === "room") {
+        const senderZone = sender.zoneId || "open";
+        const payload = {
+          id: `eph-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          channelType: "room" as const,
+          senderId: auth.userId,
+          senderName: auth.displayName,
+          content,
+          createdAt: new Date().toISOString(),
+        };
+        // Envia pra todos os clients cujos players estão na mesma zona
+        // (inclui o próprio sender pra ele ver o eco)
+        this.clients.forEach((c) => {
+          const p = this.state.players.get(c.sessionId);
+          if (p && (p.zoneId || "open") === senderZone) {
+            c.send("chat:message", payload);
+          }
+        });
+        return;
+      }
+
+      // === Global ou DM: persiste no DB ===
+      let recipientId: string | null = null;
+      if (channelType === "dm") {
+        recipientId = String(msg.recipientId || "");
+        if (!recipientId || recipientId === auth.userId) {
+          client.send("chat:error", { error: "Destinatário inválido" });
+          return;
+        }
+      }
+
+      const db = getDb();
+      const [row] = await db
+        .insert(messages)
+        .values({
+          senderId: auth.userId,
+          channelType,
+          recipientId,
+          content,
+        })
+        .returning();
+
+      const payload = {
+        id: row.id,
+        channelType,
+        senderId: auth.userId,
+        senderName: auth.displayName,
+        recipientId,
+        content,
+        createdAt: row.createdAt.toISOString(),
+      };
+
+      if (channelType === "global") {
+        // Broadcast pra todos os clients conectados
+        this.broadcast("chat:message", payload);
+      } else {
+        // DM: manda pro sender (eco) e pro target se estiver online
+        client.send("chat:message", payload);
+        const targetClient = this.clients.find((c) => {
+          const p = this.state.players.get(c.sessionId);
+          return p && p.userId === recipientId;
+        });
+        if (targetClient && targetClient.sessionId !== client.sessionId) {
+          targetClient.send("chat:message", payload);
+        }
+      }
+    } catch (err) {
+      console.error("[chat:send] EXCEPTION:", err);
     }
   }
 }

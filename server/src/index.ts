@@ -8,6 +8,7 @@ import basicAuth from "express-basic-auth";
 import { OfficeRoom } from "./OfficeRoom";
 import { createTokenRouter } from "./tokenRouter";
 import { createAuthRouter } from "./auth/router";
+import { createChatRouter } from "./chat/router";
 import { extractAuth } from "./auth/middleware";
 import { initDb } from "./db/init";
 
@@ -50,6 +51,7 @@ app.get("/", (_req, res) => {
       desks: true,
       teleport: true,
       invite: true,
+      chat: true,
     },
     ts: Date.now(),
   });
@@ -60,6 +62,7 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/", createAuthRouter());
+app.use("/", createChatRouter());
 app.use("/", createTokenRouter());
 
 // Dashboard /colyseus protegido

@@ -5,6 +5,8 @@ import { OfficeScene } from "./OfficeScene";
 import { SpatialAudio } from "./SpatialAudio";
 import LoginScreen from "./LoginScreen";
 import AdminPanel from "./AdminPanel";
+import ChatPanel from "./ChatPanel";
+import { ChatMessage, playNotificationBeep } from "./chat";
 import {
   AuthSession,
   clearToken,
@@ -119,6 +121,14 @@ export default function App() {
 
   // === Painel de admin ===
   const [adminOpen, setAdminOpen] = useState(false);
+
+  // === Chat ===
+  const [chatOpen, setChatOpen] = useState(false);
+  const [liveMessages, setLiveMessages] = useState<ChatMessage[]>([]);
+  // Contagem de mensagens não lidas por canal
+  // Key: "global" | "room" | "dm:<userId>"
+  const [unreadByChannel, setUnreadByChannel] = useState<Map<string, number>>(new Map());
+  const totalUnread = Array.from(unreadByChannel.values()).reduce((s, n) => s + n, 0);
 
   // === Mesas reserváveis ===
   // nearbyDesk = mesa que o player está perto agora (pra renderizar hint "Aperte E pra reservar/liberar")
@@ -388,6 +398,35 @@ export default function App() {
       });
       room.onMessage("teleport:error", (msg: { error: string }) => {
         setSocialToast({ text: msg?.error || "Falha no teleporte", tone: "error" });
+      });
+
+      // Chat: novas mensagens entram em real-time
+      room.onMessage("chat:message", (msg: ChatMessage) => {
+        setLiveMessages((prev) => {
+          // Dedupe por id (caso server emita 2x)
+          if (prev.some((m) => m.id === msg.id)) return prev;
+          // Limita o buffer pra 200 msgs in-memory
+          const next = [...prev, msg];
+          return next.length > 200 ? next.slice(-200) : next;
+        });
+        // Não conta msg PRÓPRIA como não lida
+        const isMine = !!session && msg.senderId === session.user.id;
+        if (!isMine) {
+          let channelKey = "global";
+          if (msg.channelType === "room") channelKey = "room";
+          else if (msg.channelType === "dm") channelKey = `dm:${msg.senderId}`;
+          setUnreadByChannel((prev) => {
+            const next = new Map(prev);
+            next.set(channelKey, (next.get(channelKey) || 0) + 1);
+            return next;
+          });
+          // Som só pra DM (geral seria spammy)
+          if (msg.channelType === "dm") playNotificationBeep();
+        }
+      });
+
+      room.onMessage("chat:error", (msg: { error: string }) => {
+        setSocialToast({ text: msg?.error || "Falha no chat", tone: "error" });
       });
 
       setAudioStatus("Obtendo token de áudio...");
@@ -781,6 +820,24 @@ export default function App() {
           <button onClick={toggleCam} style={iconBtnStyle(camOn)} title="Câmera">{camOn ? "📹" : "🚫"}</button>
           <button onClick={toggleScreen} style={iconBtnStyle(screenOn)} title="Compartilhar tela">{screenOn ? "🛑" : "🖥️"}</button>
           <button onClick={() => setSidebarOpen((v) => !v)} style={iconBtnStyle(sidebarOpen)} title="Quem está online">👥</button>
+          <button
+            onClick={() => setChatOpen((v) => !v)}
+            style={{ ...iconBtnStyle(chatOpen), position: "relative" }}
+            title="Chat"
+          >
+            💬
+            {totalUnread > 0 && (
+              <span style={{
+                position: "absolute", top: -4, right: -4,
+                background: "#ef4444", color: "#fff",
+                fontSize: 9, fontWeight: 700,
+                borderRadius: 8, padding: "1px 5px",
+                minWidth: 14, textAlign: "center",
+              }}>
+                {totalUnread > 99 ? "99+" : totalUnread}
+              </span>
+            )}
+          </button>
           {myDeskId && (
             <button
               onClick={() => roomRef.current?.send("teleport:to-desk", { deskId: myDeskId })}
@@ -953,6 +1010,34 @@ export default function App() {
           token={session.token}
           currentUserId={session.user.id}
           onClose={() => setAdminOpen(false)}
+        />
+      )}
+
+      {chatOpen && (
+        <ChatPanel
+          httpUrl={HTTP_URL}
+          token={session.token}
+          myUserId={session.user.id}
+          onlinePlayers={onlinePlayers
+            .filter((p) => p.userId) // exclui players sem userId (segurança)
+            .map((p) => ({ userId: p.userId, name: p.name, isMe: p.isMe }))}
+          liveMessages={liveMessages}
+          onSend={(channel, content) => {
+            roomRef.current?.send("chat:send", {
+              channelType: channel.type,
+              recipientId: channel.recipientId,
+              content,
+            });
+          }}
+          onClose={() => setChatOpen(false)}
+          onChannelViewed={(channelKey) => {
+            setUnreadByChannel((prev) => {
+              if (!prev.has(channelKey)) return prev;
+              const next = new Map(prev);
+              next.delete(channelKey);
+              return next;
+            });
+          }}
         />
       )}
 
