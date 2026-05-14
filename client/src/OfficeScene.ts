@@ -97,8 +97,9 @@ export class OfficeScene extends Phaser.Scene {
     video: HTMLVideoElement;
   }>();
 
-  // Configuração de visibilidade dos balões (mesma regra do áudio)
-  private readonly BALLOON_HEARING_RADIUS = 400;
+  // Raio de visibilidade dos balões em open space. Em salas isoladas
+  // (mesma zona != "open"), sempre vê. Mesma regra do áudio.
+  private readonly BALLOON_HEARING_RADIUS = 200;
 
   public onPositionsUpdate?: (
     myInfo: { x: number; y: number; zoneId: string },
@@ -113,6 +114,12 @@ export class OfficeScene extends Phaser.Scene {
 
   // === Callback de câmera (pra App.tsx mostrar hint "C pra centralizar") ===
   public onCameraFollowingChange?: (following: boolean) => void;
+
+  // === Visibilidade dos peers (pra renderizar cards filtrados na barra direita) ===
+  // Recebe Set de identities (LiveKit) dos peers visíveis pro player local.
+  // Dispara só quando o conjunto MUDA — não a cada frame.
+  public onVisiblePeersChange?: (visibleIdentities: Set<string>) => void;
+  private visiblePeersCache = new Set<string>();
 
   constructor() {
     super({ key: "OfficeScene" });
@@ -327,8 +334,11 @@ export class OfficeScene extends Phaser.Scene {
 
   /**
    * Decide se o balão de um peer deve ser visível pro player local.
-   * Regra: mesma zona E dentro do farRadius. Replica a lógica do áudio.
-   * Pro próprio user (__local__), sempre visível.
+   * Regra:
+   *  - __local__ → sempre visível (eu mesmo)
+   *  - Zona diferente → invisível (paredes isolam)
+   *  - Mesma zona isolada (sala != "open") → sempre visível (estamos juntos na sala)
+   *  - Open space → só se dentro do BALLOON_HEARING_RADIUS
    */
   private isPeerBalloonVisible(identity: string): boolean {
     if (identity === "__local__") return true;
@@ -347,16 +357,16 @@ export class OfficeScene extends Phaser.Scene {
     });
     if (!peerData) return false;
 
-    // Zona diferente → não vê (áudio isolado, então UX consistente)
     const myZone = this.currentZone || "open";
     if (peerData.zoneId !== myZone) return false;
 
-    // Distância > farRadius → não vê
+    // Sala isolada (qualquer zona != open): sempre vê quem tá dentro
+    if (myZone !== "open") return true;
+
+    // Open space: só vê quem está perto
     const dx = peerData.x - this.myContainer.x;
     const dy = peerData.y - this.myContainer.y;
-    if (dx * dx + dy * dy > this.BALLOON_HEARING_RADIUS * this.BALLOON_HEARING_RADIUS) return false;
-
-    return true;
+    return dx * dx + dy * dy <= this.BALLOON_HEARING_RADIUS * this.BALLOON_HEARING_RADIUS;
   }
 
   public hideScreenShareFromTV() {
@@ -819,8 +829,8 @@ export class OfficeScene extends Phaser.Scene {
 
     this.updateNearestDesk();
 
-    // Atualiza posição e visibilidade dos balões de vídeo
-    // Se ambos camera+screen existem pro mesmo peer, screen fica acima da camera.
+    // Atualiza posição e visibilidade dos balões de vídeo + acumula visíveis
+    const currentlyVisible = new Set<string>();
     this.videoBalloons.forEach((b) => {
       const pos = this.getAvatarPositionFor(b.identity);
       if (!pos) {
@@ -831,12 +841,22 @@ export class OfficeScene extends Phaser.Scene {
       b.dom.setVisible(visible);
       if (!visible) return;
 
+      if (b.kind === "camera" && b.identity !== "__local__") {
+        currentlyVisible.add(b.identity);
+      }
+
       // Empilhamento: screen mais alto que camera
       const offsetY = b.kind === "screen" ? -110 : -55;
       b.dom.x = pos.x;
       b.dom.y = pos.y + offsetY;
       b.dom.setDepth(10000);
     });
+
+    // Notifica App.tsx se o conjunto de peers visíveis mudou
+    if (!setEquals(currentlyVisible, this.visiblePeersCache)) {
+      this.visiblePeersCache = currentlyVisible;
+      this.onVisiblePeersChange?.(new Set(currentlyVisible));
+    }
   }
 
   /** Calcula a mesa mais próxima dentro do raio. Notifica App quando muda. */
@@ -871,4 +891,11 @@ export class OfficeScene extends Phaser.Scene {
       }
     }
   }
+}
+
+/** Compara dois Sets de strings por igualdade (mesmo conteúdo). */
+function setEquals(a: Set<string>, b: Set<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const x of a) if (!b.has(x)) return false;
+  return true;
 }

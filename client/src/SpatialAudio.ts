@@ -223,12 +223,23 @@ export class SpatialAudio {
         if (peer.audioElement) peer.audioElement.volume = 0;
         return;
       }
-      // Áudio isolado por sala: se eu e o peer estamos em zonas diferentes,
-      // muta independente da distância. "open" é a zona padrão (fora de salas).
-      if (myInfo.zoneId && info.zoneId && myInfo.zoneId !== info.zoneId) {
+      const myZone = myInfo.zoneId || "open";
+      const peerZone = info.zoneId || "open";
+
+      // Zonas diferentes → muta (paredes isolam o áudio)
+      if (myZone !== peerZone) {
         peer.audioElement.volume = 0;
         return;
       }
+
+      // Mesma sala isolada (qualquer coisa diferente de "open") → 100% volume.
+      // Dentro de uma sala, sempre se ouvem (premissa de "reunião").
+      if (myZone !== "open") {
+        peer.audioElement.volume = 1.0;
+        return;
+      }
+
+      // Open space: aplica distância (raio pequeno — só ouve quem está perto).
       const dx = info.x - myInfo.x;
       const dy = info.y - myInfo.y;
       const dist = Math.sqrt(dx * dx + dy * dy);

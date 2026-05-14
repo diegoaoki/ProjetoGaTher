@@ -58,6 +58,12 @@ interface ActiveScreenShare {
   stream: MediaStream;
 }
 
+/** Segundo element de vídeo (track.attach() é chamável várias vezes) usado nos cards laterais. */
+interface PeerCard {
+  identity: string;
+  element: HTMLVideoElement;
+}
+
 /** Tenta dar play em um vídeo, ignorando AbortError (que é benigno) */
 function safePlay(video: HTMLVideoElement) {
   const p = video.play();
@@ -73,6 +79,7 @@ function safePlay(video: HTMLVideoElement) {
 export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
   const localVideoRef = useRef<HTMLDivElement>(null);
+  const cardsContainerRef = useRef<HTMLDivElement>(null);
   const fullscreenVideoRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
   const roomRef = useRef<Room | null>(null);
@@ -96,6 +103,10 @@ export default function App() {
   const [screenOn, setScreenOn] = useState(false);
   const [audioStatus, setAudioStatus] = useState("");
   const [activeScreenShare, setActiveScreenShare] = useState<ActiveScreenShare | null>(null);
+
+  // Cards de câmera no canto superior direito (clones dos elements do balão)
+  const [peerCards, setPeerCards] = useState<PeerCard[]>([]);
+  const [visiblePeerIds, setVisiblePeerIds] = useState<Set<string>>(new Set());
   const [fullscreenStream, setFullscreenStream] = useState<MediaStream | null>(null);
 
   // === Modal de edição de avatar durante sessão ===
@@ -270,6 +281,9 @@ export default function App() {
         // Câmera (pan com botão direito)
         scene.onCameraFollowingChange = (following) => setCameraFollowing(following);
 
+        // Peers visíveis (mesma zona + raio espacial) — pra filtrar cards laterais
+        scene.onVisiblePeersChange = (ids) => setVisiblePeerIds(ids);
+
         // Zona atual (sala isolada vs open space)
         scene.onZoneChange = (zoneId) => setCurrentZoneId(zoneId || "open");
 
@@ -406,8 +420,8 @@ export default function App() {
         token,
         identity: session.profile.displayName,
         enableVideo: true,
-        hearingNearRadius: 150,
-        hearingFarRadius: 400,
+        hearingNearRadius: 80,   // 100% até 80px (ao lado da pessoa)
+        hearingFarRadius: 200,   // fade até 200px (mesa vizinha) — depois muta
       });
 
       spatial.onError = (msg) => setAudioStatus("⚠ " + msg);
@@ -418,16 +432,31 @@ export default function App() {
           sceneRef.current.hideVideoBalloon(identity, "screen");
         }
         setActiveScreenShare((cur) => (cur?.identity === identity ? null : cur));
+        setPeerCards((prev) => prev.filter((c) => c.identity !== identity));
       };
 
       spatial.onCameraTrack = (identity, element) => {
         if (sceneRef.current) {
           sceneRef.current.showVideoBalloon(identity, "camera", element);
         }
+        // Cria SEGUNDO element pro card lateral (mesmo MediaStream, dois <video>)
+        const stream = element.srcObject as MediaStream | null;
+        if (stream) {
+          const cardEl = document.createElement("video");
+          cardEl.srcObject = stream;
+          cardEl.autoplay = true;
+          cardEl.muted = true;
+          cardEl.playsInline = true;
+          setPeerCards((prev) => [
+            ...prev.filter((c) => c.identity !== identity),
+            { identity, element: cardEl },
+          ]);
+        }
       };
 
       spatial.onCameraTrackEnded = (identity) => {
         if (sceneRef.current) sceneRef.current.hideVideoBalloon(identity, "camera");
+        setPeerCards((prev) => prev.filter((c) => c.identity !== identity));
       };
 
       spatial.onScreenShareStarted = (identity, element) => {
@@ -481,6 +510,37 @@ export default function App() {
     }
   }
 
+
+  // Renderiza cards laterais filtrando peerCards pelos visíveis (mesma zona/perto)
+  useEffect(() => {
+    if (conn !== "connected") return;
+    if (!cardsContainerRef.current) return;
+    const c = cardsContainerRef.current;
+    c.innerHTML = "";
+
+    peerCards
+      .filter((card) => visiblePeerIds.has(card.identity))
+      .forEach((card) => {
+        const userId = card.identity.split("__")[0];
+        const player = onlinePlayers.find((p) => p.userId === userId);
+        const displayName = player?.name || userId.slice(0, 8);
+
+        const wrap = document.createElement("div");
+        wrap.style.cssText = "position:relative;border:2px solid #334155;border-radius:8px;overflow:hidden;background:#000;";
+        card.element.style.width = "160px";
+        card.element.style.height = "120px";
+        card.element.style.objectFit = "cover";
+        card.element.style.display = "block";
+
+        const lbl = document.createElement("div");
+        lbl.textContent = displayName;
+        lbl.style.cssText = "position:absolute;bottom:0;left:0;right:0;background:#000a;color:#fff;font-size:11px;padding:2px 6px;";
+        wrap.appendChild(card.element);
+        wrap.appendChild(lbl);
+        c.appendChild(wrap);
+        safePlay(card.element);
+      });
+  }, [peerCards, visiblePeerIds, onlinePlayers, conn]);
 
   useEffect(() => {
     if (conn !== "connected" || !spatialRef.current || !localVideoRef.current) return;
@@ -791,6 +851,11 @@ export default function App() {
         position: "absolute", bottom: 16, right: 16,
         border: "2px solid #4ade80", borderRadius: 8, overflow: "hidden",
         background: "#000", zIndex: 10,
+      }} />
+
+      <div ref={cardsContainerRef} style={{
+        position: "absolute", top: 16, right: 16,
+        display: "flex", flexDirection: "column", gap: 8, zIndex: 10,
       }} />
 
 
