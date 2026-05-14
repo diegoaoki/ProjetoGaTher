@@ -6,31 +6,34 @@ import {
   createFurnitureTextures,
   createFloorTextures,
 } from "./SpriteFactory";
-import { getDefaultLayout } from "./OfficeLayout";
+import { getDefaultLayout, checkCollision, getCurrentZone } from "./OfficeLayout";
 
 interface RemotePlayer {
   container: Phaser.GameObjects.Container;
   sprite: Phaser.GameObjects.Sprite;
   ring: Phaser.GameObjects.Arc;
   nameText: Phaser.GameObjects.Text;
-  color: string;
+  bodyColor: string;
+  hairColor: string;
   textureKey: string;
   targetX: number;
   targetY: number;
-  lastX: number;
-  lastY: number;
   direction: string;
 }
 
-const TILE = 32;
 const SPEED = 180;
 const SYNC_INTERVAL = 50;
 const WORLD_W = 1024;
 const WORLD_H = 1024;
+const PLAYER_HALF = 12; // raio de colisão
 
 export class OfficeScene extends Phaser.Scene {
   private room!: Room;
   private myId!: string;
+
+  // Aparência do meu avatar (vindo do localStorage / tela de customização)
+  private myBodyColor = "#4ade80";
+  private myHairColor = "#3b2c20";
 
   private mySprite!: Phaser.GameObjects.Sprite;
   private myRing!: Phaser.GameObjects.Arc;
@@ -47,37 +50,49 @@ export class OfficeScene extends Phaser.Scene {
   private lastSync = 0;
   private isMoving = false;
 
+  private layout = getDefaultLayout();
+
+  // TV de apresentação
+  private tvSprite?: Phaser.GameObjects.Image;
+  private tvScreen?: Phaser.GameObjects.Rectangle; // overlay quando ativa
+  private tvVideoDom?: Phaser.GameObjects.DOMElement; // wrapper do <video> dentro do canvas
+  private tvX = 0;
+  private tvY = 0;
+  private currentZone: string | null = null;
+
   public onPositionsUpdate?: (
     myPos: { x: number; y: number },
     peerPositions: Map<string, { x: number; y: number }>
   ) => void;
+  public onZoneChange?: (zone: string | null) => void;
 
   constructor() {
     super({ key: "OfficeScene" });
   }
 
-  init(data: { room: Room; myId: string }) {
+  init(data: {
+    room: Room;
+    myId: string;
+    bodyColor?: string;
+    hairColor?: string;
+  }) {
     this.room = data.room;
     this.myId = data.myId;
+    if (data.bodyColor) this.myBodyColor = data.bodyColor;
+    if (data.hairColor) this.myHairColor = data.hairColor;
   }
 
   create() {
-    // Cria todas as texturas em runtime
     createFloorTextures(this);
     createFurnitureTextures(this);
 
-    // Piso e layout
     this.drawFloor();
     this.drawFurniture();
+    this.setupStateListeners();
 
-    // Input
     this.cursors = this.input.keyboard!.createCursorKeys();
     this.wasd = this.input.keyboard!.addKeys("W,A,S,D") as any;
 
-    // Listeners do estado
-    this.setupStateListeners();
-
-    // Configurações da câmera
     this.cameras.main.setBackgroundColor("#1a1a2e");
     this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
   }
@@ -91,51 +106,89 @@ export class OfficeScene extends Phaser.Scene {
     if (this.myRing) this.myRing.setVisible(speaking);
   }
 
+  /**
+   * Mostra um <video> HTML como tela da TV.
+   * Chamado pelo App quando alguém começa a compartilhar tela.
+   */
+  public showScreenShareOnTV(videoElement: HTMLVideoElement) {
+    if (!this.tvSprite) return;
+
+    // Configura o video element pra encaixar na tela da TV
+    videoElement.style.position = "absolute";
+    videoElement.style.width = "136px"; // tela da TV ~68px lógicos * 2
+    videoElement.style.height = "52px";
+    videoElement.style.objectFit = "contain";
+    videoElement.style.background = "#000";
+    videoElement.style.pointerEvents = "none";
+
+    // Remove DOM anterior se houver
+    if (this.tvVideoDom) {
+      this.tvVideoDom.destroy();
+      this.tvVideoDom = undefined;
+    }
+
+    // Adiciona como DOMElement do Phaser, posicionado na tela da TV
+    // Tela do TV é centrada em (tvX, tvY-13) aprox
+    const dom = this.add.dom(this.tvX, this.tvY - 14, videoElement);
+    dom.setDepth(this.tvY + 1);
+    this.tvVideoDom = dom;
+
+    // Pisca o LED da TV em verde (overlay)
+    if (this.tvScreen) this.tvScreen.destroy();
+    const ledX = this.tvX + 30;
+    const ledY = this.tvY + 4;
+    this.tvScreen = this.add.rectangle(ledX, ledY, 4, 4, 0x16a34a);
+    this.tvScreen.setDepth(this.tvY + 2);
+    this.tweens.add({
+      targets: this.tvScreen,
+      alpha: { from: 0.4, to: 1 },
+      duration: 800,
+      yoyo: true,
+      repeat: -1,
+    });
+  }
+
+  public hideScreenShareFromTV() {
+    if (this.tvVideoDom) {
+      this.tvVideoDom.destroy();
+      this.tvVideoDom = undefined;
+    }
+    if (this.tvScreen) {
+      this.tweens.killTweensOf(this.tvScreen);
+      this.tvScreen.destroy();
+      this.tvScreen = undefined;
+    }
+  }
+
   private drawFloor() {
-    const layout = getDefaultLayout();
     const floor = this.add.tileSprite(0, 0, WORLD_W, WORLD_H, "floorWood").setOrigin(0, 0);
     floor.setDepth(-100);
 
-    // Tapetes e áreas especiais
-    layout.floorRegions.forEach((region) => {
+    this.layout.floorRegions.forEach((region) => {
       if (region.type === "rug") {
-        const rug = this.add.tileSprite(
-          region.x,
-          region.y,
-          region.w,
-          region.h,
-          "floorCarpet"
-        ).setOrigin(0, 0);
+        const rug = this.add.tileSprite(region.x, region.y, region.w, region.h, "floorCarpet").setOrigin(0, 0);
         rug.setDepth(-50);
         rug.setAlpha(0.9);
       }
     });
 
-    // Bordas do mundo (parede simulada)
     const border = this.add.graphics();
     border.lineStyle(4, 0x1a1a2e, 1);
     border.strokeRect(0, 0, WORLD_W, WORLD_H);
     border.setDepth(-10);
-
-    // Vinheta sutil nas bordas
-    const vignette = this.add.graphics();
-    vignette.fillStyle(0x000000, 0.15);
-    for (let i = 0; i < 4; i++) {
-      vignette.fillRect(0, i * 2, WORLD_W, 2);
-      vignette.fillRect(0, WORLD_H - (i + 1) * 2, WORLD_W, 2);
-      vignette.fillRect(i * 2, 0, 2, WORLD_H);
-      vignette.fillRect(WORLD_W - (i + 1) * 2, 0, 2, WORLD_H);
-    }
-    vignette.setDepth(-9);
   }
 
   private drawFurniture() {
-    const layout = getDefaultLayout();
-    layout.furniture.forEach((item) => {
+    this.layout.furniture.forEach((item) => {
       const sprite = this.add.image(item.x, item.y, item.type);
       sprite.setOrigin(0.5, 0.5);
-      // Usa Y do sprite como depth pra ordenação natural (sprites mais embaixo aparecem na frente)
       sprite.setDepth(item.y);
+
+      if (item.tag === "tv") {
+        this.tvSprite = sprite;
+        this.tvX = item.x;
+        this.tvY = item.y;
+      }
     });
   }
 
@@ -170,21 +223,17 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   private createMyAvatar(player: any) {
-    const color = player.color || "#4ade80";
-    this.myTextureKey = `avatar_${color}`;
-    createAvatarTexture(this, this.myTextureKey, color);
+    // Usa as cores customizadas que vieram do init()
+    this.myTextureKey = `avatar_${this.myBodyColor}_${this.myHairColor}`;
+    createAvatarTexture(this, this.myTextureKey, this.myBodyColor, this.myHairColor);
     createAvatarAnimations(this, this.myTextureKey);
 
-    // Anel verde (falando)
     this.myRing = this.add.circle(0, 4, 22, 0x4ade80, 0);
     this.myRing.setStrokeStyle(3, 0x4ade80);
     this.myRing.setVisible(false);
 
-    // Sprite do avatar
     this.mySprite = this.add.sprite(0, 0, this.myTextureKey, 0);
-    this.mySprite.setScale(1);
 
-    // Nome
     this.myNameText = this.add.text(0, -28, player.name + " (você)", {
       fontFamily: "system-ui, -apple-system",
       fontSize: "12px",
@@ -194,23 +243,28 @@ export class OfficeScene extends Phaser.Scene {
       resolution: 2,
     }).setOrigin(0.5);
 
-    this.myContainer = this.add.container(player.x, player.y, [
-      this.myRing,
-      this.mySprite,
-      this.myNameText,
-    ]);
+    this.myContainer = this.add.container(player.x, player.y, [this.myRing, this.mySprite, this.myNameText]);
     this.myContainer.setDepth(player.y);
 
     this.cameras.main.startFollow(this.myContainer, true, 0.1, 0.1);
     this.cameras.main.setZoom(1.3);
 
     this.mySprite.play(`${this.myTextureKey}_down_idle`);
+
+    // Manda minhas cores pro server pra propagar aos outros
+    this.room.send("appearance", {
+      bodyColor: this.myBodyColor,
+      hairColor: this.myHairColor,
+    });
   }
 
   private createRemoteAvatar(sessionId: string, player: any) {
-    const color = player.color || "#60a5fa";
-    const textureKey = `avatar_${color}`;
-    createAvatarTexture(this, textureKey, color);
+    // Lê cor do estado (vem do servidor). Fallback pra color/random se cliente antigo.
+    const bodyColor = player.color || "#60a5fa";
+    const hairColor = player.hairColor || "#3b2c20";
+
+    const textureKey = `avatar_${bodyColor}_${hairColor}`;
+    createAvatarTexture(this, textureKey, bodyColor, hairColor);
     createAvatarAnimations(this, textureKey);
 
     const ring = this.add.circle(0, 4, 22, 0x4ade80, 0);
@@ -234,18 +288,38 @@ export class OfficeScene extends Phaser.Scene {
     sprite.play(`${textureKey}_down_idle`);
 
     this.remotePlayers.set(sessionId, {
-      container,
-      sprite,
-      ring,
-      nameText,
-      color,
-      textureKey,
-      targetX: player.x,
-      targetY: player.y,
-      lastX: player.x,
-      lastY: player.y,
+      container, sprite, ring, nameText,
+      bodyColor, hairColor, textureKey,
+      targetX: player.x, targetY: player.y,
       direction: player.direction || "down",
     });
+  }
+
+  /**
+   * Tenta mover pra (nx, ny). Se colidir, tenta deslizar nos eixos
+   * separadamente (movimento mais natural: bate na parede mas continua andando paralelo).
+   */
+  private tryMove(currentX: number, currentY: number, dx: number, dy: number): { x: number; y: number } {
+    const nextX = currentX + dx;
+    const nextY = currentY + dy;
+
+    // Tenta movimento completo
+    if (!checkCollision(nextX, nextY, PLAYER_HALF, this.layout)) {
+      return { x: nextX, y: nextY };
+    }
+
+    // Tenta só X
+    if (dx !== 0 && !checkCollision(nextX, currentY, PLAYER_HALF, this.layout)) {
+      return { x: nextX, y: currentY };
+    }
+
+    // Tenta só Y
+    if (dy !== 0 && !checkCollision(currentX, nextY, PLAYER_HALF, this.layout)) {
+      return { x: currentX, y: nextY };
+    }
+
+    // Bloqueado total
+    return { x: currentX, y: currentY };
   }
 
   update(time: number, delta: number) {
@@ -270,14 +344,23 @@ export class OfficeScene extends Phaser.Scene {
     this.isMoving = vx !== 0 || vy !== 0;
 
     if (this.isMoving) {
-      const newX = this.myContainer.x + vx * SPEED * dt;
-      const newY = this.myContainer.y + vy * SPEED * dt;
-      this.myContainer.x = Phaser.Math.Clamp(newX, 16, WORLD_W - 16);
-      this.myContainer.y = Phaser.Math.Clamp(newY, 16, WORLD_H - 16);
+      const dx = vx * SPEED * dt;
+      const dy = vy * SPEED * dt;
+
+      const moved = this.tryMove(this.myContainer.x, this.myContainer.y, dx, dy);
+
+      // Clamp ao mundo
+      this.myContainer.x = Phaser.Math.Clamp(moved.x, PLAYER_HALF, WORLD_W - PLAYER_HALF);
+      this.myContainer.y = Phaser.Math.Clamp(moved.y, PLAYER_HALF, WORLD_H - PLAYER_HALF);
       this.myContainer.setDepth(this.myContainer.y);
+
+      // Se não conseguiu mover nada, marca como parado pra animação
+      if (Math.abs(moved.x - (this.myContainer.x - 0)) < 0.01 &&
+          Math.abs(this.myContainer.x - moved.x) > 100) {
+        // edge case, ignora
+      }
     }
 
-    // Atualiza animação se direção ou estado mudou
     if (newDir !== this.myDirection || this.isMoving !== wasMoving) {
       this.myDirection = newDir;
       const anim = this.isMoving ? "walk" : "idle";
@@ -285,7 +368,6 @@ export class OfficeScene extends Phaser.Scene {
       if (this.anims.exists(key)) this.mySprite.play(key, true);
     }
 
-    // Sync periódico
     if (time - this.lastSync > SYNC_INTERVAL) {
       this.lastSync = time;
       this.room.send("move", {
@@ -296,7 +378,15 @@ export class OfficeScene extends Phaser.Scene {
       });
     }
 
-    // Interpolação dos remotos + animação por movimento
+    // Detecta mudança de zona (presentation)
+    const zone = getCurrentZone(this.myContainer.x, this.myContainer.y, this.layout);
+    const zoneId = zone?.id || null;
+    if (zoneId !== this.currentZone) {
+      this.currentZone = zoneId;
+      this.onZoneChange?.(zoneId);
+    }
+
+    // Interpolação + animação dos remotos
     const lerp = 0.2;
     this.remotePlayers.forEach((rp) => {
       const prevX = rp.container.x;
@@ -312,12 +402,8 @@ export class OfficeScene extends Phaser.Scene {
       if (this.anims.exists(key) && rp.sprite.anims.currentAnim?.key !== key) {
         rp.sprite.play(key, true);
       }
-
-      rp.lastX = rp.container.x;
-      rp.lastY = rp.container.y;
     });
 
-    // Callback de posições pro áudio espacial
     if (this.onPositionsUpdate) {
       const peerPositions = new Map<string, { x: number; y: number }>();
       this.remotePlayers.forEach((rp, sessionId) => {
