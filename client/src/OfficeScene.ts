@@ -180,9 +180,26 @@ export class OfficeScene extends Phaser.Scene {
     };
     window.addEventListener("focusin", onFocusIn);
     window.addEventListener("focusout", onFocusOut);
+
+    // Defesa extra: intercepta keydown/keyup em CAPTURE phase (antes do Phaser
+    // que escuta em bubble phase no window) e para a propagação se o target é
+    // um input HTML. Garante que letras como E, W, A, S, D, C cheguem ao input
+    // mesmo se o Phaser ainda estiver escutando.
+    const keyInterceptor = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (!t) return;
+      if (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable) {
+        e.stopPropagation();
+      }
+    };
+    document.addEventListener("keydown", keyInterceptor, true);
+    document.addEventListener("keyup", keyInterceptor, true);
+
     this.events.once("shutdown", () => {
       window.removeEventListener("focusin", onFocusIn);
       window.removeEventListener("focusout", onFocusOut);
+      document.removeEventListener("keydown", keyInterceptor, true);
+      document.removeEventListener("keyup", keyInterceptor, true);
     });
 
     // Pan com botão direito do mouse — não interfere com cliques de UI nem com tecla E

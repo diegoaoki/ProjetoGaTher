@@ -274,11 +274,15 @@ export default function ChatPanel({
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
+                // Impede que o Phaser receba a tecla (W/A/S/D/E/C move o avatar)
+                e.stopPropagation();
                 if (e.key === "Enter" && !e.shiftKey) {
                   e.preventDefault();
                   submit();
                 }
               }}
+              onKeyUp={(e) => e.stopPropagation()}
+              onKeyPress={(e) => e.stopPropagation()}
               placeholder={tab === "dm" && !activeDmUserId ? "Selecione uma conversa" : "Digite uma mensagem…"}
               disabled={tab === "dm" && !activeDmUserId}
               style={inputStyle}
