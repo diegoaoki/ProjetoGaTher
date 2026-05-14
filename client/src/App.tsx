@@ -128,6 +128,15 @@ export default function App() {
   // === Câmera (pan com botão direito) ===
   const [cameraFollowing, setCameraFollowing] = useState(true);
 
+  // === Zona atual (sala ou open space) — pra mostrar no HUD ===
+  const [currentZoneId, setCurrentZoneId] = useState<string>("open");
+  const ZONE_LABELS: Record<string, { label: string; isIsolated: boolean }> = {
+    "open": { label: "Open space", isIsolated: false },
+    "meeting-large": { label: "Sala grande", isIsolated: true },
+    "meeting-a": { label: "Sala pequena A", isIsolated: true },
+    "meeting-b": { label: "Sala pequena B", isIsolated: true },
+  };
+
   // === Sidebar de usuários online ===
   const [sidebarOpen, setSidebarOpen] = useState(false);
   interface OnlinePlayer {
@@ -250,23 +259,26 @@ export default function App() {
         const scene = game.scene.getScene("OfficeScene") as OfficeScene;
         sceneRef.current = scene;
 
-        scene.onPositionsUpdate = (myPos, peerPositions) => {
+        scene.onPositionsUpdate = (myInfo, peerInfo) => {
           if (!spatialRef.current) return;
           const peers = spatialRef.current.getPeerIdentities();
-          const mapped = new Map<string, { x: number; y: number }>();
+          const mapped = new Map<string, { x: number; y: number; zoneId: string }>();
           const state: any = room.state;
-          peerPositions.forEach((pos, sessionId) => {
+          peerInfo.forEach((info, sessionId) => {
             const player = state.players.get(sessionId);
             if (!player) return;
             // identity do LiveKit é `userId__timestamp`; mapeia pelo userId persistido
             const identity = peers.find((id) => id.startsWith(player.userId + "__"));
-            if (identity) mapped.set(identity, pos);
+            if (identity) mapped.set(identity, info);
           });
-          spatialRef.current.updateVolumes(myPos, mapped);
+          spatialRef.current.updateVolumes(myInfo, mapped);
         };
 
         // Câmera (pan com botão direito)
         scene.onCameraFollowingChange = (following) => setCameraFollowing(following);
+
+        // Zona atual (sala isolada vs open space)
+        scene.onZoneChange = (zoneId) => setCurrentZoneId(zoneId || "open");
 
         // Mesas: hint de proximidade + toasts de claim/release/erro
         scene.onNearbyDeskChange = (info) => setNearbyDesk(info);
@@ -700,6 +712,19 @@ export default function App() {
       <div style={hudStyle}>
         <div><strong>{session.profile.displayName}</strong></div>
         <div style={{ fontSize: 12, opacity: 0.7 }}>{playerCount} no escritório</div>
+        {(() => {
+          const z = ZONE_LABELS[currentZoneId] || { label: currentZoneId, isIsolated: false };
+          return (
+            <div style={{
+              fontSize: 11,
+              marginTop: 4,
+              color: z.isIsolated ? "#60a5fa" : "#94a3b8",
+            }}>
+              {z.isIsolated ? "🔒 " : "📍 "}{z.label}
+              {z.isIsolated && <span style={{ opacity: 0.6 }}> · áudio isolado</span>}
+            </div>
+          );
+        })()}
         <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
           <button onClick={toggleMic} style={iconBtnStyle(micOn)} title="Microfone">{micOn ? "🎤" : "🔇"}</button>
           <button onClick={toggleCam} style={iconBtnStyle(camOn)} title="Câmera">{camOn ? "📹" : "🚫"}</button>

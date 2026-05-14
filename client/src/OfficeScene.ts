@@ -6,7 +6,7 @@ import {
   createFurnitureTextures,
   createFloorTextures,
 } from "./SpriteFactory";
-import { getDefaultLayout, checkCollision, getCurrentZone } from "./OfficeLayout";
+import { getDefaultLayout, checkCollision, getCurrentRoom } from "./OfficeLayout";
 
 interface RemotePlayer {
   container: Phaser.GameObjects.Container;
@@ -88,8 +88,8 @@ export class OfficeScene extends Phaser.Scene {
   private currentZone: string | null = null;
 
   public onPositionsUpdate?: (
-    myPos: { x: number; y: number },
-    peerPositions: Map<string, { x: number; y: number }>
+    myInfo: { x: number; y: number; zoneId: string },
+    peerInfo: Map<string, { x: number; y: number; zoneId: string }>
   ) => void;
   public onZoneChange?: (zone: string | null) => void;
 
@@ -116,6 +116,7 @@ export class OfficeScene extends Phaser.Scene {
     createFloorTextures(this);
     createFurnitureTextures(this);
     this.drawFloor();
+    this.drawWalls();
     this.drawFurniture();
 
     // Catálogo de mesas extraído do layout — usado pra detecção de proximidade.
@@ -272,6 +273,29 @@ export class OfficeScene extends Phaser.Scene {
         this.tvX = item.x;
         this.tvY = item.y;
       }
+    });
+  }
+
+  private drawWalls() {
+    // Paredes desenhadas como retângulos cinza-escuro, depth alta pra ficarem
+    // por cima do chão/tapetes mas abaixo de móveis e avatares na mesma linha.
+    this.layout.walls.forEach((w) => {
+      const wall = this.add.rectangle(w.x + w.w / 2, w.y + w.h / 2, w.w, w.h, 0x4a5568);
+      wall.setStrokeStyle(1, 0x2d3748);
+      wall.setDepth(-5);
+    });
+
+    // Labels flutuantes em cima de cada sala
+    this.layout.rooms.forEach((room) => {
+      const labelText = this.add.text(room.x + room.w / 2, room.y + 12, room.label, {
+        fontFamily: "system-ui, -apple-system",
+        fontSize: "11px",
+        color: "#94a3b8",
+        backgroundColor: "#1a1a2eaa",
+        padding: { x: 6, y: 2 },
+        resolution: 2,
+      }).setOrigin(0.5);
+      labelText.setDepth(-4);
     });
   }
 
@@ -620,11 +644,12 @@ export class OfficeScene extends Phaser.Scene {
       });
     }
 
-    const zone = getCurrentZone(this.myContainer.x, this.myContainer.y, this.layout);
-    const zoneId = zone?.id || null;
-    if (zoneId !== this.currentZone) {
-      this.currentZone = zoneId;
-      this.onZoneChange?.(zoneId);
+    const room = getCurrentRoom(this.myContainer.x, this.myContainer.y, this.layout);
+    if (room.id !== this.currentZone) {
+      this.currentZone = room.id;
+      this.onZoneChange?.(room.id);
+      // Avisa server da nova zona (pros peers calcularem áudio isolado)
+      this.room.send("zone", room.id);
     }
 
     const lerp = 0.2;
@@ -644,13 +669,23 @@ export class OfficeScene extends Phaser.Scene {
     });
 
     if (this.onPositionsUpdate) {
-      const peerPositions = new Map<string, { x: number; y: number }>();
+      const peerInfo = new Map<string, { x: number; y: number; zoneId: string }>();
+      const state: any = this.room.state;
       this.remotePlayers.forEach((rp, sessionId) => {
-        peerPositions.set(sessionId, { x: rp.container.x, y: rp.container.y });
+        const peerPlayer = state?.players?.get?.(sessionId);
+        peerInfo.set(sessionId, {
+          x: rp.container.x,
+          y: rp.container.y,
+          zoneId: peerPlayer?.zoneId || "open",
+        });
       });
       this.onPositionsUpdate(
-        { x: this.myContainer.x, y: this.myContainer.y },
-        peerPositions
+        {
+          x: this.myContainer.x,
+          y: this.myContainer.y,
+          zoneId: this.currentZone || "open",
+        },
+        peerInfo
       );
     }
 

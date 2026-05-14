@@ -153,13 +153,16 @@ npm run build      # build de produção
 7. Publica tracks de áudio + vídeo (câmera). Screen share é opcional, sob demanda.
 8. Cliente mapeia `identity.startsWith(player.userId + "__")` pra associar áudio/vídeo ao avatar correto na cena Phaser.
 
-### Áudio espacial
-- A cada frame do Phaser (~60fps), `OfficeScene` chama `onPositionsUpdate(myPos, peerPositions)`
-- `App.tsx` mapeia `sessionId (Colyseus) ↔ identity (LiveKit)` pelo prefixo do nome
-- `SpatialAudio.updateVolumes()` calcula distância e ajusta `audioElement.volume` de cada peer
-- Fórmula: `0-150px = 100%`, `150-400px = fade linear`, `400px+ = mute`
-- `adaptiveStream: false` no LiveKit (importante! senão screen share vira 2x2 pixels)
-- Detecção de fala usa evento `ActiveSpeakersChanged` do LiveKit
+### Áudio espacial + salas isoladas (Fase 7)
+- A cada frame do Phaser (~60fps), `OfficeScene` chama `onPositionsUpdate(myInfo, peerInfo)` — cada info contém `{x, y, zoneId}`.
+- `App.tsx` mapeia `sessionId (Colyseus) ↔ identity (LiveKit)` pelo `Player.userId` (sufixo `__timestamp`).
+- `SpatialAudio.updateVolumes()` aplica duas regras em ordem:
+  1. **Sala isolada**: se `myZoneId !== peerZoneId`, volume = 0 (independente da distância).
+  2. **Distância**: dentro da mesma zona, `0-150px = 100%`, `150-400px = fade linear`, `400px+ = mute`.
+- `OfficeLayout` define `rooms[]` (3 salas) e `walls[]` (paredes com colisão). `getCurrentRoom(x,y)` retorna a zona — fallback `open` se está fora de qualquer sala.
+- Quando o player muda de zona, cliente envia `room.send("zone", zoneId)` pro server atualizar `Player.zoneId` no schema; outros clientes recebem via state sync.
+- `adaptiveStream: false` no LiveKit (importante! senão screen share vira 2x2 pixels).
+- Detecção de fala usa evento `ActiveSpeakersChanged` do LiveKit.
 
 ### Colisão
 - Cada mesa/sofá/etc tem `hitbox` no `OfficeLayout.ts`
@@ -216,8 +219,8 @@ npm run build      # build de produção
 ✅ **Fase 6a — Auth + perfil persistido**: email+senha (bcrypt), JWT, Postgres no Railway via Drizzle, customização salva no server.
 ✅ **Fase 6b (parte 1) — Mesas reserváveis com persistência**: tecla E reserva/libera, mesa fica do dono mesmo offline, spawna na mesa reservada ao entrar.
 ✅ **Fase 6b (parte 2) — Sidebar online + convites + teletransporte**: botão 👥 abre sidebar, cada usuário tem 📍 (ir até) e 👋 (convidar). Teletransporte server-autoritativo. Botão 📍 'minha mesa' no HUD se você tem reserva.
-🚧 **Depois — Salas isoladas**: zonas que bloqueiam áudio externo (paredes que isolam)
-🚧 **Backlog**: chat de texto, esqueci-a-senha (precisa SMTP), mapa "inspirado" no print profissional do Gather, mobile responsivo, editor de mapas
+✅ **Fase 7 — Salas isoladas com paredes**: 3 salas de reunião (1 grande + 2 pequenas) + open space. Paredes com colisão, vãos pra entrar. Áudio isolado por zona — quem está em zona diferente é mutado. Mesas redistribuídas (4 no open, 4 nas salas).
+🚧 **Backlog**: chat de texto, esqueci-a-senha (precisa SMTP), mobile responsivo, editor de mapas
 
 ## Decisões técnicas e seus porquês
 

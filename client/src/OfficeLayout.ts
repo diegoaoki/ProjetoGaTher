@@ -1,8 +1,7 @@
 /**
- * Layout declarativo do escritório com hitboxes pra colisão.
- *
- * hitbox: { offsetX, offsetY, w, h } relativo à posição central do sprite.
- * Se não definido, item não bloqueia movimento.
+ * Layout declarativo do escritório com hitboxes pra colisão e zonas
+ * isoladas (cada zona tem áudio independente — quem está em zonas
+ * diferentes não se ouve, independente da distância).
  */
 
 export interface Hitbox {
@@ -18,10 +17,27 @@ export interface FurnitureItem {
   y: number;
   depth?: number;
   hitbox?: Hitbox;
-  // Marca itens especiais (TV de apresentação, etc)
   tag?: "tv" | "meeting-zone";
   // Pra mesas reserváveis: id estável que bate com o catálogo do server
   deskId?: string;
+}
+
+/** Parede com colisão. Usada pra delimitar salas (com vãos pra entrar). */
+export interface Wall {
+  x: number;       // canto superior esquerdo
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** Zona com áudio isolado. Se você está numa Room, só ouve quem também está. */
+export interface Room {
+  id: string;         // ex: "meeting-large", "open"
+  label: string;      // ex: "Sala grande", "Open space" — mostrado no HUD
+  x: number;
+  y: number;
+  w: number;
+  h: number;
 }
 
 export interface OfficeLayoutData {
@@ -29,12 +45,11 @@ export interface OfficeLayoutData {
   height: number;
   floorRegions: Array<{ x: number; y: number; w: number; h: number; type: "carpet" | "rug" }>;
   furniture: FurnitureItem[];
-  // Zonas especiais com função (ex: "perto da TV mostra tela compartilhada")
-  zones: Array<{ id: string; x: number; y: number; w: number; h: number; tag: "presentation" }>;
+  walls: Wall[];
+  rooms: Room[];
 }
 
 // Hitboxes padronizadas por tipo de móvel
-// Coordenadas relativas ao CENTRO do sprite
 const HITBOXES: Record<string, Hitbox> = {
   desk:        { offsetX: -48, offsetY: -10, w: 96, h: 32 },
   chair:       { offsetX: -16, offsetY: -10, w: 32, h: 24 },
@@ -46,6 +61,16 @@ const HITBOXES: Record<string, Hitbox> = {
   tv:          { offsetX: -36, offsetY: -28, w: 72, h: 14 },
 };
 
+/**
+ * Mapa atual:
+ *   - Sala Grande (esquerda superior): 2 mesas privadas (desk-1, desk-2)
+ *   - Sala Pequena A (esquerda meio): 1 mesa privada (desk-3)
+ *   - Sala Pequena B (esquerda baixo): 1 mesa privada (desk-4)
+ *   - Open space (direita): 4 mesas (desk-5 a desk-8) + lounge no canto
+ *
+ * IDs das mesas DEVEM bater com server/src/desks.ts.
+ */
+
 export function getDefaultLayout(): OfficeLayoutData {
   const items: FurnitureItem[] = [];
 
@@ -53,59 +78,105 @@ export function getDefaultLayout(): OfficeLayoutData {
     items.push({ type, x, y, depth, hitbox: HITBOXES[type], tag });
   };
 
-  // Estações de trabalho — 2 fileiras de 4. IDs sincronizados com server/src/desks.ts
+  // === Mesas reserváveis (8 total) ===
   const desks: Array<[string, number, number]> = [
-    ["desk-1", 180, 280], ["desk-2", 310, 280], ["desk-3", 440, 280], ["desk-4", 570, 280],
-    ["desk-5", 180, 540], ["desk-6", 310, 540], ["desk-7", 440, 540], ["desk-8", 570, 540],
+    // Sala grande
+    ["desk-1", 160, 200],
+    ["desk-2", 320, 200],
+    // Sala pequena A
+    ["desk-3", 220, 480],
+    // Sala pequena B
+    ["desk-4", 220, 680],
+    // Open space
+    ["desk-5", 600, 220],
+    ["desk-6", 780, 220],
+    ["desk-7", 600, 420],
+    ["desk-8", 780, 420],
   ];
   desks.forEach(([id, x, y]) => {
     items.push({ type: "desk", x, y, depth: 1, hitbox: HITBOXES.desk, deskId: id });
-    items.push({ type: "monitor", x, y: y - 18, depth: 2 }); // monitor sem colisão (fica em cima da mesa)
+    items.push({ type: "monitor", x, y: y - 18, depth: 2 });
     addItem("chair", x, y + 36, 0);
   });
 
-  // Lounge
-  addItem("sofa", 800, 800, 1);
-  addItem("coffeeTable", 800, 860, 2);
-  addItem("plant", 750, 770, 3);
-  addItem("plant", 870, 770, 3);
+  // === Lounge (open space, canto inferior direito) ===
+  addItem("sofa", 780, 800, 1);
+  addItem("coffeeTable", 780, 860, 2);
+  addItem("plant", 730, 770, 3);
+  addItem("plant", 850, 770, 3);
 
-  // Whiteboard (mantido)
-  addItem("whiteboard", 120, 130, 0);
-
-  // TV de apresentação — removida do escritório aberto (ficou estranho aqui).
-  // Sprite + lógica de screen share (OfficeScene.showScreenShareOnTV / hideScreenShareFromTV)
-  // estão mantidos pra reusar quando criarmos salas de reunião isoladas.
-  // Pra reativar: descomenta a linha abaixo e a zona 'presentation' lá em baixo.
-  // addItem("tv", 260, 130, 0, "tv");
-
-  // Estantes
-  addItem("bookshelf", 80, 460, 1);
-  addItem("bookshelf", 80, 540, 1);
-
-  // Plantas decorativas
-  addItem("plant", 130, 800, 3);
-  addItem("plant", 880, 200, 3);
-  addItem("plant", 480, 920, 3);
+  // === Decoração das salas ===
+  addItem("whiteboard", 240, 80, 0);     // sala grande
+  addItem("plant", 80, 80, 3);
+  addItem("plant", 400, 80, 3);
+  addItem("bookshelf", 80, 480, 1);      // sala pequena A
+  addItem("bookshelf", 80, 680, 1);      // sala pequena B
+  addItem("plant", 480, 920, 3);         // open space
+  addItem("plant", 920, 920, 3);
 
   return {
     width: 1024,
     height: 1024,
     floorRegions: [
-      { x: 720, y: 760, w: 220, h: 160, type: "rug" },
-      { x: 60, y: 80, w: 340, h: 200, type: "rug" }, // tapete da área do whiteboard
+      // Salas com tapete pra dar identidade visual
+      { x: 60, y: 60, w: 380, h: 320, type: "rug" },   // sala grande
+      { x: 60, y: 400, w: 320, h: 180, type: "rug" },  // sala pequena A
+      { x: 60, y: 600, w: 320, h: 180, type: "rug" },  // sala pequena B
+      { x: 720, y: 760, w: 220, h: 180, type: "rug" }, // lounge
     ],
     furniture: items,
-    // Sem zonas ativas por enquanto. Quando reintroduzirmos a TV na sala de
-    // reunião, adiciona uma zone com tag "presentation" pra disparar o
-    // setScreenShareOnTV quando o player entrar na área.
-    zones: [],
+    walls: WALLS,
+    rooms: ROOMS,
   };
 }
 
+// =================================================================
+//  Paredes (com colisão). Cada sala é uma caixa com um vão de 80px
+//  pra avatar entrar/sair. WALL_THICKNESS = 8px.
+// =================================================================
+const WT = 8; // espessura padrão da parede
+
+const WALLS: Wall[] = [
+  // === Sala Grande (60,60) → (440,380). Vão na lateral direita, y 200-280 ===
+  // top
+  { x: 60, y: 60, w: 380, h: WT },
+  // left
+  { x: 60, y: 60, w: WT, h: 320 },
+  // bottom
+  { x: 60, y: 372, w: 380, h: WT },
+  // right (com vão): de y=60 até y=200, e de y=280 até y=380
+  { x: 432, y: 60, w: WT, h: 140 },
+  { x: 432, y: 280, w: WT, h: 100 },
+
+  // === Sala Pequena A (60,400) → (380,580). Vão direita y 460-540 ===
+  { x: 60, y: 400, w: 320, h: WT },
+  { x: 60, y: 400, w: WT, h: 180 },
+  { x: 60, y: 572, w: 320, h: WT },
+  { x: 372, y: 400, w: WT, h: 60 },
+  { x: 372, y: 540, w: WT, h: 40 },
+
+  // === Sala Pequena B (60,600) → (380,780). Vão direita y 660-740 ===
+  { x: 60, y: 600, w: 320, h: WT },
+  { x: 60, y: 600, w: WT, h: 180 },
+  { x: 60, y: 772, w: 320, h: WT },
+  { x: 372, y: 600, w: WT, h: 60 },
+  { x: 372, y: 740, w: WT, h: 40 },
+];
+
+// =================================================================
+//  Zonas com áudio isolado.
+//  Player dentro de uma room só ouve quem está na mesma.
+//  Player fora de qualquer room = zone "open".
+// =================================================================
+const ROOMS: Room[] = [
+  { id: "meeting-large", label: "Sala grande",   x: 60,  y: 60,  w: 380, h: 320 },
+  { id: "meeting-a",     label: "Sala pequena A", x: 60,  y: 400, w: 320, h: 180 },
+  { id: "meeting-b",     label: "Sala pequena B", x: 60,  y: 600, w: 320, h: 180 },
+];
+
 /**
- * Verifica colisão entre um retângulo (avatar) e qualquer hitbox de móvel.
- * playerHalfSize: meia-largura/altura do avatar (raio efetivo de colisão)
+ * Verifica colisão entre um retângulo (avatar) e qualquer hitbox de móvel
+ * OU parede.
  */
 export function checkCollision(
   px: number,
@@ -115,9 +186,10 @@ export function checkCollision(
 ): boolean {
   const pLeft = px - playerHalfSize;
   const pRight = px + playerHalfSize;
-  const pTop = py - playerHalfSize / 2; // colisão só na parte inferior do avatar (estilo top-down clássico)
+  const pTop = py - playerHalfSize / 2;
   const pBottom = py + playerHalfSize;
 
+  // Móveis
   for (const item of layout.furniture) {
     if (!item.hitbox) continue;
     const hb = item.hitbox;
@@ -125,26 +197,37 @@ export function checkCollision(
     const hRight = hLeft + hb.w;
     const hTop = item.y + hb.offsetY;
     const hBottom = hTop + hb.h;
-
     if (pRight > hLeft && pLeft < hRight && pBottom > hTop && pTop < hBottom) {
       return true;
     }
   }
+
+  // Paredes (hitbox direto: x/y/w/h é o retângulo bloqueante)
+  for (const wall of layout.walls) {
+    if (pRight > wall.x && pLeft < wall.x + wall.w && pBottom > wall.y && pTop < wall.y + wall.h) {
+      return true;
+    }
+  }
+
   return false;
 }
 
 /**
- * Verifica se uma posição está dentro de uma zona especial.
+ * Retorna a Room atual do player. Se está fora de qualquer room
+ * delimitada, retorna a zona padrão "open".
  */
-export function getCurrentZone(
-  px: number,
-  py: number,
-  layout: OfficeLayoutData
-): { id: string; tag: string } | null {
-  for (const zone of layout.zones) {
-    if (px >= zone.x && px <= zone.x + zone.w && py >= zone.y && py <= zone.y + zone.h) {
-      return { id: zone.id, tag: zone.tag };
+export function getCurrentRoom(px: number, py: number, layout: OfficeLayoutData): Room {
+  for (const room of layout.rooms) {
+    if (px >= room.x && px <= room.x + room.w && py >= room.y && py <= room.y + room.h) {
+      return room;
     }
   }
-  return null;
+  // Zona implícita "open" — todo lugar fora das salas
+  return { id: "open", label: "Open space", x: 0, y: 0, w: layout.width, h: layout.height };
+}
+
+// Compatibilidade com chamadas antigas (OfficeScene ainda usa getCurrentZone)
+export function getCurrentZone(px: number, py: number, layout: OfficeLayoutData): { id: string; tag: string } | null {
+  const room = getCurrentRoom(px, py, layout);
+  return { id: room.id, tag: "room" };
 }

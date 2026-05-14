@@ -41,7 +41,36 @@ export async function initDb(): Promise<void> {
       );
 
       CREATE INDEX IF NOT EXISTS desk_reservations_user_idx ON desk_reservations (user_id);
+
+      CREATE TABLE IF NOT EXISTS app_meta (
+        key VARCHAR(64) PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
     `);
+
+    // Migration automática: se a versão do layout de mesas mudou, limpa
+    // reservas (porque as coordenadas mudaram e as antigas viraram lixo).
+    // Bump a string abaixo toda vez que mudar posições/quantidade de mesas.
+    const DESK_LAYOUT_VERSION = "2026-05-14-rooms";
+    const meta = await client.query(
+      `SELECT value FROM app_meta WHERE key = $1`,
+      ["desk_layout_version"]
+    );
+    const stored = meta.rows[0]?.value;
+    if (stored !== DESK_LAYOUT_VERSION) {
+      const result = await client.query(`DELETE FROM desk_reservations`);
+      await client.query(
+        `INSERT INTO app_meta (key, value, updated_at) VALUES ($1, $2, NOW())
+         ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
+        ["desk_layout_version", DESK_LAYOUT_VERSION]
+      );
+      console.log(
+        `[db] layout de mesas mudou (${stored || "vazio"} → ${DESK_LAYOUT_VERSION}). ` +
+        `Reservas limpas: ${result.rowCount}`
+      );
+    }
+
     console.log("[db] schema inicializado");
   } finally {
     client.release();

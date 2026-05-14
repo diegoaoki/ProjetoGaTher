@@ -193,17 +193,23 @@ export class SpatialAudio {
   }
 
   public updateVolumes(
-    myPos: { x: number; y: number },
-    peerPositions: Map<string, { x: number; y: number }>
+    myInfo: { x: number; y: number; zoneId?: string },
+    peerInfo: Map<string, { x: number; y: number; zoneId?: string }>
   ) {
     this.peers.forEach((peer, identity) => {
-      const pos = peerPositions.get(identity);
-      if (!pos || !peer.audioElement) {
+      const info = peerInfo.get(identity);
+      if (!info || !peer.audioElement) {
         if (peer.audioElement) peer.audioElement.volume = 0;
         return;
       }
-      const dx = pos.x - myPos.x;
-      const dy = pos.y - myPos.y;
+      // Áudio isolado por sala: se eu e o peer estamos em zonas diferentes,
+      // muta independente da distância. "open" é a zona padrão (fora de salas).
+      if (myInfo.zoneId && info.zoneId && myInfo.zoneId !== info.zoneId) {
+        peer.audioElement.volume = 0;
+        return;
+      }
+      const dx = info.x - myInfo.x;
+      const dy = info.y - myInfo.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
       peer.audioElement.volume = this.computeVolume(dist);
     });
