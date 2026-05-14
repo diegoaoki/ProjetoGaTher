@@ -7,6 +7,9 @@ import { monitor } from "@colyseus/monitor";
 import basicAuth from "express-basic-auth";
 import { OfficeRoom } from "./OfficeRoom";
 import { createTokenRouter } from "./tokenRouter";
+import { createAuthRouter } from "./auth/router";
+import { extractAuth } from "./auth/middleware";
+import { initDb } from "./db/init";
 
 const PORT = Number(process.env.PORT || 2567);
 
@@ -25,11 +28,16 @@ app.use(
 );
 app.use(express.json());
 
+// extractAuth roda em TODAS as rotas — preenche req.auth quando tem JWT válido.
+// requireAuth (nas rotas específicas) é que devolve 401 quando exigido.
+app.use(extractAuth);
+
 app.get("/", (_req, res) => {
   res.json({
     service: "virtual-office-server",
     status: "ok",
     livekit: !!(process.env.LIVEKIT_API_KEY && process.env.LIVEKIT_API_SECRET),
+    db: !!process.env.DATABASE_URL,
     ts: Date.now(),
   });
 });
@@ -38,7 +46,7 @@ app.get("/health", (_req, res) => {
   res.json({ ok: true, ts: Date.now() });
 });
 
-// Endpoint pra gerar tokens do LiveKit
+app.use("/", createAuthRouter());
 app.use("/", createTokenRouter());
 
 // Dashboard /colyseus protegido
@@ -63,7 +71,17 @@ const gameServer = new Server({
 
 gameServer.define("office", OfficeRoom);
 
-gameServer.listen(PORT, "0.0.0.0").then(() => {
+async function bootstrap() {
+  // Inicializa schema do Postgres (idempotente). Falha o boot se DATABASE_URL não estiver setada.
+  try {
+    await initDb();
+  } catch (err: any) {
+    console.error("[boot] falha ao inicializar DB:", err?.message || err);
+    console.error("[boot] o server NÃO vai aceitar conexões sem DB. Configure DATABASE_URL.");
+    process.exit(1);
+  }
+
+  await gameServer.listen(PORT, "0.0.0.0");
   console.log(`✓ Servidor Colyseus rodando na porta ${PORT}`);
   console.log(
     `✓ Origens permitidas:`,
@@ -73,7 +91,10 @@ gameServer.listen(PORT, "0.0.0.0").then(() => {
     `✓ LiveKit:`,
     process.env.LIVEKIT_API_KEY ? "configurado" : "NÃO configurado (adicione LIVEKIT_URL, LIVEKIT_API_KEY, LIVEKIT_API_SECRET)"
   );
+  console.log(`✓ JWT_SECRET:`, process.env.JWT_SECRET ? "configurado" : "NÃO configurado");
   if (process.env.MONITOR_USER) {
     console.log(`✓ Dashboard /colyseus protegido por basic auth`);
   }
-});
+}
+
+bootstrap();

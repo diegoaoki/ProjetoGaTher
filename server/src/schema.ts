@@ -1,7 +1,8 @@
 import { Schema, MapSchema, type } from "@colyseus/schema";
 
 export class Player extends Schema {
-  @type("string") id: string = "";
+  @type("string") id: string = "";        // sessionId do Colyseus
+  @type("string") userId: string = "";    // userId persistido (mapeia pro identity do LiveKit)
   @type("string") name: string = "";
   @type("number") x: number = 0;
   @type("number") y: number = 0;

@@ -3,6 +3,15 @@ import Phaser from "phaser";
 import { Client, Room } from "colyseus.js";
 import { OfficeScene } from "./OfficeScene";
 import { SpatialAudio } from "./SpatialAudio";
+import LoginScreen from "./LoginScreen";
+import {
+  AuthSession,
+  clearToken,
+  fetchMe,
+  getStoredToken,
+  storeToken,
+  updateProfile,
+} from "./auth";
 
 function resolveServerUrl(): string {
   const fromEnv = import.meta.env.VITE_SERVER_URL as string | undefined;
@@ -41,6 +50,7 @@ const HAIR_COLORS = [
 ];
 
 type ConnState = "idle" | "connecting" | "connected" | "error";
+type AuthState = "checking" | "anonymous" | "authed";
 
 interface RemoteVideo {
   identity: string;
@@ -53,35 +63,11 @@ interface ActiveScreenShare {
   stream: MediaStream;
 }
 
-const STORAGE_KEY = "virtual-office-profile-v1";
-
-interface SavedProfile {
-  name: string;
-  bodyColor: string;
-  hairColor: string;
-}
-
-function loadProfile(): Partial<SavedProfile> {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-function saveProfile(p: SavedProfile) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(p));
-  } catch {}
-}
-
 /** Tenta dar play em um vídeo, ignorando AbortError (que é benigno) */
 function safePlay(video: HTMLVideoElement) {
   const p = video.play();
   if (p && typeof p.catch === "function") {
     p.catch((err) => {
-      // AbortError acontece quando o vídeo é destruído antes do play resolver — é OK
       if (err?.name !== "AbortError") {
         console.warn("[play] falhou:", err);
       }
@@ -99,12 +85,17 @@ export default function App() {
   const spatialRef = useRef<SpatialAudio | null>(null);
   const sceneRef = useRef<OfficeScene | null>(null);
 
-  const saved = loadProfile();
+  // === Auth state ===
+  const [authState, setAuthState] = useState<AuthState>("checking");
+  const [session, setSession] = useState<AuthSession | null>(null);
+
+  // === Customização (pré-conexão, alimentado pelo profile do server) ===
+  const [bodyColor, setBodyColor] = useState(SHIRT_COLORS[0]);
+  const [hairColor, setHairColor] = useState(HAIR_COLORS[0]);
+
+  // === Conexão e mídia ===
   const [conn, setConn] = useState<ConnState>("idle");
   const [errorMsg, setErrorMsg] = useState("");
-  const [name, setName] = useState(saved.name || "");
-  const [bodyColor, setBodyColor] = useState(saved.bodyColor || SHIRT_COLORS[0]);
-  const [hairColor, setHairColor] = useState(saved.hairColor || HAIR_COLORS[0]);
   const [playerCount, setPlayerCount] = useState(0);
   const [micOn, setMicOn] = useState(true);
   const [camOn, setCamOn] = useState(true);
@@ -113,6 +104,47 @@ export default function App() {
   const [remoteVideos, setRemoteVideos] = useState<RemoteVideo[]>([]);
   const [activeScreenShare, setActiveScreenShare] = useState<ActiveScreenShare | null>(null);
   const [fullscreenStream, setFullscreenStream] = useState<MediaStream | null>(null);
+
+  // === Modal de edição de avatar durante sessão ===
+  const [editingAvatar, setEditingAvatar] = useState(false);
+  const [editError, setEditError] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+
+  // Auto-login: ao montar, tenta validar JWT salvo
+  useEffect(() => {
+    const token = getStoredToken();
+    if (!token) {
+      setAuthState("anonymous");
+      return;
+    }
+    (async () => {
+      try {
+        const { user, profile } = await fetchMe(HTTP_URL, token);
+        const s: AuthSession = { token, user, profile };
+        setSession(s);
+        setBodyColor(profile.bodyColor);
+        setHairColor(profile.hairColor);
+        setAuthState("authed");
+      } catch (e) {
+        clearToken();
+        setAuthState("anonymous");
+      }
+    })();
+  }, []);
+
+  function handleAuthed(s: AuthSession) {
+    setSession(s);
+    setBodyColor(s.profile.bodyColor);
+    setHairColor(s.profile.hairColor);
+    setAuthState("authed");
+  }
+
+  function logout() {
+    if (conn === "connected") disconnect();
+    clearToken();
+    setSession(null);
+    setAuthState("anonymous");
+  }
 
   useEffect(() => {
     if (conn !== "connected" || !roomRef.current || !containerRef.current) return;
@@ -164,7 +196,8 @@ export default function App() {
           peerPositions.forEach((pos, sessionId) => {
             const player = state.players.get(sessionId);
             if (!player) return;
-            const identity = peers.find((id) => id.startsWith(player.name + "__"));
+            // identity do LiveKit é `userId__timestamp`; mapeia pelo userId persistido
+            const identity = peers.find((id) => id.startsWith(player.userId + "__"));
             if (identity) mapped.set(identity, pos);
           });
           spatialRef.current.updateVolumes(myPos, mapped);
@@ -177,12 +210,11 @@ export default function App() {
   }, [conn]);
 
   async function connect() {
-    if (!name.trim()) {
-      setErrorMsg("Digite seu nome");
+    if (!session) {
+      setErrorMsg("Sessão expirada. Faça login novamente.");
+      setAuthState("anonymous");
       return;
     }
-
-    saveProfile({ name: name.trim(), bodyColor, hairColor });
 
     setConn("connecting");
     setErrorMsg("");
@@ -190,9 +222,7 @@ export default function App() {
     try {
       const client = new Client(SERVER_URL);
       const room = await client.joinOrCreate("office", {
-        name: name.trim(),
-        color: bodyColor,
-        hairColor,
+        token: session.token,
       });
       roomRef.current = room;
 
@@ -210,11 +240,21 @@ export default function App() {
       setAudioStatus("Obtendo token de áudio...");
       const tokenResp = await fetch(HTTP_URL + "/token", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: name.trim(), room: "office" }),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer " + session.token,
+        },
+        body: JSON.stringify({ room: "office" }),
       });
 
       if (!tokenResp.ok) {
+        if (tokenResp.status === 401) {
+          // JWT expirou ou foi invalidado
+          clearToken();
+          setSession(null);
+          setAuthState("anonymous");
+          throw new Error("Sessão expirada. Faça login novamente.");
+        }
         const errData = await tokenResp.json().catch(() => ({}));
         throw new Error(errData.error || "Falha ao obter token");
       }
@@ -225,7 +265,7 @@ export default function App() {
       const spatial = new SpatialAudio({
         serverUrl: url,
         token,
-        identity: name.trim(),
+        identity: session.profile.displayName,
         enableVideo: true,
         hearingNearRadius: 150,
         hearingFarRadius: 400,
@@ -272,7 +312,7 @@ export default function App() {
         const stateNow: any = room.state;
         let target: string | null = null;
         stateNow.players.forEach((player: any, sessionId: string) => {
-          if (identity.startsWith(player.name + "__")) target = sessionId;
+          if (identity.startsWith(player.userId + "__")) target = sessionId;
         });
         if (target && sceneRef.current) sceneRef.current.setRemoteSpeaking(target, speaking);
       };
@@ -322,7 +362,6 @@ export default function App() {
     return () => clearTimeout(t);
   }, [conn, camOn]);
 
-  // Modal fullscreen
   useEffect(() => {
     if (!fullscreenVideoRef.current || !fullscreenStream) return;
     const wrap = fullscreenVideoRef.current;
@@ -386,6 +425,37 @@ export default function App() {
     else setScreenOn(false);
   }
 
+  // Persiste aparência (e atualiza o player na sala se estiver conectado)
+  async function saveAvatarEdit(newBody: string, newHair: string) {
+    if (!session) return;
+    setEditError("");
+    setSavingEdit(true);
+    try {
+      const profile = await updateProfile(HTTP_URL, session.token, {
+        bodyColor: newBody,
+        hairColor: newHair,
+      });
+      setSession({ ...session, profile });
+      setBodyColor(newBody);
+      setHairColor(newHair);
+
+      // Avisa o server pra atualizar o Player no schema do Colyseus
+      if (roomRef.current && conn === "connected") {
+        roomRef.current.send("appearance", { bodyColor: newBody, hairColor: newHair });
+      }
+      setEditingAvatar(false);
+    } catch (e: any) {
+      if (e?.message?.includes("401") || /sess/i.test(e?.message || "")) {
+        clearToken();
+        setSession(null);
+        setAuthState("anonymous");
+      }
+      setEditError(e?.message || "Falha ao salvar");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
   useEffect(() => {
     return () => {
       roomRef.current?.leave();
@@ -396,18 +466,40 @@ export default function App() {
 
   const avatarPreviewRef = useRef<HTMLCanvasElement>(null);
   useEffect(() => {
-    if (conn === "connected") return;
+    if (conn === "connected" && !editingAvatar) return;
     if (!avatarPreviewRef.current) return;
     drawAvatarPreview(avatarPreviewRef.current, bodyColor, hairColor);
-  }, [bodyColor, hairColor, conn]);
+  }, [bodyColor, hairColor, conn, editingAvatar]);
 
+  // === Render: auth checking ===
+  if (authState === "checking") {
+    return (
+      <div style={overlayStyle}>
+        <div style={{ ...cardStyle, textAlign: "center" }}>
+          <p style={{ opacity: 0.7 }}>Verificando sessão...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // === Render: login ===
+  if (authState === "anonymous" || !session) {
+    return <LoginScreen httpUrl={HTTP_URL} onAuthed={handleAuthed} />;
+  }
+
+  // === Render: customização (autenticado, ainda não conectado) ===
   if (conn !== "connected") {
     return (
       <div style={overlayStyle}>
         <div style={cardStyle}>
-          <h1 style={{ margin: "0 0 8px", fontSize: 28 }}>Virtual Office</h1>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <h1 style={{ margin: 0, fontSize: 28 }}>Virtual Office</h1>
+            <button onClick={logout} style={{ ...iconBtnStyle(false), fontSize: 12 }} title="Sair da conta">
+              Sair
+            </button>
+          </div>
           <p style={{ margin: "0 0 20px", opacity: 0.7, fontSize: 14 }}>
-            Customize seu avatar e entre
+            Olá, <strong>{session.profile.displayName}</strong>. Confirme seu avatar e entre.
           </p>
 
           <div style={{ display: "flex", justifyContent: "center", marginBottom: 20 }}>
@@ -426,18 +518,6 @@ export default function App() {
               }}
             />
           </div>
-
-          <label style={labelStyle}>Seu nome</label>
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && connect()}
-            placeholder="Ex: Maria"
-            style={inputStyle}
-            disabled={conn === "connecting"}
-            maxLength={24}
-            autoFocus
-          />
 
           <label style={labelStyle}>Camisa</label>
           <div style={paletteStyle}>
@@ -471,7 +551,22 @@ export default function App() {
             ))}
           </div>
 
-          <button onClick={connect} disabled={conn === "connecting"} style={{ ...buttonStyle, marginTop: 16 }}>
+          <button
+            onClick={async () => {
+              // Salva alterações de cor (se houver) antes de entrar
+              if (bodyColor !== session.profile.bodyColor || hairColor !== session.profile.hairColor) {
+                try {
+                  const profile = await updateProfile(HTTP_URL, session.token, { bodyColor, hairColor });
+                  setSession({ ...session, profile });
+                } catch (e) {
+                  // não bloqueia entrada — server tem o profile atual
+                }
+              }
+              connect();
+            }}
+            disabled={conn === "connecting"}
+            style={{ ...buttonStyle, marginTop: 16 }}
+          >
             {conn === "connecting" ? (audioStatus || "Conectando...") : "Entrar no escritório"}
           </button>
 
@@ -482,17 +577,19 @@ export default function App() {
     );
   }
 
+  // === Render: conectado (jogo + HUD) ===
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
       <div ref={containerRef} style={{ position: "absolute", top: 0, left: 0, width: "100vw", height: "100vh", background: "#0f172a" }} />
 
       <div style={hudStyle}>
-        <div><strong>{name}</strong></div>
+        <div><strong>{session.profile.displayName}</strong></div>
         <div style={{ fontSize: 12, opacity: 0.7 }}>{playerCount} no escritório</div>
         <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
           <button onClick={toggleMic} style={iconBtnStyle(micOn)} title="Microfone">{micOn ? "🎤" : "🔇"}</button>
           <button onClick={toggleCam} style={iconBtnStyle(camOn)} title="Câmera">{camOn ? "📹" : "🚫"}</button>
           <button onClick={toggleScreen} style={iconBtnStyle(screenOn)} title="Compartilhar tela">{screenOn ? "🛑" : "🖥️"}</button>
+          <button onClick={() => setEditingAvatar(true)} style={iconBtnStyle(false)} title="Editar avatar">🎨</button>
           <button onClick={disconnect} style={{ ...iconBtnStyle(false), background: "#7f1d1d" }}>Sair</button>
         </div>
         {audioStatus && <div style={{ fontSize: 11, opacity: 0.8, marginTop: 6, color: "#fbbf24" }}>{audioStatus}</div>}
@@ -537,6 +634,56 @@ export default function App() {
           >
             ✕ Fechar
           </button>
+        </div>
+      )}
+
+      {editingAvatar && (
+        <div style={modalStyle} onClick={() => !savingEdit && setEditingAvatar(false)}>
+          <div style={cardStyle} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ margin: "0 0 12px", fontSize: 20 }}>Editar avatar</h2>
+
+            <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
+              <canvas
+                ref={avatarPreviewRef}
+                width={64}
+                height={80}
+                style={{
+                  imageRendering: "pixelated",
+                  width: 96, height: 120,
+                  background: "#0f172a", borderRadius: 8,
+                  border: "1px solid #334155", padding: 8,
+                }}
+              />
+            </div>
+
+            <label style={labelStyle}>Camisa</label>
+            <div style={paletteStyle}>
+              {SHIRT_COLORS.map((c) => (
+                <button key={c} onClick={() => setBodyColor(c)} disabled={savingEdit}
+                  style={{ ...swatchStyle, background: c, outline: bodyColor === c ? "2px solid #fff" : "none", outlineOffset: 2 }} />
+              ))}
+            </div>
+
+            <label style={labelStyle}>Cabelo</label>
+            <div style={paletteStyle}>
+              {HAIR_COLORS.map((c) => (
+                <button key={c} onClick={() => setHairColor(c)} disabled={savingEdit}
+                  style={{ ...swatchStyle, background: c, outline: hairColor === c ? "2px solid #fff" : "none", outlineOffset: 2 }} />
+              ))}
+            </div>
+
+            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+              <button onClick={() => setEditingAvatar(false)} disabled={savingEdit}
+                style={{ ...buttonStyle, background: "#334155", color: "#e2e8f0" }}>
+                Cancelar
+              </button>
+              <button onClick={() => saveAvatarEdit(bodyColor, hairColor)} disabled={savingEdit} style={buttonStyle}>
+                {savingEdit ? "Salvando..." : "Salvar"}
+              </button>
+            </div>
+
+            {editError && <p style={{ color: "#f87171", marginTop: 12, fontSize: 13 }}>{editError}</p>}
+          </div>
         </div>
       )}
     </div>
@@ -585,12 +732,6 @@ const cardStyle: React.CSSProperties = {
   boxShadow: "0 20px 50px rgba(0,0,0,0.4)",
 };
 const labelStyle: React.CSSProperties = { display: "block", fontSize: 13, marginBottom: 6, marginTop: 12, opacity: 0.8 };
-const inputStyle: React.CSSProperties = {
-  width: "100%", padding: "10px 12px",
-  borderRadius: 8, border: "1px solid #334155",
-  background: "#0f172a", color: "#e2e8f0",
-  fontSize: 14, outline: "none",
-};
 const buttonStyle: React.CSSProperties = {
   width: "100%", padding: "10px 16px",
   borderRadius: 8, border: "none",

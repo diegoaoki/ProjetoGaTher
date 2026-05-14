@@ -5,11 +5,12 @@ Escritório virtual com mundo 2D multiplayer, áudio/vídeo espacial, salas, e f
 ## Stack e Arquitetura
 
 ```
-┌─────────────────┐  WebSocket (wss)   ┌─────────────────────┐
-│  Client (Vercel)│ ─────────────────► │ Server (Railway)    │
-│  React + Phaser │  state deltas      │ Colyseus + Express  │
-│  Colyseus SDK   │  input messages    │ OfficeRoom + Schema │
-└────────┬────────┘                    └─────────────────────┘
+┌─────────────────┐  WebSocket (wss)   ┌─────────────────────┐    ┌──────────────┐
+│  Client (Vercel)│ ─────────────────► │ Server (Railway)    │───►│  Postgres    │
+│  React + Phaser │  state deltas      │ Colyseus + Express  │    │  (Railway)   │
+│  Colyseus SDK   │  input messages    │ Auth + Drizzle ORM  │    │  users +     │
+└────────┬────────┘  JWT no joinOrCreate│ OfficeRoom + Schema │    │  profiles    │
+         │                              └─────────────────────┘    └──────────────┘
          │ WebRTC
          ▼
 ┌──────────────────┐
@@ -18,9 +19,11 @@ Escritório virtual com mundo 2D multiplayer, áudio/vídeo espacial, salas, e f
 └──────────────────┘
 ```
 
-- **Server**: Node 20 + Colyseus (state authoritative) + Express + LiveKit server-sdk (gera JWT tokens)
+- **Server**: Node 20 + Colyseus (state authoritative) + Express + LiveKit server-sdk (gera JWT tokens) + Drizzle ORM + bcryptjs + jsonwebtoken
 - **Client**: Vite + React 18 + Phaser 3.70 + Colyseus.js + livekit-client
-- **Hospedagem**: Railway (server, Dockerfile multi-stage), Vercel (client estático, SPA)
+- **Banco**: Postgres (Railway plugin), conectado via `pg` + `drizzle-orm`. Schema criado idempotente no boot via `CREATE TABLE IF NOT EXISTS`.
+- **Auth**: email + senha (bcrypt), sessão via JWT (HS256, expira 7d) guardado em `localStorage` do cliente. Rate limiting nos endpoints sensíveis.
+- **Hospedagem**: Railway (server + Postgres, Dockerfile multi-stage), Vercel (client estático, SPA)
 - **Mídia**: LiveKit Cloud free tier (projeto "GaTherPrivate")
 - **Idioma da UI**: Português (BR). Mensagens de commit também em PT.
 - **Estilo de código**: TypeScript em ambos os lados, decorators no Colyseus schema, comentários em PT explicando "porquê" e não "o quê"
@@ -31,10 +34,19 @@ Escritório virtual com mundo 2D multiplayer, áudio/vídeo espacial, salas, e f
 /
 ├── server/                    → deploy no Railway (root directory: server)
 │   ├── src/
-│   │   ├── index.ts           # Express + Colyseus + token endpoint + CORS
-│   │   ├── OfficeRoom.ts      # Room do Colyseus: move, claim, invite, teleport, appearance
-│   │   ├── schema.ts          # Player, Desk, OfficeState (com decorators @type)
-│   │   └── tokenRouter.ts     # POST /token → gera JWT do LiveKit
+│   │   ├── index.ts           # Express + Colyseus + bootstrap (initDb)
+│   │   ├── OfficeRoom.ts      # Room do Colyseus: onAuth (JWT), move, appearance
+│   │   ├── schema.ts          # Player (com userId), OfficeState
+│   │   ├── tokenRouter.ts     # POST /token (autenticado) → JWT do LiveKit
+│   │   ├── auth/
+│   │   │   ├── router.ts      # POST /auth/register, /auth/login, GET /auth/me, PATCH /profile
+│   │   │   ├── middleware.ts  # extractAuth (global) + requireAuth (por rota)
+│   │   │   ├── jwt.ts         # sign/verify JWT (HS256, JWT_SECRET)
+│   │   │   └── password.ts    # bcrypt hash/verify
+│   │   └── db/
+│   │       ├── schema.ts      # tabelas Drizzle: users, profiles
+│   │       ├── client.ts      # Pool pg + cliente Drizzle (lazy init)
+│   │       └── init.ts        # CREATE TABLE IF NOT EXISTS (idempotente no boot)
 │   ├── Dockerfile             # multi-stage: builder + runner enxuto
 │   ├── railway.json           # config Railway (healthcheck /health)
 │   ├── package.json
@@ -43,7 +55,9 @@ Escritório virtual com mundo 2D multiplayer, áudio/vídeo espacial, salas, e f
 ├── client/                    → deploy no Vercel (root directory: client)
 │   ├── src/
 │   │   ├── main.tsx           # entry React
-│   │   ├── App.tsx            # tela de login + HUD + sidebar + modais
+│   │   ├── App.tsx            # auth gate + customização + HUD + modais
+│   │   ├── LoginScreen.tsx    # tela de login/registro (toggle)
+│   │   ├── auth.ts            # helpers de fetch p/ /auth/* + localStorage do JWT
 │   │   ├── OfficeScene.ts     # cena Phaser: input, sync, colisão, render
 │   │   ├── OfficeLayout.ts    # mobília declarativa + hitboxes + zonas
 │   │   ├── SpriteFactory.ts   # gera sprites programaticamente (canvas pixel-art)
@@ -61,6 +75,8 @@ Escritório virtual com mundo 2D multiplayer, áudio/vídeo espacial, salas, e f
 - `PORT` — definido pelo Railway automaticamente
 - `NODE_ENV=production`
 - `ALLOWED_ORIGINS=https://projeto-ga-ther.vercel.app` (CORS)
+- `DATABASE_URL` — injetado pelo plugin Postgres do Railway
+- `JWT_SECRET` — segredo HS256 (mín. 16 chars). Gerar com `openssl rand -hex 32`
 - `MONITOR_USER` + `MONITOR_PASS` — basic auth do dashboard `/colyseus`
 - `LIVEKIT_URL=wss://gatherprivate-wj37bvum.livekit.cloud`
 - `LIVEKIT_API_KEY` (secret)
@@ -78,8 +94,12 @@ URLs públicas:
 
 **Local dev (na pasta server/):**
 ```bash
+# Postgres local (uma vez)
+docker run --name pg-gather -e POSTGRES_PASSWORD=dev -p 5432:5432 -d postgres
+cp .env.example .env       # ajustar DATABASE_URL + JWT_SECRET + LIVEKIT_*
+
 npm install
-npm run dev        # ts-node-dev em ws://localhost:2567
+npm run dev        # ts-node-dev em ws://localhost:2567 (cria tabelas no boot)
 npm run build      # tsc → dist/
 npm start          # node dist/index.js
 ```
@@ -105,14 +125,24 @@ npm run build      # build de produção
 
 ## Como funciona (fluxos importantes)
 
-### Conexão de um novo jogador
-1. Cliente abre tela de customização (nome + cor camisa + cor cabelo, salvo em `localStorage`)
-2. `joinOrCreate("office")` no Colyseus → cria/entra na room
-3. Server escolhe spawn point seguro (de uma lista pré-validada, sem mobília)
-4. Server envia state inicial via @colyseus/schema deltas (binário)
-5. Cliente faz `POST /token` no server → recebe JWT do LiveKit
-6. Cliente conecta no LiveKit como participant `name__timestamp` (identity)
-7. Publica tracks de áudio + vídeo (câmera). Screen share é opcional, sob demanda
+### Autenticação (email + senha)
+1. Cliente abre `LoginScreen` (toggle entre Entrar / Cadastrar).
+2. `POST /auth/register` ou `/auth/login` valida com Zod, hasheia senha com bcrypt (10 rounds), grava em `users` + `profiles`, devolve `{ token, user, profile }`.
+3. Cliente guarda só o JWT em `localStorage` (`virtual-office-jwt-v1`). Perfil vem do server em todo boot via `GET /auth/me`.
+4. Rate limit: 20 tentativas / 15min por IP em `/auth/register` e `/auth/login`. 60 req/min nos demais.
+5. Sem domínio restrito no email (decisão consciente — uso interno, mas qualquer email serve).
+6. `PATCH /profile` (autenticado) atualiza displayName/bodyColor/hairColor. Modal "🎨 Editar avatar" no HUD usa esse endpoint e refresca o Player na room ativa.
+7. Logout: limpa JWT, derruba Colyseus + LiveKit.
+
+### Conexão de um novo jogador (autenticado)
+1. Cliente, já com JWT válido, mostra preview do avatar (cores vindas do server). Pode ajustar antes de entrar.
+2. `joinOrCreate("office", { token })` → `OfficeRoom.onAuth` valida o JWT, busca user + profile no Postgres, anexa em `client.userData`. Sem token / inválido = recusa.
+3. Server escolhe spawn point seguro (de uma lista pré-validada, sem mobília).
+4. Server envia state inicial via @colyseus/schema deltas (binário). `Player.userId` vai pro cliente pra mapear identity do LiveKit.
+5. Cliente faz `POST /token` no server com `Authorization: Bearer <jwt>` → recebe JWT do LiveKit.
+6. Cliente conecta no LiveKit como participant `userId__timestamp` (identity). O `displayName` aparece como metadado.
+7. Publica tracks de áudio + vídeo (câmera). Screen share é opcional, sob demanda.
+8. Cliente mapeia `identity.startsWith(player.userId + "__")` pra associar áudio/vídeo ao avatar correto na cena Phaser.
 
 ### Áudio espacial
 - A cada frame do Phaser (~60fps), `OfficeScene` chama `onPositionsUpdate(myPos, peerPositions)`
@@ -156,7 +186,9 @@ npm run build      # build de produção
 3. **AbortError no `play()`**: é benigno, ignorar. Acontece quando elemento é destruído antes do play resolver.
 4. **Phaser canvas com tamanho zero**: o canvas precisa ser inicializado DEPOIS do React renderizar o container com dimensões reais (uso 2x `requestAnimationFrame` aninhados).
 5. **Spawn em colisão**: tem lista de spawn points "seguros" no server, e fallback no cliente que faz busca em espiral por posição livre.
-6. **Persistência zero**: tudo é em memória do server. Restart do Railway = perde mesas reservadas.
+6. **Persistência parcial**: `users` e `profiles` persistem em Postgres. Estado da room (posições, players online) ainda é em memória — restart do Railway derruba quem está online (eles re-logam).
+7. **Identity LiveKit usa userId, NÃO displayName**: o mapeamento client↔LiveKit é por `Player.userId`, não pelo nome. Mudar isso quebra áudio espacial e detecção de fala.
+8. **Schema do Postgres é criado no boot**: `initDb()` roda `CREATE TABLE IF NOT EXISTS`. Mudanças destrutivas (drop coluna, alter tipo) NÃO são detectadas — pra isso precisa migrar pra `drizzle-kit migrations`.
 
 ## Roadmap
 
@@ -164,10 +196,11 @@ npm run build      # build de produção
 ✅ **Fase 2 — Áudio/vídeo espacial**: LiveKit, volume por distância, screen share
 ✅ **Fase 3 — Visual**: sprites pixel-art, mobília, animações
 ✅ **Fase 4 — Polimento**: colisão, TV de apresentação, customização de avatar
-✅ **Fase 5 — Produtividade**: claim de mesas, sidebar online, convites, teletransporte
-🚧 **Próxima — Auth + persistência**: Postgres, login Google Workspace, salvar customização e mesas
+🚧 **Fase 5 — Produtividade** (ainda NÃO implementada no código): claim de mesas, sidebar online, convites, teletransporte. CLAUDE.md histórico marcava como ✅ mas o código atual não tem o sistema de `Desk`/claim/invite — fica pra próxima.
+✅ **Fase 6a — Auth + perfil persistido**: email+senha (bcrypt), JWT, Postgres no Railway via Drizzle, customização salva no server.
+🚧 **Fase 6b — Mesas + persistência**: implementar Fase 5 do zero e persistir reservas em `desk_reservations`.
 🚧 **Depois — Salas isoladas**: zonas que bloqueiam áudio externo (paredes que isolam)
-🚧 **Backlog**: chat de texto, mapa "inspirado" no print profissional do Gather, mobile responsivo, editor de mapas
+🚧 **Backlog**: chat de texto, esqueci-a-senha (precisa SMTP), mapa "inspirado" no print profissional do Gather, mobile responsivo, editor de mapas
 
 ## Decisões técnicas e seus porquês
 
@@ -175,8 +208,9 @@ npm run build      # build de produção
 - **Phaser em vez de PixiJS**: maduro, físicas opcionais, animações prontas. Mas PixiJS seria mais leve.
 - **LiveKit Cloud em vez de self-host**: WebRTC self-host exige TURN/STUN, UDP, IP fixo. Railway não suporta UDP. Cloud é simples e free tier comporta MVP. Migrar pra self-host é trivial (só troca URL).
 - **Sprites programáticos em vez de asset pack**: zero custo, zero dependência externa, fácil de iterar. Visual fica "indie" mas funcional. Trocar por pack do LimeZu ($15) é decisão futura.
-- **localStorage em vez de banco**: customização do avatar persistida só no navegador. Migra pra Postgres quando fizermos auth.
-- **Sem auth ainda**: complexidade que não agrega antes do produto ser validado com o time. Próxima fase.
+- **Postgres no Railway via Drizzle**: SQL idempotente no boot (`CREATE TABLE IF NOT EXISTS`) em vez de migrations versionadas. Schema atual é pequeno; quando crescer, migra pra `drizzle-kit migrations`.
+- **Auth email+senha (não OAuth Google)**: time decidiu não restringir domínio e não depender de provider externo. Bcrypt local + JWT são suficientes pra MVP interno.
+- **JWT em `localStorage` (não cookie httpOnly)**: simplifica CORS entre Vercel e Railway. Trade-off: XSS pode roubar o token. Aceitável pra uso interno; revisitar se o produto sair pra externo.
 
 ## Como me ajudar (instruções pro Claude Code)
 

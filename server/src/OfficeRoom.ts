@@ -1,5 +1,9 @@
 import { Room, Client } from "@colyseus/core";
+import { eq } from "drizzle-orm";
 import { OfficeState, Player } from "./schema";
+import { verifyAuthToken } from "./auth/jwt";
+import { getDb } from "./db/client";
+import { profiles, users } from "./db/schema";
 
 interface MoveMessage {
   x: number;
@@ -14,22 +18,27 @@ interface AppearanceMessage {
 }
 
 interface JoinOptions {
-  name?: string;
-  color?: string;
-  hairColor?: string;
+  token?: string;
+}
+
+interface AuthData {
+  userId: string;
+  email: string;
+  displayName: string;
+  bodyColor: string;
+  hairColor: string;
 }
 
 /**
  * Spawn points conhecidos como SEGUROS (longe de qualquer móvel).
  * Verificados manualmente contra o OfficeLayout do cliente.
- * Adicione mais se quiser distribuir melhor a entrada.
  */
 const SPAWN_POINTS: Array<[number, number]> = [
-  [450, 420],  // centro-superior (entre fileiras de mesas)
+  [450, 420],
   [400, 420],
   [500, 420],
   [550, 420],
-  [380, 680],  // abaixo das mesas inferiores
+  [380, 680],
   [480, 680],
   [580, 680],
   [380, 720],
@@ -50,14 +59,31 @@ export class OfficeRoom extends Room<OfficeState> {
 
     this.onMessage<MoveMessage>("move", (client, message) => this.handleMove(client, message));
 
-    this.onMessage<AppearanceMessage>("appearance", (client, message) => {
+    // Aparência também é persistida no DB pra refletir mudanças em sessões futuras.
+    this.onMessage<AppearanceMessage>("appearance", async (client, message) => {
       const player = this.state.players.get(client.sessionId);
-      if (!player) return;
+      const authData = client.userData as AuthData | undefined;
+      if (!player || !authData) return;
+
+      const updates: Partial<{ bodyColor: string; hairColor: string }> = {};
       if (message.bodyColor && /^#[0-9a-fA-F]{6}$/.test(message.bodyColor)) {
         player.color = message.bodyColor;
+        updates.bodyColor = message.bodyColor;
       }
       if (message.hairColor && /^#[0-9a-fA-F]{6}$/.test(message.hairColor)) {
         player.hairColor = message.hairColor;
+        updates.hairColor = message.hairColor;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        try {
+          await getDb()
+            .update(profiles)
+            .set({ ...updates, updatedAt: new Date() })
+            .where(eq(profiles.userId, authData.userId));
+        } catch (err) {
+          console.warn("[OfficeRoom] falha ao persistir aparência:", err);
+        }
       }
     });
 
@@ -67,18 +93,56 @@ export class OfficeRoom extends Room<OfficeState> {
     });
   }
 
-  onJoin(client: Client, options: JoinOptions) {
-    console.log(`[OfficeRoom] ${client.sessionId} entrou`);
+  /**
+   * Valida o JWT vindo do cliente ANTES de aceitar a conexão.
+   * Retorna os dados que vão pra client.userData (acessível em onJoin/onMessage).
+   */
+  async onAuth(_client: Client, options: JoinOptions): Promise<AuthData> {
+    const token = options?.token;
+    if (!token) throw new Error("Token de autenticação ausente");
+
+    let payload: { sub: string; email: string };
+    try {
+      payload = verifyAuthToken(token);
+    } catch {
+      throw new Error("Token inválido ou expirado");
+    }
+
+    const db = getDb();
+    const [user] = await db
+      .select({ id: users.id, email: users.email })
+      .from(users)
+      .where(eq(users.id, payload.sub))
+      .limit(1);
+    if (!user) throw new Error("Usuário não encontrado");
+
+    const [profile] = await db.select().from(profiles).where(eq(profiles.userId, user.id)).limit(1);
+    if (!profile) throw new Error("Perfil não encontrado");
+
+    return {
+      userId: user.id,
+      email: user.email,
+      displayName: profile.displayName,
+      bodyColor: profile.bodyColor,
+      hairColor: profile.hairColor,
+    };
+  }
+
+  onJoin(client: Client, _options: JoinOptions, auth: AuthData) {
+    console.log(`[OfficeRoom] ${client.sessionId} entrou (user=${auth.email})`);
+
+    // Anexa dados de auth na conexão pra reuso em onMessage/onLeave
+    client.userData = auth;
+
     const player = new Player();
     player.id = client.sessionId;
-    player.name = options.name?.slice(0, 24) || `Convidado-${client.sessionId.slice(0, 4)}`;
-    player.color = (options.color && /^#[0-9a-fA-F]{6}$/.test(options.color)) ? options.color : this.randomColor();
-    player.hairColor = (options.hairColor && /^#[0-9a-fA-F]{6}$/.test(options.hairColor)) ? options.hairColor : "#3b2c20";
+    player.userId = auth.userId;
+    player.name = auth.displayName;
+    player.color = auth.bodyColor;
+    player.hairColor = auth.hairColor;
 
-    // Spawn em ponto seguro pré-definido (rotacionando entre os pontos disponíveis)
     const spawnIdx = this.state.players.size % SPAWN_POINTS.length;
     const [sx, sy] = SPAWN_POINTS[spawnIdx];
-    // Pequeno jitter pra evitar empilhar avatares
     player.x = sx + Math.floor(Math.random() * 20) - 10;
     player.y = sy + Math.floor(Math.random() * 20) - 10;
 
@@ -108,10 +172,5 @@ export class OfficeRoom extends Room<OfficeState> {
     player.y = newY;
     player.direction = msg.direction;
     player.isMoving = msg.isMoving;
-  }
-
-  private randomColor(): string {
-    const palette = ["#4ade80", "#60a5fa", "#f472b6", "#fbbf24", "#a78bfa", "#34d399", "#fb7185", "#22d3ee"];
-    return palette[Math.floor(Math.random() * palette.length)];
   }
 }

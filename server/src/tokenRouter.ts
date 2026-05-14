@@ -1,27 +1,21 @@
 import { Router, Request, Response } from "express";
 import { AccessToken } from "livekit-server-sdk";
+import { requireAuth } from "./auth/middleware";
 
 /**
- * Endpoint POST /token
+ * Endpoint POST /token (autenticado)
  *
- * Recebe { name, room } no body e devolve um JWT assinado que o cliente
- * usa pra entrar numa sala do LiveKit.
- *
- * O cliente NUNCA recebe a API_SECRET — só o token assinado, válido por 1h.
- *
- * Em produção, normalmente você adicionaria uma verificação de auth aqui
- * (ex: o usuário precisa estar logado, ou ter um JWT do seu próprio sistema).
- * Pra MVP interno, qualquer um com o nome pode entrar.
+ * Exige Bearer JWT do nosso server. Devolve um JWT do LiveKit pro cliente
+ * entrar numa sala. Identity é derivada do userId (não confia em input).
  */
 export function createTokenRouter() {
   const router = Router();
 
-  router.post("/token", async (req: Request, res: Response) => {
+  router.post("/token", requireAuth, async (req: Request, res: Response) => {
     try {
-      const { name, room } = req.body as { name?: string; room?: string };
-
-      if (!name || !room) {
-        return res.status(400).json({ error: "name e room são obrigatórios" });
+      const { room } = req.body as { room?: string };
+      if (!room || typeof room !== "string" || room.length > 64) {
+        return res.status(400).json({ error: "room é obrigatório" });
       }
 
       const apiKey = process.env.LIVEKIT_API_KEY;
@@ -33,14 +27,15 @@ export function createTokenRouter() {
         return res.status(500).json({ error: "Servidor não configurado pra LiveKit" });
       }
 
-      // Identidade única pro participante. Vamos usar nome + timestamp pra
-      // evitar conflito se duas pessoas tiverem o mesmo nome.
-      const identity = `${name.slice(0, 24)}__${Date.now().toString(36)}`;
+      const auth = req.auth!;
+      // Identity vinculada ao userId. O sufixo timestamp permite reconectar
+      // sem colidir com sessões antigas que ainda não foram limpas pelo LiveKit.
+      const identity = `${auth.sub}__${Date.now().toString(36)}`;
 
       const at = new AccessToken(apiKey, apiSecret, {
         identity,
-        name: name.slice(0, 24),
-        // Token expira em 1h. Mais que suficiente pra sessão de trabalho.
+        // O "name" do LiveKit é só metadado; o nome de exibição real vem do schema do Colyseus.
+        name: auth.email.slice(0, 64),
         ttl: 60 * 60,
       });
 
@@ -54,12 +49,7 @@ export function createTokenRouter() {
 
       const token = await at.toJwt();
 
-      return res.json({
-        token,
-        url: livekitUrl,
-        identity,
-        room,
-      });
+      return res.json({ token, url: livekitUrl, identity, room });
     } catch (err: any) {
       console.error("[/token] erro:", err);
       return res.status(500).json({ error: "Falha ao gerar token" });
