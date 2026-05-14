@@ -117,6 +117,20 @@ export default function App() {
   // === Painel de admin ===
   const [adminOpen, setAdminOpen] = useState(false);
 
+  // === Mesas reserváveis ===
+  // nearbyDesk = mesa que o player está perto agora (pra renderizar hint "Aperte E pra reservar/liberar")
+  const [nearbyDesk, setNearbyDesk] = useState<{ deskId: string; isMine: boolean; ownerName?: string } | null>(null);
+  // myDeskId = mesa que pertence ao usuário (pra mostrar status persistente no HUD)
+  const [myDeskId, setMyDeskId] = useState<string | null>(null);
+  // Toast efêmero — usado pra confirmação de claim/release e mensagens de erro do server
+  const [deskToast, setDeskToast] = useState<{ text: string; tone: "info" | "error" } | null>(null);
+
+  useEffect(() => {
+    if (!deskToast) return;
+    const t = setTimeout(() => setDeskToast(null), 2500);
+    return () => clearTimeout(t);
+  }, [deskToast]);
+
   // Auto-login: ao montar, tenta validar JWT salvo
   useEffect(() => {
     const token = getStoredToken();
@@ -227,6 +241,21 @@ export default function App() {
           });
           spatialRef.current.updateVolumes(myPos, mapped);
         };
+
+        // Mesas: hint de proximidade + toasts de claim/release/erro
+        scene.onNearbyDeskChange = (info) => setNearbyDesk(info);
+        scene.onMyDeskChange = (deskId) => {
+          setMyDeskId((prev) => {
+            // Toast só na transição: virou minha OU deixou de ser minha
+            if (deskId && deskId !== prev) {
+              setDeskToast({ text: `Mesa ${labelOf(deskId)} reservada pra você`, tone: "info" });
+            } else if (!deskId && prev) {
+              setDeskToast({ text: `Mesa ${labelOf(prev)} liberada`, tone: "info" });
+            }
+            return deskId;
+          });
+        };
+        scene.onDeskError = (msg) => setDeskToast({ text: msg, tone: "error" });
       }, 100);
     };
 
@@ -632,6 +661,24 @@ export default function App() {
 
       <div style={hintStyle}>WASD/setas • chegue perto pra conversar • aproxime da TV pra ver apresentações</div>
 
+      {nearbyDesk && (
+        <div style={deskHintStyle}>
+          {nearbyDesk.isMine ? (
+            <>Aperte <kbd style={kbdStyle}>E</kbd> pra liberar sua mesa</>
+          ) : nearbyDesk.ownerName ? (
+            <>Mesa de <strong>{nearbyDesk.ownerName}</strong></>
+          ) : (
+            <>Aperte <kbd style={kbdStyle}>E</kbd> pra reservar essa mesa</>
+          )}
+        </div>
+      )}
+
+      {deskToast && (
+        <div style={{ ...deskToastStyle, borderColor: deskToast.tone === "error" ? "#f87171" : "#4ade80" }}>
+          {deskToast.text}
+        </div>
+      )}
+
       {fullscreenStream && (
         <div style={modalStyle} onClick={() => setFullscreenStream(null)}>
           <div ref={fullscreenVideoRef} style={{
@@ -805,3 +852,34 @@ const saveStatusStyle = (status: "saving" | "saved" | "error"): React.CSSPropert
   color: status === "saved" ? "#4ade80" : status === "error" ? "#f87171" : "#fbbf24",
   opacity: 0.9,
 });
+const deskHintStyle: React.CSSProperties = {
+  position: "absolute", bottom: 56, left: "50%",
+  transform: "translateX(-50%)",
+  background: "#1e293bee", border: "1px solid #fbbf24",
+  borderRadius: 8, padding: "6px 12px",
+  fontSize: 13, zIndex: 12,
+};
+const kbdStyle: React.CSSProperties = {
+  display: "inline-block",
+  padding: "1px 6px",
+  margin: "0 4px",
+  background: "#334155",
+  border: "1px solid #475569",
+  borderRadius: 4,
+  fontFamily: "monospace",
+  fontSize: 11,
+};
+const deskToastStyle: React.CSSProperties = {
+  position: "absolute", top: "20%", left: "50%",
+  transform: "translateX(-50%)",
+  background: "#1e293bee", border: "1px solid #4ade80",
+  borderRadius: 8, padding: "10px 16px",
+  fontSize: 13, zIndex: 20, textAlign: "center",
+  boxShadow: "0 8px 24px rgba(0,0,0,0.4)",
+};
+
+/** "desk-3" → "3" (label curto pra toast) */
+function labelOf(deskId: string): string {
+  const m = /^desk-(\d+)$/.exec(deskId);
+  return m ? m[1] : deskId;
+}

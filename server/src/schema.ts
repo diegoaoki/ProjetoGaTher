@@ -13,8 +13,16 @@ export class Player extends Schema {
   @type("string") zoneId: string = "open";
 }
 
+export class Desk extends Schema {
+  @type("string") deskId: string = "";
+  @type("string") ownerId: string = "";       // userId (não sessionId — persiste mesmo offline)
+  @type("string") ownerName: string = "";
+  @type("string") ownerColor: string = "";    // hex da camisa do dono
+}
+
 export class OfficeState extends Schema {
   @type({ map: Player }) players = new MapSchema<Player>();
+  @type({ map: Desk }) desks = new MapSchema<Desk>();
   @type("number") worldWidth: number = 1024;
   @type("number") worldHeight: number = 1024;
 }

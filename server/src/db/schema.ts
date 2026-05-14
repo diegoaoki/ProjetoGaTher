@@ -31,7 +31,25 @@ export const profiles = pgTable("profiles", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+/**
+ * Reservas de mesas. desk_id é o identificador estável do layout (ex: "desk-1").
+ * display_name e body_color são snapshots — assim conseguimos mostrar "Mesa do
+ * Fulano (verde)" mesmo quando o dono está offline, sem JOIN em runtime.
+ * O snapshot é atualizado quando o user reserva ou troca aparência.
+ */
+export const deskReservations = pgTable("desk_reservations", {
+  deskId: varchar("desk_id", { length: 32 }).primaryKey(),
+  userId: uuid("user_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  displayName: varchar("display_name", { length: 24 }).notNull(),
+  bodyColor: varchar("body_color", { length: 7 }).notNull(),
+  claimedAt: timestamp("claimed_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type Profile = typeof profiles.$inferSelect;
 export type NewProfile = typeof profiles.$inferInsert;
+export type DeskReservation = typeof deskReservations.$inferSelect;
+export type NewDeskReservation = typeof deskReservations.$inferInsert;

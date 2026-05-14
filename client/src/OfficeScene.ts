@@ -21,11 +21,23 @@ interface RemotePlayer {
   direction: string;
 }
 
+interface DeskInfo {
+  id: string;
+  x: number;
+  y: number;
+}
+
+interface DeskOverlay {
+  outline: Phaser.GameObjects.Rectangle;
+  label: Phaser.GameObjects.Text;
+}
+
 const SPEED = 180;
 const SYNC_INTERVAL = 50;
 const WORLD_W = 1024;
 const WORLD_H = 1024;
 const PLAYER_HALF = 12;
+const DESK_CLAIM_RADIUS = 70;
 
 export class OfficeScene extends Phaser.Scene {
   private room!: Room;
@@ -42,6 +54,14 @@ export class OfficeScene extends Phaser.Scene {
   private myDirection = "down";
 
   private remotePlayers = new Map<string, RemotePlayer>();
+  private myUserId = "";
+
+  // === Mesas reserváveis ===
+  private allDesks: DeskInfo[] = [];
+  private deskOverlays = new Map<string, DeskOverlay>(); // deskId → overlay
+  private nearestDeskId: string | null = null;
+  private myDeskId: string | null = null;
+  private keyE!: Phaser.Input.Keyboard.Key;
 
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd!: { W: Phaser.Input.Keyboard.Key; A: Phaser.Input.Keyboard.Key; S: Phaser.Input.Keyboard.Key; D: Phaser.Input.Keyboard.Key };
@@ -65,6 +85,11 @@ export class OfficeScene extends Phaser.Scene {
   ) => void;
   public onZoneChange?: (zone: string | null) => void;
 
+  // === Callbacks de mesas (pra App.tsx renderizar HUD/toast) ===
+  public onNearbyDeskChange?: (info: { deskId: string; isMine: boolean; ownerName?: string } | null) => void;
+  public onMyDeskChange?: (deskId: string | null) => void;
+  public onDeskError?: (msg: string) => void;
+
   constructor() {
     super({ key: "OfficeScene" });
   }
@@ -81,10 +106,23 @@ export class OfficeScene extends Phaser.Scene {
     createFurnitureTextures(this);
     this.drawFloor();
     this.drawFurniture();
+
+    // Catálogo de mesas extraído do layout — usado pra detecção de proximidade.
+    this.allDesks = this.layout.furniture
+      .filter((f) => f.type === "desk" && f.deskId)
+      .map((f) => ({ id: f.deskId!, x: f.x, y: f.y }));
+
     this.setupStateListeners();
 
     this.cursors = this.input.keyboard!.createCursorKeys();
     this.wasd = this.input.keyboard!.addKeys("W,A,S,D") as any;
+    this.keyE = this.input.keyboard!.addKey(Phaser.Input.Keyboard.KeyCodes.E);
+    this.keyE.on("down", () => this.handleClaimKey());
+
+    // Erros vindos do server (mesa já reservada, mesa inválida, etc)
+    this.room.onMessage("desk:error", (msg: { error: string }) => {
+      this.onDeskError?.(msg?.error || "Falha na ação de mesa");
+    });
 
     this.cameras.main.setBackgroundColor("#1a1a2e");
     this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
@@ -203,9 +241,88 @@ export class OfficeScene extends Phaser.Scene {
         this.remotePlayers.delete(sessionId);
       }
     });
+
+    // Listener de mesas reservadas
+    state.desks.onAdd((desk: any, deskId: string) => {
+      this.renderDeskOverlay(deskId, desk);
+      desk.onChange(() => this.renderDeskOverlay(deskId, desk));
+      if (desk.ownerId === this.myUserId) {
+        this.myDeskId = deskId;
+        this.onMyDeskChange?.(deskId);
+      }
+    });
+
+    state.desks.onRemove((desk: any, deskId: string) => {
+      this.removeDeskOverlay(deskId);
+      if (this.myDeskId === deskId) {
+        this.myDeskId = null;
+        this.onMyDeskChange?.(null);
+      }
+    });
+  }
+
+  private renderDeskOverlay(deskId: string, desk: { ownerName: string; ownerColor: string }) {
+    const info = this.allDesks.find((d) => d.id === deskId);
+    if (!info) return;
+
+    const color = Phaser.Display.Color.HexStringToColor(desk.ownerColor || "#4ade80").color;
+    const existing = this.deskOverlays.get(deskId);
+
+    if (existing) {
+      existing.outline.setStrokeStyle(3, color, 1);
+      existing.label.setText(desk.ownerName);
+      existing.label.setColor("#ffffff");
+      existing.label.setBackgroundColor("#000000bb");
+      return;
+    }
+
+    const outline = this.add.rectangle(info.x, info.y, 100, 36);
+    outline.setStrokeStyle(3, color, 1);
+    outline.setFillStyle(0, 0);
+    outline.setDepth(info.y - 1);
+
+    const label = this.add.text(info.x, info.y - 30, desk.ownerName, {
+      fontFamily: "system-ui, -apple-system",
+      fontSize: "11px",
+      color: "#ffffff",
+      backgroundColor: "#000000bb",
+      padding: { x: 5, y: 1 },
+      resolution: 2,
+    }).setOrigin(0.5);
+    label.setDepth(info.y - 1);
+
+    this.deskOverlays.set(deskId, { outline, label });
+  }
+
+  private removeDeskOverlay(deskId: string) {
+    const o = this.deskOverlays.get(deskId);
+    if (o) {
+      o.outline.destroy();
+      o.label.destroy();
+      this.deskOverlays.delete(deskId);
+    }
+  }
+
+  private handleClaimKey() {
+    if (!this.myContainer) return;
+    // Se está perto de uma mesa, age sobre ela. Senão, se tem mesa reservada, libera.
+    if (this.nearestDeskId) {
+      const state: any = this.room.state;
+      const desk = state.desks.get(this.nearestDeskId);
+      if (desk && desk.ownerId === this.myUserId) {
+        this.room.send("desk:release", { deskId: this.nearestDeskId });
+      } else if (!desk) {
+        this.room.send("desk:claim", { deskId: this.nearestDeskId });
+      }
+      // Se tem dono diferente, ignora — server avisaria com desk:error de qualquer jeito
+    } else if (this.myDeskId) {
+      // Não tá perto de nenhuma; libera a mesa atual se tiver
+      this.room.send("desk:release", { deskId: this.myDeskId });
+    }
   }
 
   private createMyAvatar(player: any) {
+    this.myUserId = player.userId || "";
     this.myTextureKey = `avatar_${this.myBodyColor}_${this.myHairColor}`;
     createAvatarTexture(this, this.myTextureKey, this.myBodyColor, this.myHairColor);
     createAvatarAnimations(this, this.myTextureKey);
@@ -435,6 +552,41 @@ export class OfficeScene extends Phaser.Scene {
         { x: this.myContainer.x, y: this.myContainer.y },
         peerPositions
       );
+    }
+
+    this.updateNearestDesk();
+  }
+
+  /** Calcula a mesa mais próxima dentro do raio. Notifica App quando muda. */
+  private updateNearestDesk() {
+    if (!this.myContainer) return;
+    const px = this.myContainer.x;
+    const py = this.myContainer.y;
+
+    let closest: { id: string; dist2: number } | null = null;
+    for (const d of this.allDesks) {
+      const dx = d.x - px;
+      const dy = d.y - py;
+      const dist2 = dx * dx + dy * dy;
+      if (dist2 < DESK_CLAIM_RADIUS * DESK_CLAIM_RADIUS) {
+        if (!closest || dist2 < closest.dist2) closest = { id: d.id, dist2 };
+      }
+    }
+
+    const newId = closest?.id || null;
+    if (newId !== this.nearestDeskId) {
+      this.nearestDeskId = newId;
+      if (!newId) {
+        this.onNearbyDeskChange?.(null);
+      } else {
+        const state: any = this.room.state;
+        const desk = state.desks.get(newId);
+        this.onNearbyDeskChange?.({
+          deskId: newId,
+          isMine: desk?.ownerId === this.myUserId,
+          ownerName: desk?.ownerName,
+        });
+      }
     }
   }
 }

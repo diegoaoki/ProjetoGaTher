@@ -168,12 +168,15 @@ npm run build      # build de produção
 - Lógica "unstuck": se já está dentro de hitbox, permite movimento mesmo com colisão
 - Server tem validação de `MAX_DELTA` (600px) só pra anti-cheat básico — confia no cliente
 
-### Sistema de mesas reserváveis
-- Cada mesa tem `deskId` estável (ex: "desk-1") no layout
-- Cliente detecta mesa mais próxima (raio 70px) → tecla `E` reserva/libera
-- Server mantém `MapSchema<Desk>` com `ownerId`, `ownerName`, `ownerColor`
-- Quando dono sai (`onLeave`), mesa libera automaticamente
-- Visual: retângulo colorido + tag com nome em volta da mesa reservada
+### Sistema de mesas reserváveis (implementado na Fase 6b parte 1)
+- Cada mesa tem `deskId` estável (`desk-1` a `desk-8`) declarado em `client/src/OfficeLayout.ts` e no catálogo `server/src/desks.ts` (precisam ficar sincronizados — se mudar layout, atualiza os dois).
+- Cliente detecta mesa mais próxima (raio 70px) → tecla `E` reserva ou libera. Hint visual aparece quando perto.
+- Server mantém `MapSchema<Desk>` no Colyseus + tabela `desk_reservations` no Postgres. Tabela tem snapshot de `display_name` e `body_color` pra renderizar nome+cor mesmo com dono offline.
+- **Reservas persistem entre sessões**: mesa não libera quando user desconecta — só libera com `E` explicitamente OU `DELETE /admin/users/:id` (cascade pela FK).
+- **Cada user só pode ter UMA mesa**: claim novo libera a anterior automaticamente.
+- **Spawn point**: se user tem mesa reservada, spawna na cadeira da mesa. Senão, fallback pra lista `SPAWN_POINTS`.
+- **Sincronização de cor**: quando user troca `bodyColor` via modal 🎨, o snapshot em `desk_reservations` é atualizado pra outros verem a cor nova no outline da mesa.
+- Visual no Phaser: retângulo com stroke da cor do dono em volta da mesa + label com nome.
 
 ### Convites entre usuários
 - Sidebar mostra usuários online com botões `📍 ir até` e `👋 convidar`
@@ -207,7 +210,8 @@ npm run build      # build de produção
 ✅ **Fase 4 — Polimento**: colisão, TV de apresentação, customização de avatar
 🚧 **Fase 5 — Produtividade** (ainda NÃO implementada no código): claim de mesas, sidebar online, convites, teletransporte. CLAUDE.md histórico marcava como ✅ mas o código atual não tem o sistema de `Desk`/claim/invite — fica pra próxima.
 ✅ **Fase 6a — Auth + perfil persistido**: email+senha (bcrypt), JWT, Postgres no Railway via Drizzle, customização salva no server.
-🚧 **Fase 6b — Mesas + persistência**: implementar Fase 5 do zero e persistir reservas em `desk_reservations`.
+✅ **Fase 6b (parte 1) — Mesas reserváveis com persistência**: tecla E reserva/libera, mesa fica do dono mesmo offline, spawna na mesa reservada ao entrar.
+🚧 **Fase 6b (parte 2) — Sidebar online + convites + teletransporte**: lista de usuários online no HUD, "👋 convidar" e "📍 ir até". Teletransporte server-autoritativo.
 🚧 **Depois — Salas isoladas**: zonas que bloqueiam áudio externo (paredes que isolam)
 🚧 **Backlog**: chat de texto, esqueci-a-senha (precisa SMTP), mapa "inspirado" no print profissional do Gather, mobile responsivo, editor de mapas
 

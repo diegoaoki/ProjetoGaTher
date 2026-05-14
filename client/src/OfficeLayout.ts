@@ -20,6 +20,8 @@ export interface FurnitureItem {
   hitbox?: Hitbox;
   // Marca itens especiais (TV de apresentação, etc)
   tag?: "tv" | "meeting-zone";
+  // Pra mesas reserváveis: id estável que bate com o catálogo do server
+  deskId?: string;
 }
 
 export interface OfficeLayoutData {
@@ -51,13 +53,13 @@ export function getDefaultLayout(): OfficeLayoutData {
     items.push({ type, x, y, depth, hitbox: HITBOXES[type], tag });
   };
 
-  // Estações de trabalho — 2 fileiras de 4
-  const desks: Array<[number, number]> = [
-    [180, 280], [310, 280], [440, 280], [570, 280],
-    [180, 540], [310, 540], [440, 540], [570, 540],
+  // Estações de trabalho — 2 fileiras de 4. IDs sincronizados com server/src/desks.ts
+  const desks: Array<[string, number, number]> = [
+    ["desk-1", 180, 280], ["desk-2", 310, 280], ["desk-3", 440, 280], ["desk-4", 570, 280],
+    ["desk-5", 180, 540], ["desk-6", 310, 540], ["desk-7", 440, 540], ["desk-8", 570, 540],
   ];
-  desks.forEach(([x, y]) => {
-    addItem("desk", x, y, 1);
+  desks.forEach(([id, x, y]) => {
+    items.push({ type: "desk", x, y, depth: 1, hitbox: HITBOXES.desk, deskId: id });
     items.push({ type: "monitor", x, y: y - 18, depth: 2 }); // monitor sem colisão (fica em cima da mesa)
     addItem("chair", x, y + 36, 0);
   });

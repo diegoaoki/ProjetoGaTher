@@ -31,6 +31,16 @@ export async function initDb(): Promise<void> {
         hair_color VARCHAR(7) NOT NULL DEFAULT '#3b2c20',
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+
+      CREATE TABLE IF NOT EXISTS desk_reservations (
+        desk_id VARCHAR(32) PRIMARY KEY,
+        user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        display_name VARCHAR(24) NOT NULL,
+        body_color VARCHAR(7) NOT NULL,
+        claimed_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+
+      CREATE INDEX IF NOT EXISTS desk_reservations_user_idx ON desk_reservations (user_id);
     `);
     console.log("[db] schema inicializado");
   } finally {
