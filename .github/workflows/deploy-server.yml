@@ -1,0 +1,34 @@
+name: Deploy server to Railway
+
+# Dispara em push pra main que afete arquivos do server.
+# Substitui o webhook nativo do Railway (que estava quebrado) — usa o CLI
+# autenticado via RAILWAY_TOKEN (secret do GitHub) pra fazer railway up.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - '.github/workflows/deploy-server.yml'
+  # Permite disparar manualmente também (botão "Run workflow" no GitHub)
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy
+        working-directory: server
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service ${{ secrets.RAILWAY_SERVICE_ID }} --detach
