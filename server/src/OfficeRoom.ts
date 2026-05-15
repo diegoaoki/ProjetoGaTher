@@ -47,6 +47,8 @@ interface ChatSendMessage {
 
 interface JoinOptions {
   token?: string;
+  /** Se true, kicka qualquer sessão existente do mesmo userId em vez de rejeitar. */
+  forceTakeover?: boolean;
 }
 
 interface AuthData {
@@ -79,6 +81,13 @@ const SPAWN_POINTS: Array<[number, number]> = [
 export class OfficeRoom extends Room<OfficeState> {
   maxClients = 50;
   private readonly MAX_DELTA = 100;
+
+  /**
+   * Map de userId → client atualmente ativo. Usado pra detectar quando o
+   * mesmo user tenta entrar de outra aba (duplicate session). O cliente
+   * pode optar por "forçar entrada", caso em que o anterior é kickado.
+   */
+  private activeUsers = new Map<string, Client>();
 
   async onCreate(_options: any) {
     console.log(`[OfficeRoom] criada: ${this.roomId}`);
@@ -206,6 +215,23 @@ export class OfficeRoom extends Room<OfficeState> {
     const [profile] = await db.select().from(profiles).where(eq(profiles.userId, user.id)).limit(1);
     if (!profile) throw new Error("Perfil não encontrado");
 
+    // Checa sessão duplicada (mesmo user em outra aba)
+    const existing = this.activeUsers.get(user.id);
+    if (existing) {
+      if (!options?.forceTakeover) {
+        // Rejeita com código específico que o cliente reconhece
+        throw new Error("DUPLICATE_SESSION");
+      }
+      // Force takeover: avisa o anterior e desconecta
+      try {
+        existing.send("session:kicked", { reason: "Você entrou em outra aba" });
+      } catch {}
+      // leave() é async; o onLeave do anterior limpa o estado eventualmente
+      try {
+        existing.leave();
+      } catch {}
+    }
+
     return {
       userId: user.id,
       email: user.email,
@@ -246,11 +272,19 @@ export class OfficeRoom extends Room<OfficeState> {
     }
 
     this.state.players.set(client.sessionId, player);
+    // Registra como sessão ativa pro userId (sobrescreve qualquer anterior já kickada)
+    this.activeUsers.set(auth.userId, client);
   }
 
   onLeave(client: Client, consented: boolean) {
     console.log(`[OfficeRoom] ${client.sessionId} saiu (consented=${consented})`);
     this.state.players.delete(client.sessionId);
+    // Limpa activeUsers SÓ se este client é o atualmente registrado.
+    // Quando há force takeover, o novo client já tomou o slot e não devemos limpá-lo.
+    const auth = client.userData as AuthData | undefined;
+    if (auth?.userId && this.activeUsers.get(auth.userId) === client) {
+      this.activeUsers.delete(auth.userId);
+    }
     // NÃO libera mesas — reservas persistem mesmo offline.
   }
 

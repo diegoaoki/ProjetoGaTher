@@ -122,6 +122,13 @@ export default function App() {
   // === Painel de admin ===
   const [adminOpen, setAdminOpen] = useState(false);
 
+  // === Sessão duplicada (mesma conta em outra aba) ===
+  // Quando server retorna erro DUPLICATE_SESSION, abre modal pra forçar entrada.
+  const [duplicateSession, setDuplicateSession] = useState(false);
+  // Quando este cliente é kickado por outra aba, mostra tela específica e
+  // bloqueia auto-reconnect (senão entra em loop).
+  const [wasKicked, setWasKicked] = useState(false);
+
   // === Chat ===
   const [chatOpen, setChatOpen] = useState(false);
   const [liveMessages, setLiveMessages] = useState<ChatMessage[]>([]);
@@ -318,7 +325,7 @@ export default function App() {
     return () => cancelAnimationFrame(id);
   }, [conn]);
 
-  async function connect() {
+  async function connect(forceTakeover: boolean = false) {
     if (!session) {
       setErrorMsg("Sessão expirada. Faça login novamente.");
       setAuthState("anonymous");
@@ -327,11 +334,14 @@ export default function App() {
 
     setConn("connecting");
     setErrorMsg("");
+    setDuplicateSession(false);
+    setWasKicked(false);
 
     try {
       const client = new Client(SERVER_URL);
       const room = await client.joinOrCreate("office", {
         token: session.token,
+        forceTakeover,
       });
       roomRef.current = room;
 
@@ -372,11 +382,22 @@ export default function App() {
       });
 
       room.onLeave(() => {
-        setConn("idle");
-        setErrorMsg("Desconectado do servidor — reconectando...");
         cleanupGame();
-        // Reseta a guarda pra o useEffect de auto-connect tentar de novo
-        autoConnectedRef.current = false;
+        // Se foi kickado por outra aba, NÃO tenta reconnect (loop infinito)
+        // — wasKicked é setado pelo listener session:kicked logo abaixo
+        if (!wasKicked) {
+          setConn("idle");
+          setErrorMsg("Desconectado do servidor — reconectando...");
+          autoConnectedRef.current = false;
+        } else {
+          setConn("idle");
+        }
+      });
+
+      // Server avisa que esta sessão foi kickada porque o user entrou em outra aba
+      room.onMessage("session:kicked", () => {
+        setWasKicked(true);
+        autoConnectedRef.current = true; // bloqueia auto-reconnect
       });
 
       // Listeners de convites/teleporte do server
@@ -544,7 +565,15 @@ export default function App() {
       setConn("connected");
     } catch (e: any) {
       console.error(e);
-      setErrorMsg(e?.message || "Falha na conexão");
+      const msg = String(e?.message || "");
+      if (msg.includes("DUPLICATE_SESSION")) {
+        // Sessão duplicada: abre modal pra forçar entrada
+        setDuplicateSession(true);
+        setConn("idle");
+        autoConnectedRef.current = false;
+        return;
+      }
+      setErrorMsg(msg || "Falha na conexão");
       setConn("error");
     }
   }
@@ -747,6 +776,65 @@ export default function App() {
   // === Render: login ===
   if (authState === "anonymous" || !session) {
     return <LoginScreen httpUrl={HTTP_URL} onAuthed={handleAuthed} />;
+  }
+
+  // === Render: foi kickado por outra aba ===
+  if (wasKicked) {
+    return (
+      <div style={overlayStyle}>
+        <div style={cardStyle}>
+          <h1 style={{ margin: "0 0 8px", fontSize: 22 }}>👋 Sessão encerrada</h1>
+          <p style={{ margin: "0 0 16px", fontSize: 14, opacity: 0.8 }}>
+            Você foi desconectado porque entrou em outra aba ou dispositivo.
+            Essa aba ficou inativa.
+          </p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={() => {
+                setWasKicked(false);
+                autoConnectedRef.current = false;
+                setConn("idle");
+              }}
+              style={buttonStyle}
+            >
+              Voltar pra esta aba
+            </button>
+            <button onClick={logout} style={{ ...buttonStyle, background: "#334155", color: "#e2e8f0" }}>
+              Sair da conta
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // === Render: sessão duplicada — pergunta se quer forçar entrada ===
+  if (duplicateSession) {
+    return (
+      <div style={overlayStyle}>
+        <div style={cardStyle}>
+          <h1 style={{ margin: "0 0 8px", fontSize: 22 }}>⚠️ Já está conectado</h1>
+          <p style={{ margin: "0 0 16px", fontSize: 14, opacity: 0.8 }}>
+            Sua conta já está conectada em outra aba ou dispositivo.
+            Se entrar aqui, a outra sessão será desconectada.
+          </p>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              onClick={() => {
+                setDuplicateSession(false);
+                connect(true); // força takeover
+              }}
+              style={buttonStyle}
+            >
+              Forçar entrada aqui
+            </button>
+            <button onClick={logout} style={{ ...buttonStyle, background: "#334155", color: "#e2e8f0" }}>
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // === Render: erro de conexão (auth OK mas algo falhou no caminho) ===
