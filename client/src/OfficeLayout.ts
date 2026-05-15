@@ -124,32 +124,47 @@ const ZONES: ZoneDef[] = [
   //     entre o lounge e as salas de reunião. 4 aberturas top dentro do open
   //     space dos departamentos (x ≥ 14) pra não conflitar com a Segurança. ===
   { id: "lounge",         label: "Lounge",             x: 0,  y: 43, w: 58, h: 12,
-    openings: [
-      { side: "top", pos: 14, width: 2 },
-      { side: "top", pos: 26, width: 2 },
-      { side: "top", pos: 38, width: 2 },
-      { side: "top", pos: 50, width: 2 },
-    ] },
+    openings: [{ side: "top", pos: 27, width: 4 }] },
 ];
 
 /**
- * Dedup conservador: duas walls são consideradas "a mesma parede dupla" só
- * se cobrem EXATAMENTE o mesmo range na direção paralela e estão a até WALL_T
- * de distância na perpendicular. Casos parciais (uma cobre só parte da outra)
- * são mantidos separados — caso contrário criaríamos buracos onde uma sala
- * adjacente perderia parte da sua parede.
+ * Dedup com SPLIT: quando duas walls adjacentes se sobrepõem (parcial ou
+ * totalmente), a primeira a entrar vence; a candidate é dividida nos
+ * trechos que NÃO sobrepõem e cada segmento é re-tentado recursivamente.
+ *
+ * Resolve o caso "duas paredes lado a lado" mesmo quando uma é maior que a
+ * outra (ex: office_2 bottom w=640 vs lobby top w=448). Mantém a primeira
+ * inteira e descarta a parte sobreposta da segunda, mantendo o resto.
  */
 function pushWallDedup(walls: Wall[], cand: Wall): void {
-  const candH = cand.h === WALL_T && cand.w > WALL_T;
-  const candV = cand.w === WALL_T && cand.h > WALL_T;
-  for (const w of walls) {
-    const wH = w.h === WALL_T && w.w > WALL_T;
-    const wV = w.w === WALL_T && w.h > WALL_T;
-    if (candH && wH && Math.abs(w.y - cand.y) <= WALL_T && w.x === cand.x && w.w === cand.w) {
-      return; // exata duplicata horizontal — descarta
+  const candH = cand.h <= WALL_T && cand.w > WALL_T;
+  const candV = cand.w <= WALL_T && cand.h > WALL_T;
+
+  for (let i = 0; i < walls.length; i++) {
+    const w = walls[i];
+    const wH = w.h <= WALL_T && w.w > WALL_T;
+    const wV = w.w <= WALL_T && w.h > WALL_T;
+
+    if (candH && wH && Math.abs(w.y - cand.y) <= WALL_T) {
+      const overlapStart = Math.max(w.x, cand.x);
+      const overlapEnd = Math.min(w.x + w.w, cand.x + cand.w);
+      if (overlapEnd <= overlapStart) continue;
+      const segments: Wall[] = [];
+      if (cand.x < overlapStart) segments.push({ x: cand.x, y: cand.y, w: overlapStart - cand.x, h: cand.h });
+      if (cand.x + cand.w > overlapEnd) segments.push({ x: overlapEnd, y: cand.y, w: cand.x + cand.w - overlapEnd, h: cand.h });
+      for (const seg of segments) pushWallDedup(walls, seg);
+      return;
     }
-    if (candV && wV && Math.abs(w.x - cand.x) <= WALL_T && w.y === cand.y && w.h === cand.h) {
-      return; // exata duplicata vertical — descarta
+
+    if (candV && wV && Math.abs(w.x - cand.x) <= WALL_T) {
+      const overlapStart = Math.max(w.y, cand.y);
+      const overlapEnd = Math.min(w.y + w.h, cand.y + cand.h);
+      if (overlapEnd <= overlapStart) continue;
+      const segments: Wall[] = [];
+      if (cand.y < overlapStart) segments.push({ x: cand.x, y: cand.y, w: cand.w, h: overlapStart - cand.y });
+      if (cand.y + cand.h > overlapEnd) segments.push({ x: cand.x, y: overlapEnd, w: cand.w, h: cand.y + cand.h - overlapEnd });
+      for (const seg of segments) pushWallDedup(walls, seg);
+      return;
     }
   }
   walls.push(cand);

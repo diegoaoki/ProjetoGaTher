@@ -14,34 +14,38 @@ export interface DoorConfig {
   orientation: "vertical" | "horizontal"; // qual eixo a porta atravessa
   roomTag: string;
   restricted: boolean;
+  gapTiles: number;   // largura do vão em tiles (porta visual = gapTiles × 32 px)
 }
 
-/** Porta vertical (atravessa parede vertical). Vão de 2 tiles.
+/** Porta vertical (atravessa parede vertical).
  *  side: "right" (zona à esquerda, porta no lado direito da zona) ou "left".
- *  Centro x = centro da parede (cxTile ± WALL_T/2 conforme o lado). */
-function v(doorId: string, cxTile: number, vGapStartTile: number, side: "right" | "left", roomTag: string, restricted = false): DoorConfig {
+ *  gapTiles: largura do vão em tiles (default 2). */
+function v(doorId: string, cxTile: number, vGapStartTile: number, side: "right" | "left", roomTag: string, gapTiles = 2, restricted = false): DoorConfig {
   const offset = side === "right" ? -WALL_T / 2 : WALL_T / 2;
   return {
     doorId,
     x: cxTile * TILE + offset,
-    y: vGapStartTile * TILE + TILE,         // centro de vão de 2 tiles
+    y: vGapStartTile * TILE + (gapTiles / 2) * TILE,
     orientation: "vertical",
     roomTag,
     restricted,
+    gapTiles,
   };
 }
 
-/** Porta horizontal (atravessa parede horizontal). Vão de 2 tiles.
- *  cyTile = y da parede; side "top" = zona abaixo, "bottom" = acima. */
-function h(doorId: string, hGapStartTile: number, cyTile: number, side: "top" | "bottom", roomTag: string, restricted = false): DoorConfig {
+/** Porta horizontal (atravessa parede horizontal).
+ *  cyTile = y da parede; side "top" = zona abaixo, "bottom" = acima.
+ *  gapTiles: largura do vão em tiles (default 2). */
+function h(doorId: string, hGapStartTile: number, cyTile: number, side: "top" | "bottom", roomTag: string, gapTiles = 2, restricted = false): DoorConfig {
   const offset = side === "top" ? WALL_T / 2 : -WALL_T / 2;
   return {
     doorId,
-    x: hGapStartTile * TILE + TILE,         // centro de vão de 2 tiles
+    x: hGapStartTile * TILE + (gapTiles / 2) * TILE,
     y: cyTile * TILE + offset,
     orientation: "horizontal",
     roomTag,
     restricted,
+    gapTiles,
   };
 }
 
@@ -75,11 +79,8 @@ export const DOORS: DoorConfig[] = [
   v("door-meeting_g1", 60, 45, "left", "meeting_g1"),
   v("door-meeting_g2", 60, 51, "left", "meeting_g2"),
 
-  // Lounge (4 portas horizontais na parede norte, alinhadas com openings)
-  h("door-lounge_1", 14, 43, "top", "lounge"),
-  h("door-lounge_2", 26, 43, "top", "lounge"),
-  h("door-lounge_3", 38, 43, "top", "lounge"),
-  h("door-lounge_4", 50, 43, "top", "lounge"),
+  // Lounge: 1 porta horizontal grande no centro (vão de 4 tiles)
+  h("door-lounge", 27, 43, "top", "lounge", 4),
 ];
 
 export const DOOR_OPEN_RADIUS_PX = 96;   // 3 tiles

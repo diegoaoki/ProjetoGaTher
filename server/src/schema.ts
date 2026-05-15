@@ -34,6 +34,7 @@ export class Door extends Schema {
   @type("string") roomTag: string = "";   // sala interna
   @type("boolean") open: boolean = false;
   @type("boolean") restricted: boolean = false; // flag pra auth futura
+  @type("number") gapTiles: number = 2;   // largura do vão em tiles (default 2)
 }
 
 export class OfficeState extends Schema {

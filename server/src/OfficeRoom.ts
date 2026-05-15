@@ -186,6 +186,7 @@ export class OfficeRoom extends Room<OfficeState> {
       d.orientation = cfg.orientation;
       d.roomTag = cfg.roomTag;
       d.restricted = cfg.restricted;
+      d.gapTiles = cfg.gapTiles;
       d.open = false;
       this.state.doors.set(cfg.doorId, d);
     }

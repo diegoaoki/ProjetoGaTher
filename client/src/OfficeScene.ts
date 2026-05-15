@@ -652,10 +652,9 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   /** Renderiza a porta + atualiza wall dinâmico de colisão. */
-  private renderDoor(doorId: string, door: { x: number; y: number; orientation: string; open: boolean }) {
+  private renderDoor(doorId: string, door: { x: number; y: number; orientation: string; open: boolean; gapTiles?: number }) {
     let rect = this.doorVisuals.get(doorId);
-    // Tamanho: 1 tile na direção do vão, espessura igual à parede
-    const span = 64; // 2 tiles
+    const span = (door.gapTiles ?? 2) * 32;
     const thickness = WALL_T;
     const isVertical = door.orientation === "vertical";
     const w = isVertical ? thickness : span;
@@ -686,7 +685,7 @@ export class OfficeScene extends Phaser.Scene {
     state.doors.forEach((door: any) => {
       if (door.open) return;
       const isVertical = door.orientation === "vertical";
-      const span = 64;
+      const span = (door.gapTiles ?? 2) * 32;
       const thickness = WALL_T;
       const w = isVertical ? thickness : span;
       const h = isVertical ? span : thickness;
