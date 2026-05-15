@@ -28,8 +28,13 @@ export const CHARACTER_FRAME_W = 16;
 export const CHARACTER_FRAME_H = 32;
 export const FRAMES_PER_DIRECTION = 6;
 
-/** Direções na ordem dos frames do spritesheet (assumido). */
-export const DIRECTION_ORDER = ["down", "left", "right", "up"] as const;
+/** Direções na ordem dos frames do spritesheet (descoberto via teste).
+ *  frames 0-5  = right
+ *  frames 6-11 = up
+ *  frames 12-17 = left
+ *  frames 18-23 = down
+ */
+export const DIRECTION_ORDER = ["right", "up", "left", "down"] as const;
 export type Direction = typeof DIRECTION_ORDER[number];
 
 export const TILE_SIZE = 32;
