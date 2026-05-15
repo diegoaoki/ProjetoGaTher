@@ -15,13 +15,13 @@ export interface DoorConfig {
   restricted: boolean;
 }
 
-/** Helper: porta vertical (parede vertical, vão horizontal de 2 tiles).
- *  Center y é o meio do vão (2 tiles de altura). */
+/** Helper: porta vertical (parede vertical, vão de 1 tile = 32px).
+ *  Center y é o meio do vão. */
 function v(doorId: string, cxTile: number, vGapStartTile: number, roomTag: string, restricted = false): DoorConfig {
   return {
     doorId,
     x: cxTile * TILE,                       // centro horizontal (parede)
-    y: (vGapStartTile + 1) * TILE,           // centro do vão (2 tiles)
+    y: vGapStartTile * TILE + TILE / 2,     // centro do vão (1 tile de altura)
     orientation: "vertical",
     roomTag,
     restricted,

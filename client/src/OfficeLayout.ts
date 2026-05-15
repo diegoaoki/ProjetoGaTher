@@ -186,7 +186,7 @@ function wallsForZone(z: ZoneDef): Wall[] {
       out.push(...s.segments);
       continue;
     }
-    const gapWidth = (opening.width ?? 2) * TILE;
+    const gapWidth = (opening.width ?? 1) * TILE;
     const gapStart = opening.pos * TILE;
 
     // Quebra a parede em 2 segmentos com vão no meio

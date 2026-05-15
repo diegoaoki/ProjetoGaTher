@@ -641,7 +641,7 @@ export class OfficeScene extends Phaser.Scene {
   private renderDoor(doorId: string, door: { x: number; y: number; orientation: string; open: boolean }) {
     let rect = this.doorVisuals.get(doorId);
     // Tamanho: 2 tiles na direção do vão, espessura igual ao wall (8px)
-    const span = 64; // 2 tiles
+    const span = 32; // 1 tile
     const thickness = 8;
     const isVertical = door.orientation === "vertical";
     const w = isVertical ? thickness : span;
@@ -672,7 +672,7 @@ export class OfficeScene extends Phaser.Scene {
     state.doors.forEach((door: any) => {
       if (door.open) return;
       const isVertical = door.orientation === "vertical";
-      const span = 64;
+      const span = 32;
       const thickness = 8;
       const w = isVertical ? thickness : span;
       const h = isVertical ? span : thickness;
