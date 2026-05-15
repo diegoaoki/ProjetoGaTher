@@ -134,6 +134,10 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [audioTestOpen, setAudioTestOpen] = useState(false);
 
+  // === Câmera (pan com botão direito) ===
+  // Declarado AQUI (antes dos useEffects abaixo) pra evitar TDZ
+  const [cameraFollowing, setCameraFollowing] = useState(true);
+
   // === Toast unificado pra mensagens efêmeras do HUD ===
   const [hudToast, setHudToast] = useState<string | null>(null);
   useEffect(() => {
@@ -227,9 +231,6 @@ export default function App() {
   const [myDeskId, setMyDeskId] = useState<string | null>(null);
   // Toast efêmero — usado pra confirmação de claim/release e mensagens de erro do server
   const [deskToast, setDeskToast] = useState<{ text: string; tone: "info" | "error" } | null>(null);
-
-  // === Câmera (pan com botão direito) ===
-  const [cameraFollowing, setCameraFollowing] = useState(true);
 
   // === Zona atual (sala ou open space) — pra mostrar no HUD ===
   const [currentZoneId, setCurrentZoneId] = useState<string>("open");
