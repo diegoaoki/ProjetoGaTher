@@ -13,24 +13,16 @@ import { TILE_SIZE } from "./AssetLoader";
  * Pra testar visualmente o tileset, acesse o jogo com ?tiles=1 (TODO).
  */
 export const FURNITURE_TILES: Record<string, { col: number; row: number; w?: number; h?: number }> = {
-  // Mesa de escritório (3 tiles de largura no tileset original, mas vamos usar 1)
-  desk:        { col: 0, row: 12 },
-  // Cadeira de escritório
-  chair:       { col: 0, row: 10 },
-  // Sofá
-  sofa:        { col: 0, row: 36, w: 3, h: 2 },
-  // Mesa de centro
-  coffeeTable: { col: 8, row: 25 },
-  // Planta vaso
-  plant:       { col: 11, row: 25 },
-  // Lousa branca
-  whiteboard:  { col: 5, row: 4 },
-  // Estante
-  bookshelf:   { col: 0, row: 20, w: 1, h: 2 },
-  // Monitor (vai em cima da mesa)
-  monitor:     { col: 12, row: 5 },
-  // TV (mantida pra futuras salas)
-  tv:          { col: 0, row: 5, w: 2, h: 1 },
+  // Coordenadas mapeadas pelo usuário via /?inspect=tiles
+  desk:        { col: 5,  row: 36, w: 2, h: 2 },
+  chair:       { col: 6,  row: 21, w: 1, h: 2 },
+  sofa:        { col: 7,  row: 8,  w: 2, h: 3 },
+  coffeeTable: { col: 4,  row: 51, w: 2, h: 2 },
+  plant:       { col: 2,  row: 53, w: 1, h: 2 },
+  whiteboard:  { col: 13, row: 40, w: 2, h: 2 },
+  bookshelf:   { col: 10, row: 71, w: 2, h: 3 },
+  monitor:     { col: 13, row: 3,  w: 1, h: 2 },
+  tv:          { col: 0,  row: 14, w: 2, h: 2 },
 };
 
 /**
