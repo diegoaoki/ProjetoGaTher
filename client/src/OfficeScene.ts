@@ -9,6 +9,7 @@ import {
   preloadLimezuAssets,
   createCharacterAnimations,
   pickCharacterFor,
+  registerLimezuFloor,
   CharacterId,
 } from "./AssetLoader";
 import { registerFurnitureTextures } from "./FurnitureTiles";
@@ -154,6 +155,8 @@ export class OfficeScene extends Phaser.Scene {
     // registerFurnitureTextures(this);
     // Etapa 3 — animações dos personagens LimeZu (4 personagens × 4 direções × {idle, walk})
     createCharacterAnimations(this);
+    // Substitui o piso procedural por uma textura tileable do LimeZu (parquet)
+    registerLimezuFloor(this);
     this.drawFloor();
     this.drawWalls();
     this.drawFurniture();
@@ -461,7 +464,9 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   private drawFloor() {
-    const floor = this.add.tileSprite(0, 0, WORLD_W, WORLD_H, "floorWood").setOrigin(0, 0);
+    // Usa textura LimeZu se carregada; senão fallback pro canvas procedural
+    const floorKey = this.textures.exists("floorWoodLime") ? "floorWoodLime" : "floorWood";
+    const floor = this.add.tileSprite(0, 0, WORLD_W, WORLD_H, floorKey).setOrigin(0, 0);
     floor.setDepth(-100);
 
     this.layout.floorRegions.forEach((region) => {

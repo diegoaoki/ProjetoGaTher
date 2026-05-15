@@ -61,6 +61,27 @@ export function preloadLimezuAssets(scene: Phaser.Scene) {
 
   scene.load.image("tileset_interiors", "/assets/interiors/Interiors_32x32.png");
   scene.load.image("tileset_roombuilder", "/assets/interiors/RoomBuilder_32x32.png");
+  // Sala pronta usada como source pra extrair piso de madeira (parquet)
+  scene.load.image("home_layer1", "/assets/interiors/GenericHome_Layer1.png");
+}
+
+/**
+ * Extrai uma região do `home_layer1` (sala pronta com piso de madeira parquet)
+ * pra criar uma texture tileable 'floorWoodLime'. Substitui o canvas
+ * procedural antigo (createFloorTextures.floorWood do SpriteFactory).
+ *
+ * Coordenadas (192, 120, 64, 64) escolhidas pra cair dentro da área de parquet
+ * limpo no centro da Generic_Home_1. Se aparecer costura visível, ajustar.
+ */
+export function registerLimezuFloor(scene: Phaser.Scene) {
+  if (scene.textures.exists("floorWoodLime")) return;
+  if (!scene.textures.exists("home_layer1")) return;
+  const src = scene.textures.get("home_layer1").getSourceImage() as HTMLImageElement | HTMLCanvasElement;
+  const SX = 192, SY = 120, SIZE = 64;
+  const canvasTex = scene.textures.createCanvas("floorWoodLime", SIZE, SIZE);
+  if (!canvasTex) return;
+  canvasTex.context.drawImage(src, SX, SY, SIZE, SIZE, 0, 0, SIZE, SIZE);
+  canvasTex.refresh();
 }
 
 /**
