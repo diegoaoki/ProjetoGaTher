@@ -9,6 +9,7 @@ import ChatPanel from "./ChatPanel";
 import MobileControls from "./MobileControls";
 import { ChatMessage, playNotificationBeep } from "./chat";
 import { useIsMobile } from "./useIsMobile";
+import { requestNotificationPermissionOnce, showNotificationIfHidden } from "./notifications";
 import {
   AuthSession,
   clearToken,
@@ -127,6 +128,15 @@ export default function App() {
 
   // === Confirmação ao clicar em "Sair" ===
   const [confirmingLogout, setConfirmingLogout] = useState(false);
+
+  // Pede permissão de notificações na primeira vez que conecta no escritório.
+  // Cacheado em localStorage — não pede de novo nas próximas sessões.
+  useEffect(() => {
+    if (conn !== "connected") return;
+    // Pequeno atraso pra não interromper o "Entrando no escritório" loading
+    const t = setTimeout(() => { requestNotificationPermissionOnce(); }, 1500);
+    return () => clearTimeout(t);
+  }, [conn]);
 
   // Aviso do browser ao fechar aba/janela quando dentro do escritório.
   // O browser mostra dialog padrão ("Sair do site?") — não dá pra customizar
@@ -427,6 +437,12 @@ export default function App() {
           if (prev) setSocialToast({ text: `Novo convite de ${msg.fromName} (substituiu anterior)`, tone: "info" });
           return msg;
         });
+        // Notificação push (só se aba não está visível)
+        showNotificationIfHidden({
+          title: "👋 Convite recebido",
+          body: `${msg.fromName} está te chamando`,
+          tag: "invite",
+        });
       });
       room.onMessage("invite:response", (msg: { fromName: string; accepted: boolean }) => {
         setSocialToast({
@@ -461,8 +477,19 @@ export default function App() {
             next.set(channelKey, (next.get(channelKey) || 0) + 1);
             return next;
           });
-          // Som só pra DM (geral seria spammy)
-          if (msg.channelType === "dm") playNotificationBeep();
+          // Som + notificação só pra DM (geral seria spammy)
+          if (msg.channelType === "dm") {
+            playNotificationBeep();
+            showNotificationIfHidden({
+              title: `💬 ${msg.senderName || "Nova mensagem"}`,
+              body: msg.content.slice(0, 120),
+              tag: `dm:${msg.senderId}`, // novas DMs do mesmo user substituem
+              onClick: () => {
+                setChatOpen(true);
+                // Idealmente abriria a conversa direto — pra MVP, abre o painel
+              },
+            });
+          }
         }
       });
 
