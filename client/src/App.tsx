@@ -105,8 +105,9 @@ export default function App() {
   const [conn, setConn] = useState<ConnState>("idle");
   const [errorMsg, setErrorMsg] = useState("");
   const [playerCount, setPlayerCount] = useState(0);
-  const [micOn, setMicOn] = useState(true);
-  const [camOn, setCamOn] = useState(true);
+  // Mic e câmera começam DESLIGADOS — user liga manualmente quando quiser
+  const [micOn, setMicOn] = useState(false);
+  const [camOn, setCamOn] = useState(false);
   const [screenOn, setScreenOn] = useState(false);
   const [audioStatus, setAudioStatus] = useState("");
   const [activeScreenShare, setActiveScreenShare] = useState<ActiveScreenShare | null>(null);
@@ -1319,45 +1320,61 @@ export default function App() {
       {editingAvatar && (
         <div style={modalStyle} onClick={() => !savingEdit && setEditingAvatar(false)}>
           <div style={cardStyle} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ margin: "0 0 12px", fontSize: 20 }}>Editar avatar</h2>
+            <h2 style={{ margin: "0 0 8px", fontSize: 20 }}>Escolha seu personagem</h2>
+            <p style={{ margin: "0 0 16px", fontSize: 12, opacity: 0.7 }}>
+              Click pra escolher. Salva ao clicar — outros vão ver na hora.
+            </p>
 
-            <div style={{ display: "flex", justifyContent: "center", marginBottom: 16 }}>
-              <canvas
-                ref={avatarPreviewRef}
-                width={64}
-                height={80}
-                style={{
-                  imageRendering: "pixelated",
-                  width: 96, height: 120,
-                  background: "#0f172a", borderRadius: 8,
-                  border: "1px solid #334155", padding: 8,
-                }}
-              />
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 16 }}>
+              {(["adam", "alex", "amelia", "bob"] as const).map((c) => {
+                const selected = (session.profile.characterId || "") === c;
+                const label = c.charAt(0).toUpperCase() + c.slice(1);
+                const file = label;
+                return (
+                  <button
+                    key={c}
+                    onClick={async () => {
+                      if (savingEdit) return;
+                      setEditError("");
+                      setSavingEdit(true);
+                      try {
+                        const profile = await updateProfile(HTTP_URL, session.token, { characterId: c });
+                        setSession({ ...session, profile });
+                        // Propaga em tempo real pros peers via Colyseus
+                        roomRef.current?.send("appearance", { characterId: c });
+                      } catch (e: any) {
+                        setEditError(e?.message || "Falha ao salvar");
+                      } finally {
+                        setSavingEdit(false);
+                      }
+                    }}
+                    disabled={savingEdit}
+                    style={{
+                      background: selected ? "#2563eb" : "#1e293b",
+                      border: selected ? "2px solid #60a5fa" : "1px solid #334155",
+                      borderRadius: 10, padding: 8,
+                      cursor: "pointer",
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+                    }}
+                  >
+                    <div style={{
+                      width: 48, height: 64,
+                      background: `url("/assets/characters/${file}_idle_16x16.png") 0 0 / 384px 32px no-repeat`,
+                      imageRendering: "pixelated" as React.CSSProperties["imageRendering"],
+                      transform: "scale(3)",
+                      transformOrigin: "top left",
+                      marginBottom: 32,
+                    }} />
+                    <span style={{ fontSize: 12, color: "#e2e8f0", marginTop: 8 }}>{label}</span>
+                  </button>
+                );
+              })}
             </div>
 
-            <label style={labelStyle}>Camisa</label>
-            <div style={paletteStyle}>
-              {SHIRT_COLORS.map((c) => (
-                <button key={c} onClick={() => setBodyColor(c)} disabled={savingEdit}
-                  style={{ ...swatchStyle, background: c, outline: bodyColor === c ? "2px solid #fff" : "none", outlineOffset: 2 }} />
-              ))}
-            </div>
-
-            <label style={labelStyle}>Cabelo</label>
-            <div style={paletteStyle}>
-              {HAIR_COLORS.map((c) => (
-                <button key={c} onClick={() => setHairColor(c)} disabled={savingEdit}
-                  style={{ ...swatchStyle, background: c, outline: hairColor === c ? "2px solid #fff" : "none", outlineOffset: 2 }} />
-              ))}
-            </div>
-
-            <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+            <div style={{ display: "flex", gap: 8 }}>
               <button onClick={() => setEditingAvatar(false)} disabled={savingEdit}
                 style={{ ...buttonStyle, background: "#334155", color: "#e2e8f0" }}>
-                Cancelar
-              </button>
-              <button onClick={() => saveAvatarEdit(bodyColor, hairColor)} disabled={savingEdit} style={buttonStyle}>
-                {savingEdit ? "Salvando..." : "Salvar"}
+                Fechar
               </button>
             </div>
 

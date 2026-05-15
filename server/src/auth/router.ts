@@ -24,10 +24,13 @@ const loginSchema = z.object({
   password: z.string().min(1).max(128),
 });
 
+const CHARACTER_IDS = ["adam", "alex", "amelia", "bob"] as const;
+
 const profilePatchSchema = z.object({
   displayName: z.string().trim().min(1).max(24).optional(),
   bodyColor: z.string().regex(HEX_COLOR).optional(),
   hairColor: z.string().regex(HEX_COLOR).optional(),
+  characterId: z.enum(CHARACTER_IDS).optional(),
 });
 
 // Rate limits separados: registro/login mais restrito (anti-bruteforce),

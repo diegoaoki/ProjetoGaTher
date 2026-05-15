@@ -24,6 +24,7 @@ export interface AuthProfile {
   displayName: string;
   bodyColor: string;
   hairColor: string;
+  characterId?: string | null;
   updatedAt?: string;
 }
 
@@ -103,7 +104,7 @@ export async function fetchMe(httpUrl: string, token: string): Promise<{ user: A
 export async function updateProfile(
   httpUrl: string,
   token: string,
-  patch: { displayName?: string; bodyColor?: string; hairColor?: string }
+  patch: { displayName?: string; bodyColor?: string; hairColor?: string; characterId?: string }
 ): Promise<AuthProfile> {
   const resp = await fetch(httpUrl + "/profile", {
     method: "PATCH",

@@ -17,6 +17,7 @@ interface MoveMessage {
 interface AppearanceMessage {
   bodyColor?: string;
   hairColor?: string;
+  characterId?: string;
 }
 
 interface DeskClaimMessage {
@@ -65,6 +66,7 @@ interface AuthData {
   displayName: string;
   bodyColor: string;
   hairColor: string;
+  characterId: string;
 }
 
 /**
@@ -131,7 +133,7 @@ export class OfficeRoom extends Room<OfficeState> {
       const authData = client.userData as AuthData | undefined;
       if (!player || !authData) return;
 
-      const updates: Partial<{ bodyColor: string; hairColor: string }> = {};
+      const updates: Partial<{ bodyColor: string; hairColor: string; characterId: string }> = {};
       if (message.bodyColor && /^#[0-9a-fA-F]{6}$/.test(message.bodyColor)) {
         player.color = message.bodyColor;
         updates.bodyColor = message.bodyColor;
@@ -139,6 +141,10 @@ export class OfficeRoom extends Room<OfficeState> {
       if (message.hairColor && /^#[0-9a-fA-F]{6}$/.test(message.hairColor)) {
         player.hairColor = message.hairColor;
         updates.hairColor = message.hairColor;
+      }
+      if (message.characterId && ["adam", "alex", "amelia", "bob"].includes(message.characterId)) {
+        player.characterId = message.characterId;
+        updates.characterId = message.characterId;
       }
 
       if (Object.keys(updates).length === 0) return;
@@ -250,6 +256,7 @@ export class OfficeRoom extends Room<OfficeState> {
       displayName: profile.displayName,
       bodyColor: profile.bodyColor,
       hairColor: profile.hairColor,
+      characterId: profile.characterId || "",
     };
   }
 
@@ -269,6 +276,7 @@ export class OfficeRoom extends Room<OfficeState> {
     player.name = auth.displayName;
     player.color = auth.bodyColor;
     player.hairColor = auth.hairColor;
+    player.characterId = auth.characterId;
 
     // Se o user tem uma mesa reservada, spawna ao lado dela. Senão usa fallback.
     const reservedDesk = this.findReservedDeskFor(auth.userId);

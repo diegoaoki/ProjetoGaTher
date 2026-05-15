@@ -8,8 +8,9 @@ export class Player extends Schema {
   @type("number") y: number = 0;
   @type("string") direction: string = "down";
   @type("boolean") isMoving: boolean = false;
-  @type("string") color: string = "#4ade80"; // cor da camisa
-  @type("string") hairColor: string = "#3b2c20"; // cor do cabelo
+  @type("string") color: string = "#4ade80"; // cor da camisa (legado — não usado no LimeZu)
+  @type("string") hairColor: string = "#3b2c20"; // cor do cabelo (legado)
+  @type("string") characterId: string = "";  // adam|alex|amelia|bob — "" = fallback pra hash do userId
   @type("string") zoneId: string = "open";
 }
 

@@ -28,6 +28,8 @@ export const profiles = pgTable("profiles", {
   displayName: varchar("display_name", { length: 24 }).notNull(),
   bodyColor: varchar("body_color", { length: 7 }).notNull().default("#4ade80"),
   hairColor: varchar("hair_color", { length: 7 }).notNull().default("#3b2c20"),
+  // Etapa 3 (LimeZu): personagem escolhido. NULL = usa hash do userId como fallback.
+  characterId: varchar("character_id", { length: 16 }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

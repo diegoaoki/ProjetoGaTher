@@ -32,6 +32,9 @@ export async function initDb(): Promise<void> {
         updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
 
+      -- Migration idempotente: adiciona coluna character_id em profiles existentes
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS character_id VARCHAR(16);
+
       CREATE TABLE IF NOT EXISTS desk_reservations (
         desk_id VARCHAR(32) PRIMARY KEY,
         user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,

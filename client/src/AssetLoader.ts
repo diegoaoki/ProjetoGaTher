@@ -100,8 +100,8 @@ export function createCharacterAnimations(scene: Phaser.Scene) {
 }
 
 /** Hash determinístico que escolhe um personagem baseado no userId.
- *  Mesma userId sempre vira o mesmo personagem — todos veem todos igual. */
-export function pickCharacterFor(userId: string): CharacterId {
+ *  Usado como FALLBACK quando o user não escolheu manualmente. */
+function hashCharacter(userId: string): CharacterId {
   if (!userId) return "adam";
   let hash = 0;
   for (let i = 0; i < userId.length; i++) {
@@ -109,4 +109,13 @@ export function pickCharacterFor(userId: string): CharacterId {
   }
   const idx = Math.abs(hash) % CHARACTER_KEYS.length;
   return CHARACTER_KEYS[idx];
+}
+
+/** Resolve o personagem: prefere a escolha explícita (profile.character_id);
+ *  fallback determinístico via hash do userId se não escolheu. */
+export function pickCharacterFor(userId: string, override?: string | null): CharacterId {
+  if (override && (CHARACTER_KEYS as readonly string[]).includes(override)) {
+    return override as CharacterId;
+  }
+  return hashCharacter(userId);
 }

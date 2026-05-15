@@ -84,6 +84,9 @@ export class SpatialAudio {
       for (const track of tracks) {
         await this.localParticipant.publishTrack(track);
       }
+      // Inicia com mic e câmera DESLIGADOS — user liga manualmente nos botões do HUD
+      await this.localParticipant.setMicrophoneEnabled(false);
+      await this.localParticipant.setCameraEnabled(false);
     } catch (err: any) {
       console.error("[spatial] erro ao acessar mídia:", err);
       this.onError?.(

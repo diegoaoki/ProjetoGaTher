@@ -536,9 +536,12 @@ export class OfficeScene extends Phaser.Scene {
             this.myContainer.y = player.y;
             this.myContainer.setDepth(player.y);
           }
-          // Mudança de aparência (modal 🎨) → recria texture do meu sprite
           if (player.color !== this.myBodyColor || player.hairColor !== this.myHairColor) {
             this.refreshMyAvatarTexture(player.color, player.hairColor);
+          }
+          // Mudança de personagem (novo sistema LimeZu)
+          if (player.characterId && player.characterId !== this.myTextureKey) {
+            this.refreshMyCharacter(player.characterId);
           }
           return;
         }
@@ -547,9 +550,11 @@ export class OfficeScene extends Phaser.Scene {
           rp.targetX = player.x;
           rp.targetY = player.y;
           rp.direction = player.direction || "down";
-          // Mudança de aparência de outro player → recria texture do sprite dele
           if (rp.bodyColor !== player.color || rp.hairColor !== player.hairColor) {
             this.refreshRemoteAvatarTexture(rp, player.color, player.hairColor);
+          }
+          if (player.characterId && player.characterId !== rp.textureKey) {
+            this.refreshRemoteCharacter(rp, player.userId || "", player.characterId);
           }
         }
       });
@@ -664,9 +669,9 @@ export class OfficeScene extends Phaser.Scene {
 
   private createMyAvatar(player: any) {
     this.myUserId = player.userId || "";
-    // Avatar é decidido pelo hash do userId — consistente em todas as sessões.
-    // Cores antigas (bodyColor/hairColor) viraram irrelevantes; mantidas no DB por compat.
-    const charId: CharacterId = pickCharacterFor(this.myUserId);
+    // Avatar: prefere player.characterId (escolhido pelo user via modal 🎨),
+    // fallback pra hash do userId se não escolheu.
+    const charId: CharacterId = pickCharacterFor(this.myUserId, player.characterId);
     this.myTextureKey = charId;
 
     this.myRing = this.add.circle(0, 6, 16, 0x4ade80, 0);
@@ -740,26 +745,42 @@ export class OfficeScene extends Phaser.Scene {
     return { x: WORLD_W / 2, y: WORLD_H / 2 };
   }
 
-  /**
-   * Antes substituía a texture quando bodyColor/hairColor mudava.
-   * No sistema novo (LimeZu), o avatar é determinado pelo userId via hash,
-   * então mudanças de cor NÃO afetam visual. Mantida pra compat, mas no-op.
-   */
+  /** Cores legadas — não afetam visual no sistema LimeZu, mantidas pra compat. */
   private refreshMyAvatarTexture(bodyColor: string, hairColor: string) {
     this.myBodyColor = bodyColor;
     this.myHairColor = hairColor;
-    // sprite continua o mesmo (charId fixo pelo userId)
   }
 
   private refreshRemoteAvatarTexture(rp: RemotePlayer, bodyColor: string, hairColor: string) {
     rp.bodyColor = bodyColor;
     rp.hairColor = hairColor;
-    // idem — char não muda
+  }
+
+  /** Quando o user escolhe outro personagem (modal 🎨), troca o spritesheet. */
+  private refreshMyCharacter(newCharId: string) {
+    const charId = pickCharacterFor(this.myUserId, newCharId);
+    if (charId === this.myTextureKey) return;
+    this.myTextureKey = charId;
+    if (this.mySprite) {
+      this.mySprite.setTexture(`${charId}_idle`, 0);
+      const anim = this.isMoving ? "walk" : "idle";
+      const animKey = `${charId}_${this.myDirection}_${anim}`;
+      if (this.anims.exists(animKey)) this.mySprite.play(animKey, true);
+    }
+  }
+
+  private refreshRemoteCharacter(rp: RemotePlayer, userId: string, newCharId: string) {
+    const charId = pickCharacterFor(userId, newCharId);
+    if (charId === rp.textureKey) return;
+    rp.textureKey = charId;
+    rp.sprite.setTexture(`${charId}_idle`, 0);
+    const animKey = `${charId}_${rp.direction}_idle`;
+    if (this.anims.exists(animKey)) rp.sprite.play(animKey, true);
   }
 
   private createRemoteAvatar(sessionId: string, player: any) {
     const userId: string = player.userId || "";
-    const charId: CharacterId = pickCharacterFor(userId);
+    const charId: CharacterId = pickCharacterFor(userId, player.characterId);
     const textureKey = charId;
 
     const ring = this.add.circle(0, 6, 16, 0x4ade80, 0);
