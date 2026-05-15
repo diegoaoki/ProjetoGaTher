@@ -7,6 +7,7 @@ import LoginScreen from "./LoginScreen";
 import AdminPanel from "./AdminPanel";
 import ChatPanel from "./ChatPanel";
 import MobileControls from "./MobileControls";
+import AudioTestScreen from "./AudioTestScreen";
 import { ChatMessage, playNotificationBeep } from "./chat";
 import { useIsMobile } from "./useIsMobile";
 import { requestNotificationPermissionOnce, showNotificationIfHidden } from "./notifications";
@@ -131,6 +132,7 @@ export default function App() {
 
   // === Menu de configurações (engrenagem) ===
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [audioTestOpen, setAudioTestOpen] = useState(false);
 
   // === Toast unificado pra mensagens efêmeras do HUD ===
   const [hudToast, setHudToast] = useState<string | null>(null);
@@ -1031,6 +1033,7 @@ export default function App() {
         {settingsOpen && (
           <div style={settingsMenuStyle} onClick={() => setSettingsOpen(false)}>
             <button onClick={() => setEditingAvatar(true)} style={menuItemStyle}>🎨 Editar avatar</button>
+            <button onClick={() => setAudioTestOpen(true)} style={menuItemStyle}>🎧 Testar áudio/vídeo</button>
             <button onClick={() => setSidebarOpen(true)} style={menuItemStyle}>👥 Quem está online</button>
             {session.user.isAdmin && (
               <button onClick={() => setAdminOpen(true)} style={menuItemStyle}>🛡️ Admin</button>
@@ -1241,6 +1244,10 @@ export default function App() {
           currentUserId={session.user.id}
           onClose={() => setAdminOpen(false)}
         />
+      )}
+
+      {audioTestOpen && (
+        <AudioTestScreen onClose={() => setAudioTestOpen(false)} />
       )}
 
       {confirmingLogout && (

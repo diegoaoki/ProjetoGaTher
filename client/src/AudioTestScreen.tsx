@@ -2,17 +2,15 @@ import { useEffect, useRef, useState } from "react";
 import { playNotificationBeep } from "./chat";
 
 interface Props {
-  /** Confirma e prossegue (vai conectar no escritório). */
-  onContinue: () => void;
-  /** Cancela e volta (logout). */
-  onCancel: () => void;
+  /** Fecha o modal de teste. */
+  onClose: () => void;
 }
 
 /**
  * Tela pré-conexão pra usuário testar mic, speaker e câmera antes de entrar.
  * Não obrigatório — só botões. Pra dispensar, clica em "Entrar no escritório".
  */
-export default function AudioTestScreen({ onContinue, onCancel }: Props) {
+export default function AudioTestScreen({ onClose }: Props) {
   const [micLevel, setMicLevel] = useState(0);   // 0..1
   const [micActive, setMicActive] = useState(false);
   const [micError, setMicError] = useState("");
@@ -105,10 +103,10 @@ export default function AudioTestScreen({ onContinue, onCancel }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function confirm() {
+  function close() {
     stopMicTest();
     stopCameraTest();
-    onContinue();
+    onClose();
   }
 
   return (
@@ -170,11 +168,8 @@ export default function AudioTestScreen({ onContinue, onCancel }: Props) {
         </div>
 
         <div style={{ display: "flex", gap: 8, marginTop: 18 }}>
-          <button onClick={() => { stopMicTest(); stopCameraTest(); onCancel(); }} style={{ ...primaryBtnStyle, background: "#334155", color: "#e2e8f0" }}>
-            Cancelar
-          </button>
-          <button onClick={confirm} style={primaryBtnStyle}>
-            Entrar no escritório
+          <button onClick={close} style={primaryBtnStyle}>
+            Fechar
           </button>
         </div>
       </div>
