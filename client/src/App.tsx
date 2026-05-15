@@ -1030,7 +1030,7 @@ export default function App() {
         background: "#000", zIndex: 10,
       }} />
 
-      {isMobile && (
+      {isMobile && !chatOpen && !sidebarOpen && !adminOpen && !editingAvatar && !confirmingLogout && !incomingInvite && !fullscreenStream && (
         <MobileControls
           onMove={(x, y) => sceneRef.current?.setVirtualInput(x, y)}
           onAction={() => sceneRef.current?.triggerClaimAction()}
