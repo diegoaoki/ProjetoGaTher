@@ -240,12 +240,14 @@ export function getDefaultLayout(): OfficeLayoutData {
   items.push({ type: "bookshelf", x: 2 * TILE, y: 11 * TILE, depth: 1, hitbox: HITBOXES.bookshelf });
   items.push({ type: "plant", x: 17 * TILE, y: 16 * TILE, depth: 1, hitbox: HITBOXES.plant });
 
-  // --- RECEPÇÃO (lobby) — sofás + plantas + tapete ---
+  // --- RECEPÇÃO (lobby) — sofás + plantas + notice board ---
   items.push({ type: "sofa", x: 4 * TILE, y: 22 * TILE, depth: 1, hitbox: HITBOXES.sofa });
   items.push({ type: "sofa", x: 9 * TILE, y: 22 * TILE, depth: 1, hitbox: HITBOXES.sofa });
   items.push({ type: "coffeeTable", x: 6 * TILE, y: 24 * TILE, depth: 2, hitbox: HITBOXES.coffeeTable });
   items.push({ type: "plant", x: 1 * TILE, y: 25 * TILE, depth: 1, hitbox: HITBOXES.plant });
   items.push({ type: "plant", x: 12 * TILE, y: 25 * TILE, depth: 1, hitbox: HITBOXES.plant });
+  // Quadro de avisos (placeholder usando whiteboard, na parede norte)
+  items.push({ type: "whiteboard", x: 7 * TILE, y: 19 * TILE, depth: 1, hitbox: HITBOXES.whiteboard, tag: "notice_board" });
 
   // --- COPA — mesa redonda no centro, "geladeira/fogão" placeholders ---
   items.push({ type: "coffeeTable", x: 7 * TILE, y: 32 * TILE, depth: 1, hitbox: HITBOXES.coffeeTable });
@@ -254,9 +256,11 @@ export function getDefaultLayout(): OfficeLayoutData {
   items.push({ type: "chair", x: 9 * TILE, y: 32 * TILE, depth: 0, hitbox: HITBOXES.chair });
   items.push({ type: "chair", x: 7 * TILE, y: 30 * TILE, depth: 0, hitbox: HITBOXES.chair });
   items.push({ type: "chair", x: 7 * TILE, y: 34 * TILE, depth: 0, hitbox: HITBOXES.chair });
-  // "Bancada/geladeira" placeholders com bookshelf
-  items.push({ type: "bookshelf", x: 2 * TILE, y: 28 * TILE, depth: 1, hitbox: HITBOXES.bookshelf });
-  items.push({ type: "bookshelf", x: 12 * TILE, y: 28 * TILE, depth: 1, hitbox: HITBOXES.bookshelf });
+  // "Bancada/geladeira/fogão" placeholders com bookshelf + tags
+  items.push({ type: "bookshelf", x: 2 * TILE, y: 28 * TILE, depth: 1, hitbox: HITBOXES.bookshelf, tag: "fridge" });
+  items.push({ type: "bookshelf", x: 4 * TILE, y: 28 * TILE, depth: 1, hitbox: HITBOXES.bookshelf, tag: "stove" });
+  items.push({ type: "bookshelf", x: 10 * TILE, y: 28 * TILE, depth: 1, hitbox: HITBOXES.bookshelf, tag: "coffee_machine" });
+  items.push({ type: "bookshelf", x: 12 * TILE, y: 28 * TILE, depth: 1, hitbox: HITBOXES.bookshelf, tag: "microwave" });
   items.push({ type: "plant", x: 12 * TILE, y: 36 * TILE, depth: 1, hitbox: HITBOXES.plant });
 
   // --- SEGURANÇA — mesa com monitor de câmera ---
