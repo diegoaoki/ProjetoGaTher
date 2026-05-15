@@ -165,18 +165,27 @@ function wallsForZone(z: ZoneDef): Wall[] {
   return out;
 }
 
+/** Helper pra adicionar uma mesa com chair, monitor e deskId estável. */
+function addWorkstation(items: FurnitureItem[], desks: Array<{ id: string; x: number; y: number }>, id: string, tileX: number, tileY: number) {
+  const x = tileX * TILE;
+  const y = tileY * TILE;
+  desks.push({ id, x, y });
+  items.push({ type: "desk", x, y, depth: 1, hitbox: HITBOXES.desk, deskId: id });
+  items.push({ type: "monitor", x, y: y - 18, depth: 2 });
+  items.push({ type: "chair", x, y: y + 36, depth: 0, hitbox: HITBOXES.chair });
+}
+
 export function getDefaultLayout(): OfficeLayoutData {
   const W_TILES = 80;
   const H_TILES = 55;
   const items: FurnitureItem[] = [];
+  const desks: Array<{ id: string; x: number; y: number }> = [];
 
-  // Gera paredes a partir das zonas + bordas externas
   const walls: Wall[] = [];
   for (const z of ZONES) {
     walls.push(...wallsForZone(z));
   }
 
-  // Rooms em pixels (pra colisão / áudio isolado)
   const rooms: Room[] = ZONES.map((z) => ({
     id: z.id,
     label: z.label,
@@ -186,9 +195,132 @@ export function getDefaultLayout(): OfficeLayoutData {
     h: z.h * TILE,
   }));
 
-  // Tapetes nas zonas (pra dar identidade visual diferente do parquet padrão)
+  // ============================================================
+  // Fase B: Mobília
+  // Distribui mesas reserváveis nas 4 áreas de trabalho + decoração
+  // ============================================================
+
+  // --- DESENVOLVIMENTO (dev_area, x=20-60, y=0-11) — 8 mesas em 2 fileiras ---
+  // Fileira 1 (y=4), Fileira 2 (y=8)
+  [24, 30, 36, 42].forEach((tx, i) => addWorkstation(items, desks, `desk-${i + 1}`, tx, 4));
+  [24, 30, 36, 42].forEach((tx, i) => addWorkstation(items, desks, `desk-${i + 5}`, tx, 8));
+  // Plantas + bebedouro
+  items.push({ type: "plant", x: 22 * TILE, y: 2 * TILE, depth: 1, hitbox: HITBOXES.plant });
+  items.push({ type: "plant", x: 58 * TILE, y: 2 * TILE, depth: 1, hitbox: HITBOXES.plant });
+
+  // --- DADOS (data_area, x=20-60, y=11-21) — 5 mesas ---
+  [24, 30, 36, 42, 48].forEach((tx, i) => addWorkstation(items, desks, `desk-${i + 9}`, tx, 16));
+  items.push({ type: "whiteboard", x: 56 * TILE, y: 12 * TILE, depth: 1, hitbox: HITBOXES.whiteboard });
+  items.push({ type: "plant", x: 22 * TILE, y: 19 * TILE, depth: 1, hitbox: HITBOXES.plant });
+
+  // --- INFRA (infra_area, y=21-31) — 5 mesas ---
+  [24, 30, 36, 42, 48].forEach((tx, i) => addWorkstation(items, desks, `desk-${i + 14}`, tx, 26));
+  // "Rack" — usa bookshelf como placeholder
+  items.push({ type: "bookshelf", x: 56 * TILE, y: 23 * TILE, depth: 1, hitbox: HITBOXES.bookshelf });
+  items.push({ type: "plant", x: 22 * TILE, y: 29 * TILE, depth: 1, hitbox: HITBOXES.plant });
+
+  // --- FINANCEIRO (finance_area, y=31-42) — 5 mesas ---
+  [24, 30, 36, 42, 48].forEach((tx, i) => addWorkstation(items, desks, `desk-${i + 19}`, tx, 36));
+  items.push({ type: "bookshelf", x: 22 * TILE, y: 33 * TILE, depth: 1, hitbox: HITBOXES.bookshelf });
+  items.push({ type: "plant", x: 58 * TILE, y: 40 * TILE, depth: 1, hitbox: HITBOXES.plant });
+
+  // --- DIRETORIAS (office_1, office_2) — mesa executiva grande + visitante ---
+  // Office 1 (x=0-20, y=0-9)
+  items.push({ type: "desk", x: 8 * TILE, y: 4 * TILE, depth: 1, hitbox: HITBOXES.desk });
+  items.push({ type: "monitor", x: 8 * TILE, y: 4 * TILE - 18, depth: 2 });
+  items.push({ type: "chair", x: 8 * TILE, y: 5 * TILE + 16, depth: 0, hitbox: HITBOXES.chair });
+  items.push({ type: "chair", x: 12 * TILE, y: 4 * TILE, depth: 0, hitbox: HITBOXES.chair }); // visitante
+  items.push({ type: "bookshelf", x: 2 * TILE, y: 2 * TILE, depth: 1, hitbox: HITBOXES.bookshelf });
+  items.push({ type: "plant", x: 17 * TILE, y: 7 * TILE, depth: 1, hitbox: HITBOXES.plant });
+  // Office 2
+  items.push({ type: "desk", x: 8 * TILE, y: 13 * TILE, depth: 1, hitbox: HITBOXES.desk });
+  items.push({ type: "monitor", x: 8 * TILE, y: 13 * TILE - 18, depth: 2 });
+  items.push({ type: "chair", x: 8 * TILE, y: 14 * TILE + 16, depth: 0, hitbox: HITBOXES.chair });
+  items.push({ type: "chair", x: 12 * TILE, y: 13 * TILE, depth: 0, hitbox: HITBOXES.chair });
+  items.push({ type: "bookshelf", x: 2 * TILE, y: 11 * TILE, depth: 1, hitbox: HITBOXES.bookshelf });
+  items.push({ type: "plant", x: 17 * TILE, y: 16 * TILE, depth: 1, hitbox: HITBOXES.plant });
+
+  // --- RECEPÇÃO (lobby) — sofás + plantas + tapete ---
+  items.push({ type: "sofa", x: 4 * TILE, y: 22 * TILE, depth: 1, hitbox: HITBOXES.sofa });
+  items.push({ type: "sofa", x: 9 * TILE, y: 22 * TILE, depth: 1, hitbox: HITBOXES.sofa });
+  items.push({ type: "coffeeTable", x: 6 * TILE, y: 24 * TILE, depth: 2, hitbox: HITBOXES.coffeeTable });
+  items.push({ type: "plant", x: 1 * TILE, y: 25 * TILE, depth: 1, hitbox: HITBOXES.plant });
+  items.push({ type: "plant", x: 12 * TILE, y: 25 * TILE, depth: 1, hitbox: HITBOXES.plant });
+
+  // --- COPA — mesa redonda no centro, "geladeira/fogão" placeholders ---
+  items.push({ type: "coffeeTable", x: 7 * TILE, y: 32 * TILE, depth: 1, hitbox: HITBOXES.coffeeTable });
+  // Cadeiras em volta
+  items.push({ type: "chair", x: 5 * TILE, y: 32 * TILE, depth: 0, hitbox: HITBOXES.chair });
+  items.push({ type: "chair", x: 9 * TILE, y: 32 * TILE, depth: 0, hitbox: HITBOXES.chair });
+  items.push({ type: "chair", x: 7 * TILE, y: 30 * TILE, depth: 0, hitbox: HITBOXES.chair });
+  items.push({ type: "chair", x: 7 * TILE, y: 34 * TILE, depth: 0, hitbox: HITBOXES.chair });
+  // "Bancada/geladeira" placeholders com bookshelf
+  items.push({ type: "bookshelf", x: 2 * TILE, y: 28 * TILE, depth: 1, hitbox: HITBOXES.bookshelf });
+  items.push({ type: "bookshelf", x: 12 * TILE, y: 28 * TILE, depth: 1, hitbox: HITBOXES.bookshelf });
+  items.push({ type: "plant", x: 12 * TILE, y: 36 * TILE, depth: 1, hitbox: HITBOXES.plant });
+
+  // --- SEGURANÇA — mesa com monitor de câmera ---
+  items.push({ type: "desk", x: 5 * TILE, y: 41 * TILE, depth: 1, hitbox: HITBOXES.desk });
+  items.push({ type: "monitor", x: 5 * TILE, y: 41 * TILE - 18, depth: 2 });
+  items.push({ type: "monitor", x: 8 * TILE, y: 41 * TILE - 18, depth: 2 });
+  items.push({ type: "chair", x: 5 * TILE, y: 42 * TILE, depth: 0, hitbox: HITBOXES.chair });
+
+  // --- REUNIÃO XG (sala grande, executiva) ---
+  items.push({ type: "desk", x: 70 * TILE, y: 4 * TILE, depth: 1, hitbox: HITBOXES.desk });
+  items.push({ type: "desk", x: 70 * TILE, y: 6 * TILE, depth: 1, hitbox: HITBOXES.desk });
+  // Cadeiras em volta
+  [66, 70, 74].forEach((tx) => {
+    items.push({ type: "chair", x: tx * TILE, y: 3 * TILE, depth: 0, hitbox: HITBOXES.chair });
+    items.push({ type: "chair", x: tx * TILE, y: 8 * TILE, depth: 0, hitbox: HITBOXES.chair });
+  });
+  items.push({ type: "tv", x: 70 * TILE, y: 1 * TILE, depth: 1, hitbox: HITBOXES.tv });
+  items.push({ type: "plant", x: 62 * TILE, y: 9 * TILE, depth: 1, hitbox: HITBOXES.plant });
+
+  // --- REUNIÕES P / M / G (coluna direita) — cada uma com mesa+cadeiras ---
+  const meetings = [
+    { y: 13, h: 5, chairs: 4 }, // p1
+    { y: 18, h: 5, chairs: 4 }, // p2
+    { y: 23, h: 5, chairs: 4 }, // p3
+    { y: 28, h: 5, chairs: 4 }, // p4
+    { y: 33, h: 6, chairs: 6 }, // m1
+    { y: 39, h: 6, chairs: 6 }, // m2
+    { y: 45, h: 6, chairs: 8 }, // g1
+    { y: 51, h: 6, chairs: 8 }, // g2
+  ];
+  for (const m of meetings) {
+    const cx = 70;
+    const cy = m.y + Math.floor(m.h / 2);
+    items.push({ type: "coffeeTable", x: cx * TILE, y: cy * TILE, depth: 1, hitbox: HITBOXES.coffeeTable });
+    // Distribui cadeiras em volta
+    const half = Math.floor(m.chairs / 2);
+    for (let i = 0; i < half; i++) {
+      items.push({ type: "chair", x: (cx - 2 + i) * TILE, y: (cy - 1) * TILE, depth: 0, hitbox: HITBOXES.chair });
+      items.push({ type: "chair", x: (cx - 2 + i) * TILE, y: (cy + 1) * TILE, depth: 0, hitbox: HITBOXES.chair });
+    }
+  }
+
+  // --- LOUNGE (faixa inferior, 0-60 horizontal, 43-55 vertical) ---
+  // Sofás em ângulo, pebolim, sinuca placeholders
+  items.push({ type: "sofa", x: 8 * TILE, y: 47 * TILE, depth: 1, hitbox: HITBOXES.sofa });
+  items.push({ type: "sofa", x: 14 * TILE, y: 47 * TILE, depth: 1, hitbox: HITBOXES.sofa });
+  items.push({ type: "coffeeTable", x: 11 * TILE, y: 49 * TILE, depth: 2, hitbox: HITBOXES.coffeeTable });
+  items.push({ type: "sofa", x: 26 * TILE, y: 47 * TILE, depth: 1, hitbox: HITBOXES.sofa });
+  items.push({ type: "sofa", x: 32 * TILE, y: 47 * TILE, depth: 1, hitbox: HITBOXES.sofa });
+  items.push({ type: "coffeeTable", x: 29 * TILE, y: 49 * TILE, depth: 2, hitbox: HITBOXES.coffeeTable });
+  // Plantas
+  items.push({ type: "plant", x: 2 * TILE, y: 45 * TILE, depth: 1, hitbox: HITBOXES.plant });
+  items.push({ type: "plant", x: 56 * TILE, y: 45 * TILE, depth: 1, hitbox: HITBOXES.plant });
+  items.push({ type: "plant", x: 30 * TILE, y: 53 * TILE, depth: 1, hitbox: HITBOXES.plant });
+  // "Pebolim" e "Sinuca" — placeholders com coffeeTable maior
+  items.push({ type: "coffeeTable", x: 42 * TILE, y: 47 * TILE, depth: 1, hitbox: HITBOXES.coffeeTable, tag: "foosball" });
+  items.push({ type: "coffeeTable", x: 50 * TILE, y: 47 * TILE, depth: 1, hitbox: HITBOXES.coffeeTable, tag: "pool_table" });
+  // "TV grande" na parede sul
+  items.push({ type: "tv", x: 30 * TILE, y: 44 * TILE, depth: 1, hitbox: HITBOXES.tv, tag: "tv_screen" });
+
   const floorRegions: OfficeLayoutData["floorRegions"] = [];
 
+  // Expõe deskIds usados pra o server gerar o catálogo
+  // (em runtime, server e client têm que estar em sync via desks.ts)
   return {
     width: W_TILES * TILE,
     height: H_TILES * TILE,
@@ -197,6 +329,19 @@ export function getDefaultLayout(): OfficeLayoutData {
     walls,
     rooms,
   };
+}
+
+/** Lista de deskIds + posições, exportada pra debugging.
+ *  O server tem que ter os mesmos IDs+coords em desks.ts. */
+export function getDeskCatalog(): Array<{ id: string; x: number; y: number }> {
+  const desks: Array<{ id: string; x: number; y: number }> = [];
+  // Espelha a lógica de addWorkstation acima (mesmas coords)
+  [24, 30, 36, 42].forEach((tx, i) => desks.push({ id: `desk-${i + 1}`, x: tx * TILE, y: 4 * TILE }));
+  [24, 30, 36, 42].forEach((tx, i) => desks.push({ id: `desk-${i + 5}`, x: tx * TILE, y: 8 * TILE }));
+  [24, 30, 36, 42, 48].forEach((tx, i) => desks.push({ id: `desk-${i + 9}`, x: tx * TILE, y: 16 * TILE }));
+  [24, 30, 36, 42, 48].forEach((tx, i) => desks.push({ id: `desk-${i + 14}`, x: tx * TILE, y: 26 * TILE }));
+  [24, 30, 36, 42, 48].forEach((tx, i) => desks.push({ id: `desk-${i + 19}`, x: tx * TILE, y: 36 * TILE }));
+  return desks;
 }
 
 /**

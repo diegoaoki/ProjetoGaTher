@@ -19,10 +19,45 @@ export interface DeskInfo {
 }
 
 /**
- * Fase A do mapa grande: array vazio enquanto não temos mesas posicionadas
- * (Fase B vai re-popular com mesas em dev_area, data_area, infra_area, finance_area).
+ * Mesas reserváveis do mapa grande (Fase B).
+ * Distribuídas nas áreas de trabalho da coluna central:
+ *  - desk-1..8: Desenvolvimento (8 mesas, 2 fileiras)
+ *  - desk-9..13: Dados (5 mesas)
+ *  - desk-14..18: Infra (5 mesas)
+ *  - desk-19..23: Financeiro (5 mesas)
+ *
+ * Coordenadas precisam bater com `client/src/OfficeLayout.ts`.
  */
-export const DESKS: DeskInfo[] = [];
+const TILE = 32;
+export const DESKS: DeskInfo[] = [
+  // Desenvolvimento — fileira 1 (y=4*32=128), 2 (y=8*32=256)
+  { id: "desk-1",  x: 24 * TILE, y: 4 * TILE },
+  { id: "desk-2",  x: 30 * TILE, y: 4 * TILE },
+  { id: "desk-3",  x: 36 * TILE, y: 4 * TILE },
+  { id: "desk-4",  x: 42 * TILE, y: 4 * TILE },
+  { id: "desk-5",  x: 24 * TILE, y: 8 * TILE },
+  { id: "desk-6",  x: 30 * TILE, y: 8 * TILE },
+  { id: "desk-7",  x: 36 * TILE, y: 8 * TILE },
+  { id: "desk-8",  x: 42 * TILE, y: 8 * TILE },
+  // Dados (y=16)
+  { id: "desk-9",  x: 24 * TILE, y: 16 * TILE },
+  { id: "desk-10", x: 30 * TILE, y: 16 * TILE },
+  { id: "desk-11", x: 36 * TILE, y: 16 * TILE },
+  { id: "desk-12", x: 42 * TILE, y: 16 * TILE },
+  { id: "desk-13", x: 48 * TILE, y: 16 * TILE },
+  // Infra (y=26)
+  { id: "desk-14", x: 24 * TILE, y: 26 * TILE },
+  { id: "desk-15", x: 30 * TILE, y: 26 * TILE },
+  { id: "desk-16", x: 36 * TILE, y: 26 * TILE },
+  { id: "desk-17", x: 42 * TILE, y: 26 * TILE },
+  { id: "desk-18", x: 48 * TILE, y: 26 * TILE },
+  // Financeiro (y=36)
+  { id: "desk-19", x: 24 * TILE, y: 36 * TILE },
+  { id: "desk-20", x: 30 * TILE, y: 36 * TILE },
+  { id: "desk-21", x: 36 * TILE, y: 36 * TILE },
+  { id: "desk-22", x: 42 * TILE, y: 36 * TILE },
+  { id: "desk-23", x: 48 * TILE, y: 36 * TILE },
+];
 
 const DESK_BY_ID = new Map(DESKS.map((d) => [d.id, d]));
 
