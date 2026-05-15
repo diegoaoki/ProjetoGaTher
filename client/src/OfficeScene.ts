@@ -63,6 +63,10 @@ export class OfficeScene extends Phaser.Scene {
   private myDeskId: string | null = null;
   private keyE!: Phaser.Input.Keyboard.Key;
 
+  // === Joystick virtual (mobile) — sobrescreve teclado quando ativo ===
+  private virtualVx = 0;
+  private virtualVy = 0;
+
   // === Pan da câmera com mouse ===
   private cameraFollowing = true;
   private isPanning = false;
@@ -262,6 +266,17 @@ export class OfficeScene extends Phaser.Scene {
   public setRemoteSpeaking(sessionId: string, speaking: boolean) {
     const rp = this.remotePlayers.get(sessionId);
     if (rp) rp.ring.setVisible(speaking);
+  }
+
+  /** Joystick virtual: x/y normalizados em -1..1. (0,0) = parado. */
+  public setVirtualInput(x: number, y: number) {
+    this.virtualVx = Math.max(-1, Math.min(1, x));
+    this.virtualVy = Math.max(-1, Math.min(1, y));
+  }
+
+  /** Versão pública de handleClaimKey pra o botão E mobile chamar. */
+  public triggerClaimAction() {
+    this.handleClaimKey();
   }
 
   public setMySpeaking(speaking: boolean) {
@@ -831,11 +846,26 @@ export class OfficeScene extends Phaser.Scene {
     const typing = isTypingInInput();
 
     if (!typing) {
+      // Teclado (desktop)
       if (this.cursors.left?.isDown || this.wasd.A.isDown) { vx = -1; newDir = "left"; }
       else if (this.cursors.right?.isDown || this.wasd.D.isDown) { vx = 1; newDir = "right"; }
 
       if (this.cursors.up?.isDown || this.wasd.W.isDown) { vy = -1; newDir = "up"; }
       else if (this.cursors.down?.isDown || this.wasd.S.isDown) { vy = 1; newDir = "down"; }
+
+      // Joystick virtual (mobile) — só usa se teclado não está ativo
+      if (vx === 0 && vy === 0 && (this.virtualVx !== 0 || this.virtualVy !== 0)) {
+        // Threshold mínimo pra evitar drift
+        const ax = Math.abs(this.virtualVx);
+        const ay = Math.abs(this.virtualVy);
+        if (ax > 0.15 || ay > 0.15) {
+          vx = this.virtualVx;
+          vy = this.virtualVy;
+          // Direção animada baseada no eixo dominante
+          if (ax > ay) newDir = this.virtualVx > 0 ? "right" : "left";
+          else newDir = this.virtualVy > 0 ? "down" : "up";
+        }
+      }
     }
 
     if (vx !== 0 && vy !== 0) {

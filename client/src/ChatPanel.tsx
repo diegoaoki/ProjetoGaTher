@@ -27,12 +27,14 @@ interface Props {
   onClose: () => void;
   /** Chama quando o usuário visualiza msgs de um canal — pra App zerar o unread. */
   onChannelViewed: (channelKey: string) => void;
+  /** Em mobile, ocupa a tela inteira. */
+  mobile?: boolean;
 }
 
 type Tab = "global" | "room" | "dm";
 
 export default function ChatPanel({
-  httpUrl, token, myUserId, onlinePlayers, liveMessages, onSend, onClose, onChannelViewed,
+  httpUrl, token, myUserId, onlinePlayers, liveMessages, onSend, onClose, onChannelViewed, mobile,
 }: Props) {
   /**
    * Resolve userId → displayName com 3 níveis de fallback:
@@ -176,7 +178,7 @@ export default function ChatPanel({
   }, [dmConversations, liveMessages, myUserId]);
 
   return (
-    <div style={panelStyle}>
+    <div style={mobile ? { ...panelStyle, width: "100vw", borderLeft: "none" } : panelStyle}>
       <div style={headerStyle}>
         <strong style={{ fontSize: 14 }}>💬 Chat</strong>
         <button onClick={onClose} style={closeBtnStyle} title="Fechar">✕</button>

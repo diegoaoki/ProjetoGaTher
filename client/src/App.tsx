@@ -6,7 +6,9 @@ import { SpatialAudio } from "./SpatialAudio";
 import LoginScreen from "./LoginScreen";
 import AdminPanel from "./AdminPanel";
 import ChatPanel from "./ChatPanel";
+import MobileControls from "./MobileControls";
 import { ChatMessage, playNotificationBeep } from "./chat";
+import { useIsMobile } from "./useIsMobile";
 import {
   AuthSession,
   clearToken,
@@ -79,6 +81,7 @@ function safePlay(video: HTMLVideoElement) {
 }
 
 export default function App() {
+  const isMobile = useIsMobile();
   const containerRef = useRef<HTMLDivElement>(null);
   const localVideoRef = useRef<HTMLDivElement>(null);
   const cardsContainerRef = useRef<HTMLDivElement>(null);
@@ -945,7 +948,10 @@ export default function App() {
       </div>
 
       {sidebarOpen && (
-        <div style={sidebarStyle}>
+        <div style={{
+          ...sidebarStyle,
+          ...(isMobile ? { top: 0, left: 0, right: 0, bottom: 0, width: "100vw", maxHeight: "100vh" } : {}),
+        }}>
           <div style={sidebarHeaderStyle}>
             <span><strong>{onlinePlayers.length}</strong> online</span>
             <button onClick={() => setSidebarOpen(false)} style={sidebarCloseBtn} title="Fechar">✕</button>
@@ -993,10 +999,20 @@ export default function App() {
       )}
 
       <div ref={localVideoRef} style={{
-        position: "absolute", bottom: 16, right: 16,
+        position: "absolute",
+        // Em mobile, sobe pra não colidir com o joystick
+        bottom: isMobile ? 120 : 16,
+        right: 16,
         border: "2px solid #4ade80", borderRadius: 8, overflow: "hidden",
         background: "#000", zIndex: 10,
       }} />
+
+      {isMobile && (
+        <MobileControls
+          onMove={(x, y) => sceneRef.current?.setVirtualInput(x, y)}
+          onAction={() => sceneRef.current?.triggerClaimAction()}
+        />
+      )}
 
       <div ref={cardsContainerRef} style={{
         position: "absolute", top: 16, right: 16,
@@ -1005,11 +1021,13 @@ export default function App() {
       }} />
 
 
-      <div style={hintStyle}>
-        WASD/setas pra mover • <kbd style={kbdStyle}>botão direito</kbd> arrasta a câmera • <kbd style={kbdStyle}>C</kbd> centraliza
-      </div>
+      {!isMobile && (
+        <div style={hintStyle}>
+          WASD/setas pra mover • <kbd style={kbdStyle}>botão direito</kbd> arrasta a câmera • <kbd style={kbdStyle}>C</kbd> centraliza
+        </div>
+      )}
 
-      {!cameraFollowing && (
+      {!cameraFollowing && !isMobile && (
         <div style={cameraHintStyle}>
           Câmera deslocada — aperte <kbd style={kbdStyle}>C</kbd> ou mova com <kbd style={kbdStyle}>WASD</kbd> pra voltar
         </div>
@@ -1107,7 +1125,7 @@ export default function App() {
           token={session.token}
           myUserId={session.user.id}
           onlinePlayers={onlinePlayers
-            .filter((p) => p.userId) // exclui players sem userId (segurança)
+            .filter((p) => p.userId)
             .map((p) => ({ userId: p.userId, name: p.name, isMe: p.isMe }))}
           liveMessages={liveMessages}
           onSend={(channel, content) => {
@@ -1126,6 +1144,7 @@ export default function App() {
               return next;
             });
           }}
+          mobile={isMobile}
         />
       )}
 
