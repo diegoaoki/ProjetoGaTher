@@ -324,18 +324,28 @@ export class OfficeRoom extends Room<OfficeState> {
 
   /**
    * Tick periódico das portas:
-   * - Player a < DOOR_OPEN_RADIUS_PX da porta → abre + reseta timer
+   * - Player "à frente" da porta (caixa retangular alinhada ao eixo de passagem) → abre + reseta timer
    * - Sem ninguém perto há > DOOR_CLOSE_TIMEOUT_MS → fecha
+   *
+   * "Frente" pra porta vertical = aproximar-se pelo eixo X (perpendicular à parede)
+   * com Y próximo ao vão. Evita que portas abram quando o jogador só passa
+   * paralelo à parede.
    */
   private tickDoors() {
     const now = Date.now();
+    const FRONT = DOOR_OPEN_RADIUS_PX;       // alcance perpendicular à porta
+    const SIDE = 40;                          // tolerância lateral (paralela à parede)
     this.state.doors.forEach((door, doorId) => {
       let nearby = false;
       this.state.players.forEach((p) => {
-        const dx = p.x - door.x;
-        const dy = p.y - door.y;
-        if (dx * dx + dy * dy < DOOR_OPEN_RADIUS_PX * DOOR_OPEN_RADIUS_PX) {
-          nearby = true;
+        const dx = Math.abs(p.x - door.x);
+        const dy = Math.abs(p.y - door.y);
+        if (door.orientation === "vertical") {
+          // parede vertical → "frente" é leste/oeste (dx pequeno = perto), lateral é Y
+          if (dx < FRONT && dy < SIDE) nearby = true;
+        } else {
+          // parede horizontal → "frente" é norte/sul (dy pequeno)
+          if (dy < FRONT && dx < SIDE) nearby = true;
         }
       });
 

@@ -47,7 +47,7 @@ export interface Room {
 export interface OfficeLayoutData {
   width: number;
   height: number;
-  floorRegions: Array<{ x: number; y: number; w: number; h: number; type: "carpet" | "rug" }>;
+  floorRegions: Array<{ x: number; y: number; w: number; h: number; type: "carpet" | "rug" | "dept"; tint?: number; label?: string }>;
   furniture: FurnitureItem[];
   walls: Wall[];
   rooms: Room[];
@@ -76,6 +76,9 @@ type ZoneDef = {
   /** Vão na parede (lado, posição em tiles dentro do lado, largura do vão).
    *  side: "top" | "bottom" | "left" | "right". Pode ter múltiplos. */
   openings?: Array<{ side: "top" | "bottom" | "left" | "right"; pos: number; width?: number }>;
+  /** Se true, zona é "open space" (departamento sem paredes). Continua existindo
+   *  como room pra label/áudio, mas sem hitboxes de parede. */
+  noWalls?: boolean;
 };
 
 const ZONES: ZoneDef[] = [
@@ -91,15 +94,11 @@ const ZONES: ZoneDef[] = [
   { id: "security_room",  label: "Segurança",          x: 0,  y: 38, w: 14, h: 5,
     openings: [{ side: "right", pos: 2 }] },
 
-  // === Coluna central ===
-  { id: "dev_area",       label: "Desenvolvimento",    x: 20, y: 0,  w: 40, h: 11,
-    openings: [{ side: "left", pos: 5, width: 3 }] },
-  { id: "data_area",      label: "Dados",              x: 20, y: 11, w: 40, h: 10,
-    openings: [{ side: "left", pos: 4, width: 3 }] },
-  { id: "infra_area",     label: "Infra",              x: 20, y: 21, w: 40, h: 10,
-    openings: [{ side: "left", pos: 4, width: 3 }] },
-  { id: "finance_area",   label: "Financeiro",         x: 20, y: 31, w: 40, h: 11,
-    openings: [{ side: "left", pos: 5, width: 3 }] },
+  // === Coluna central — open space, sem paredes (departamentos fundidos) ===
+  { id: "dev_area",       label: "Desenvolvimento",    x: 20, y: 0,  w: 40, h: 11, noWalls: true },
+  { id: "data_area",      label: "Dados",              x: 20, y: 11, w: 40, h: 10, noWalls: true },
+  { id: "infra_area",     label: "Infra",              x: 20, y: 21, w: 40, h: 10, noWalls: true },
+  { id: "finance_area",   label: "Financeiro",         x: 20, y: 31, w: 40, h: 11, noWalls: true },
 
   // === Coluna direita: reuniões ===
   { id: "meeting_xg",     label: "Reunião XG",         x: 60, y: 0,  w: 20, h: 11,
@@ -125,6 +124,45 @@ const ZONES: ZoneDef[] = [
   { id: "lounge",         label: "Lounge",             x: 0,  y: 43, w: 60, h: 12,
     openings: [{ side: "top", pos: 8, width: 4 }, { side: "top", pos: 30, width: 4 }] },
 ];
+
+/**
+ * Considera dois walls "duplicados adjacentes" se forem da mesma orientação,
+ * estiverem encostados (gap ≤ WALL_T) e tiverem sobreposição significativa no
+ * eixo paralelo. Resolve o caso "parede com parede" entre zonas vizinhas.
+ *
+ * Estratégia: ao adicionar um candidato, se já existem adjacentes, escolhe
+ * manter o conjunto com menor área total — assim openings (segmentos menores)
+ * vencem paredes sólidas adjacentes, preservando a passagem.
+ */
+function pushWallDedup(walls: Wall[], cand: Wall): void {
+  const candH = cand.h === WALL_T && cand.w > WALL_T;
+  const candV = cand.w === WALL_T && cand.h > WALL_T;
+  const adjacentIdxs: number[] = [];
+  let totalAdjacentArea = 0;
+  for (let i = 0; i < walls.length; i++) {
+    const w = walls[i];
+    const wH = w.h === WALL_T && w.w > WALL_T;
+    const wV = w.w === WALL_T && w.h > WALL_T;
+    if (candH && wH && Math.abs(w.y - cand.y) <= WALL_T) {
+      const overlapX = Math.max(0, Math.min(w.x + w.w, cand.x + cand.w) - Math.max(w.x, cand.x));
+      if (overlapX > WALL_T) { adjacentIdxs.push(i); totalAdjacentArea += w.w * w.h; }
+    } else if (candV && wV && Math.abs(w.x - cand.x) <= WALL_T) {
+      const overlapY = Math.max(0, Math.min(w.y + w.h, cand.y + cand.h) - Math.max(w.y, cand.y));
+      if (overlapY > WALL_T) { adjacentIdxs.push(i); totalAdjacentArea += w.w * w.h; }
+    }
+  }
+  if (adjacentIdxs.length === 0) {
+    walls.push(cand);
+    return;
+  }
+  const candArea = cand.w * cand.h;
+  if (candArea < totalAdjacentArea) {
+    // Candidato cobre menos (tem mais opening) → mantém candidato, remove existentes
+    for (let i = adjacentIdxs.length - 1; i >= 0; i--) walls.splice(adjacentIdxs[i], 1);
+    walls.push(cand);
+  }
+  // Senão: já tem existentes melhores, descarta candidato silenciosamente
+}
 
 /** Gera as 4 paredes de uma zona com vãos (openings) onde definido. */
 function wallsForZone(z: ZoneDef): Wall[] {
@@ -183,7 +221,8 @@ export function getDefaultLayout(): OfficeLayoutData {
 
   const walls: Wall[] = [];
   for (const z of ZONES) {
-    walls.push(...wallsForZone(z));
+    if (z.noWalls) continue;
+    for (const w of wallsForZone(z)) pushWallDedup(walls, w);
   }
 
   const rooms: Room[] = ZONES.map((z) => ({
@@ -321,7 +360,13 @@ export function getDefaultLayout(): OfficeLayoutData {
   // "TV grande" na parede sul
   items.push({ type: "tv", x: 30 * TILE, y: 44 * TILE, depth: 1, hitbox: HITBOXES.tv, tag: "tv_screen" });
 
-  const floorRegions: OfficeLayoutData["floorRegions"] = [];
+  // Tints sutis pra distinguir os 4 departamentos no open space central
+  const floorRegions: OfficeLayoutData["floorRegions"] = [
+    { x: 20 * TILE, y: 0,         w: 40 * TILE, h: 11 * TILE, type: "dept", tint: 0xb8d4ff, label: "Desenvolvimento" }, // azul
+    { x: 20 * TILE, y: 11 * TILE, w: 40 * TILE, h: 10 * TILE, type: "dept", tint: 0xc8e8c8, label: "Dados" },          // verde
+    { x: 20 * TILE, y: 21 * TILE, w: 40 * TILE, h: 10 * TILE, type: "dept", tint: 0xffd9a8, label: "Infra" },          // laranja
+    { x: 20 * TILE, y: 31 * TILE, w: 40 * TILE, h: 11 * TILE, type: "dept", tint: 0xe0c8ff, label: "Financeiro" },     // roxo
+  ];
 
   // Expõe deskIds usados pra o server gerar o catálogo
   // (em runtime, server e client têm que estar em sync via desks.ts)

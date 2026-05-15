@@ -481,6 +481,12 @@ export class OfficeScene extends Phaser.Scene {
         const rug = this.add.tileSprite(region.x, region.y, region.w, region.h, "floorCarpet").setOrigin(0, 0);
         rug.setDepth(-50);
         rug.setAlpha(0.9);
+      } else if (region.type === "dept") {
+        // Tinted overlay do piso base pra distinguir departamentos no open space
+        const dept = this.add.tileSprite(region.x, region.y, region.w, region.h, floorKey).setOrigin(0, 0);
+        dept.setDepth(-90);
+        if (region.tint !== undefined) dept.setTint(region.tint);
+        dept.setAlpha(0.6);
       }
     });
 
