@@ -1,6 +1,7 @@
 import { Room, Client } from "@colyseus/core";
 import { eq } from "drizzle-orm";
-import { OfficeState, Player, Desk } from "./schema";
+import { OfficeState, Player, Desk, Door } from "./schema";
+import { DOORS, DOOR_OPEN_RADIUS_PX, DOOR_CLOSE_TIMEOUT_MS } from "./doors";
 import { verifyAuthToken } from "./auth/jwt";
 import { getDb } from "./db/client";
 import { profiles, users, deskReservations, messages, messageReactions } from "./db/schema";
@@ -89,6 +90,9 @@ export class OfficeRoom extends Room<OfficeState> {
    */
   private activeUsers = new Map<string, Client>();
 
+  /** Timestamp (ms) da última vez que cada porta teve player próximo. */
+  private doorLastActivity = new Map<string, number>();
+
   async onCreate(_options: any) {
     console.log(`[OfficeRoom] criada: ${this.roomId}`);
     this.setState(new OfficeState());
@@ -171,6 +175,22 @@ export class OfficeRoom extends Room<OfficeState> {
       const player = this.state.players.get(client.sessionId);
       if (player) player.zoneId = zoneId;
     });
+
+    // Inicializa portas (sempre fechadas no boot)
+    for (const cfg of DOORS) {
+      const d = new Door();
+      d.doorId = cfg.doorId;
+      d.x = cfg.x;
+      d.y = cfg.y;
+      d.orientation = cfg.orientation;
+      d.roomTag = cfg.roomTag;
+      d.restricted = cfg.restricted;
+      d.open = false;
+      this.state.doors.set(cfg.doorId, d);
+    }
+
+    // Tick periódico: abre/fecha portas baseado em proximidade dos players
+    this.setSimulationInterval((deltaTime) => this.tickDoors(), 250);
 
     this.onMessage<DeskClaimMessage>("desk:claim", (client, msg) =>
       this.handleDeskClaim(client, msg)
@@ -300,6 +320,35 @@ export class OfficeRoom extends Room<OfficeState> {
 
   onDispose() {
     console.log(`[OfficeRoom] descartada: ${this.roomId}`);
+  }
+
+  /**
+   * Tick periódico das portas:
+   * - Player a < DOOR_OPEN_RADIUS_PX da porta → abre + reseta timer
+   * - Sem ninguém perto há > DOOR_CLOSE_TIMEOUT_MS → fecha
+   */
+  private tickDoors() {
+    const now = Date.now();
+    this.state.doors.forEach((door, doorId) => {
+      let nearby = false;
+      this.state.players.forEach((p) => {
+        const dx = p.x - door.x;
+        const dy = p.y - door.y;
+        if (dx * dx + dy * dy < DOOR_OPEN_RADIUS_PX * DOOR_OPEN_RADIUS_PX) {
+          nearby = true;
+        }
+      });
+
+      if (nearby) {
+        this.doorLastActivity.set(doorId, now);
+        if (!door.open) door.open = true;
+      } else {
+        const lastActivity = this.doorLastActivity.get(doorId) || 0;
+        if (door.open && now - lastActivity > DOOR_CLOSE_TIMEOUT_MS) {
+          door.open = false;
+        }
+      }
+    });
   }
 
   private handleMove(client: Client, msg: MoveMessage) {

@@ -345,14 +345,15 @@ export function getDeskCatalog(): Array<{ id: string; x: number; y: number }> {
 }
 
 /**
- * Verifica colisão entre um retângulo (avatar) e qualquer hitbox de móvel
- * OU parede.
+ * Verifica colisão entre um retângulo (avatar) e qualquer hitbox de móvel,
+ * parede estática OU portas fechadas dinâmicas (extraWalls).
  */
 export function checkCollision(
   px: number,
   py: number,
   playerHalfSize: number,
-  layout: OfficeLayoutData
+  layout: OfficeLayoutData,
+  extraWalls?: Wall[]
 ): boolean {
   const pLeft = px - playerHalfSize;
   const pRight = px + playerHalfSize;
@@ -374,6 +375,14 @@ export function checkCollision(
   for (const wall of layout.walls) {
     if (pRight > wall.x && pLeft < wall.x + wall.w && pBottom > wall.y && pTop < wall.y + wall.h) {
       return true;
+    }
+  }
+
+  if (extraWalls) {
+    for (const wall of extraWalls) {
+      if (pRight > wall.x && pLeft < wall.x + wall.w && pBottom > wall.y && pTop < wall.y + wall.h) {
+        return true;
+      }
     }
   }
 

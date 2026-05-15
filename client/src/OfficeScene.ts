@@ -71,6 +71,11 @@ export class OfficeScene extends Phaser.Scene {
   private myDeskId: string | null = null;
   private keyE!: Phaser.Input.Keyboard.Key;
 
+  // === Portas (Fase C) ===
+  private doorVisuals = new Map<string, Phaser.GameObjects.Rectangle>();
+  /** Walls dinâmicos a partir das portas fechadas — usados em checkCollision. */
+  private dynamicWalls: Array<{ x: number; y: number; w: number; h: number }> = [];
+
   // === Joystick virtual (mobile) — sobrescreve teclado quando ativo ===
   private virtualVx = 0;
   private virtualVy = 0;
@@ -575,6 +580,18 @@ export class OfficeScene extends Phaser.Scene {
       }
     });
 
+    // Listener de portas (Fase C)
+    if (state.doors && typeof state.doors.onAdd === "function") {
+      state.doors.onAdd((door: any, doorId: string) => {
+        this.renderDoor(doorId, door);
+        door.onChange(() => this.renderDoor(doorId, door));
+      });
+      state.doors.onRemove((_door: any, doorId: string) => {
+        const r = this.doorVisuals.get(doorId);
+        if (r) { r.destroy(); this.doorVisuals.delete(doorId); }
+      });
+    }
+
     // Listener de mesas reservadas — protegido contra server desatualizado
     // que ainda não tem `desks` no schema (durante deploys parciais).
     if (state.desks && typeof state.desks.onAdd === "function") {
@@ -597,6 +614,50 @@ export class OfficeScene extends Phaser.Scene {
     } else {
       console.warn("[scene] state.desks ausente — server desatualizado, mesas desabilitadas");
     }
+  }
+
+  /** Renderiza a porta + atualiza wall dinâmico de colisão. */
+  private renderDoor(doorId: string, door: { x: number; y: number; orientation: string; open: boolean }) {
+    let rect = this.doorVisuals.get(doorId);
+    // Tamanho: 2 tiles na direção do vão, espessura igual ao wall (8px)
+    const span = 64; // 2 tiles
+    const thickness = 8;
+    const isVertical = door.orientation === "vertical";
+    const w = isVertical ? thickness : span;
+    const h = isVertical ? span : thickness;
+
+    if (!rect) {
+      rect = this.add.rectangle(door.x, door.y, w, h, 0x8b4513);
+      rect.setStrokeStyle(2, 0x3d2817);
+      rect.setDepth(door.y + 100);
+      this.doorVisuals.set(doorId, rect);
+    }
+    // Aberta: invisível e sem colisão. Fechada: marrom + bloqueia.
+    rect.setVisible(!door.open);
+    rect.setAlpha(door.open ? 0 : 1);
+
+    // Atualiza dynamicWalls com todas as portas fechadas
+    this.refreshDynamicWalls();
+  }
+
+  /** Reconstrói o array de walls dinâmicos com as portas fechadas. */
+  private refreshDynamicWalls() {
+    const state: any = this.room.state;
+    if (!state?.doors) {
+      this.dynamicWalls = [];
+      return;
+    }
+    const walls: Array<{ x: number; y: number; w: number; h: number }> = [];
+    state.doors.forEach((door: any) => {
+      if (door.open) return;
+      const isVertical = door.orientation === "vertical";
+      const span = 64;
+      const thickness = 8;
+      const w = isVertical ? thickness : span;
+      const h = isVertical ? span : thickness;
+      walls.push({ x: door.x - w / 2, y: door.y - h / 2, w, h });
+    });
+    this.dynamicWalls = walls;
   }
 
   private renderDeskOverlay(deskId: string, desk: { ownerName: string; ownerColor: string }) {
@@ -743,7 +804,7 @@ export class OfficeScene extends Phaser.Scene {
       for (const [dx, dy] of directions) {
         const nx = Phaser.Math.Clamp(sx + dx, PLAYER_HALF, WORLD_W - PLAYER_HALF);
         const ny = Phaser.Math.Clamp(sy + dy, PLAYER_HALF, WORLD_H - PLAYER_HALF);
-        if (!checkCollision(nx, ny, PLAYER_HALF, this.layout)) {
+        if (!checkCollision(nx, ny, PLAYER_HALF, this.layout, this.dynamicWalls)) {
           return { x: nx, y: ny };
         }
       }
@@ -829,7 +890,7 @@ export class OfficeScene extends Phaser.Scene {
    *   - Caso contrário, comportamento normal: testa destino, slide nos eixos.
    */
   private tryMove(curX: number, curY: number, dx: number, dy: number): { x: number; y: number } {
-    const stuck = checkCollision(curX, curY, PLAYER_HALF, this.layout);
+    const stuck = checkCollision(curX, curY, PLAYER_HALF, this.layout, this.dynamicWalls);
 
     if (stuck) {
       // Estou preso. Aceito qualquer movimento que reduza o overlap com móveis,
@@ -838,7 +899,7 @@ export class OfficeScene extends Phaser.Scene {
       const nextY = curY + dy;
 
       // Se a nova posição já está livre, ótimo
-      if (!checkCollision(nextX, nextY, PLAYER_HALF, this.layout)) {
+      if (!checkCollision(nextX, nextY, PLAYER_HALF, this.layout, this.dynamicWalls)) {
         return { x: nextX, y: nextY };
       }
 
@@ -853,13 +914,13 @@ export class OfficeScene extends Phaser.Scene {
     const nextX = curX + dx;
     const nextY = curY + dy;
 
-    if (!checkCollision(nextX, nextY, PLAYER_HALF, this.layout)) {
+    if (!checkCollision(nextX, nextY, PLAYER_HALF, this.layout, this.dynamicWalls)) {
       return { x: nextX, y: nextY };
     }
-    if (dx !== 0 && !checkCollision(nextX, curY, PLAYER_HALF, this.layout)) {
+    if (dx !== 0 && !checkCollision(nextX, curY, PLAYER_HALF, this.layout, this.dynamicWalls)) {
       return { x: nextX, y: curY };
     }
-    if (dy !== 0 && !checkCollision(curX, nextY, PLAYER_HALF, this.layout)) {
+    if (dy !== 0 && !checkCollision(curX, nextY, PLAYER_HALF, this.layout, this.dynamicWalls)) {
       return { x: curX, y: nextY };
     }
     return { x: curX, y: curY };
