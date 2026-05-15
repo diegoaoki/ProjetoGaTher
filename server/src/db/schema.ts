@@ -77,5 +77,29 @@ export type Profile = typeof profiles.$inferSelect;
 export type NewProfile = typeof profiles.$inferInsert;
 export type DeskReservation = typeof deskReservations.$inferSelect;
 export type NewDeskReservation = typeof deskReservations.$inferInsert;
+/**
+ * Reações em mensagens (👍 ❤️ etc).
+ * PK composta: cada user só pode reagir com o MESMO emoji uma vez por msg.
+ * Toggle: se já existe, DELETE; senão INSERT.
+ */
+export const messageReactions = pgTable(
+  "message_reactions",
+  {
+    messageId: uuid("message_id")
+      .notNull()
+      .references(() => messages.id, { onDelete: "cascade" }),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    emoji: varchar("emoji", { length: 8 }).notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => ({
+    msgIdx: index("message_reactions_msg_idx").on(table.messageId),
+  })
+);
+
 export type Message = typeof messages.$inferSelect;
 export type NewMessage = typeof messages.$inferInsert;
+export type MessageReaction = typeof messageReactions.$inferSelect;
+export type NewMessageReaction = typeof messageReactions.$inferInsert;

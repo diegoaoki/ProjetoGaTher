@@ -3,7 +3,8 @@ import { eq } from "drizzle-orm";
 import { OfficeState, Player, Desk } from "./schema";
 import { verifyAuthToken } from "./auth/jwt";
 import { getDb } from "./db/client";
-import { profiles, users, deskReservations, messages } from "./db/schema";
+import { profiles, users, deskReservations, messages, messageReactions } from "./db/schema";
+import { and, eq as eqOp } from "drizzle-orm";
 import { DESKS, getDeskById, getSeatPosition } from "./desks";
 
 interface MoveMessage {
@@ -44,6 +45,13 @@ interface ChatSendMessage {
   recipientId?: string;  // userId, obrigatório pra DM
   content: string;       // texto (max 2000 chars)
 }
+
+interface ChatReactionToggleMessage {
+  messageId: string;
+  emoji: string;
+}
+
+const ALLOWED_REACTION_EMOJIS = new Set(["👍", "❤️", "😂", "😮", "😢", "🎉"]);
 
 interface JoinOptions {
   token?: string;
@@ -190,6 +198,10 @@ export class OfficeRoom extends Room<OfficeState> {
 
     this.onMessage<ChatSendMessage>("chat:send", (client, msg) =>
       this.handleChatSend(client, msg)
+    );
+
+    this.onMessage<ChatReactionToggleMessage>("chat:reaction:toggle", (client, msg) =>
+      this.handleChatReactionToggle(client, msg)
     );
   }
 
@@ -663,6 +675,100 @@ export class OfficeRoom extends Room<OfficeState> {
       }
     } catch (err) {
       console.error("[chat:send] EXCEPTION:", err);
+    }
+  }
+
+  /**
+   * Toggle de reação em uma mensagem persistida (global/DM).
+   * Reações em mensagens efêmeras (room) não são suportadas.
+   */
+  private async handleChatReactionToggle(client: Client, msg: ChatReactionToggleMessage) {
+    try {
+      const auth = client.userData as AuthData | undefined;
+      if (!auth) return;
+
+      const messageId = String(msg?.messageId || "");
+      const emoji = String(msg?.emoji || "");
+      if (!messageId || !emoji) return;
+      if (!ALLOWED_REACTION_EMOJIS.has(emoji)) {
+        client.send("chat:error", { error: "Emoji não permitido" });
+        return;
+      }
+
+      const db = getDb();
+
+      // Busca a mensagem original pra saber pra quem propagar
+      const [original] = await db
+        .select({ id: messages.id, channelType: messages.channelType, senderId: messages.senderId, recipientId: messages.recipientId })
+        .from(messages)
+        .where(eqOp(messages.id, messageId))
+        .limit(1);
+      if (!original) {
+        client.send("chat:error", { error: "Mensagem não encontrada" });
+        return;
+      }
+
+      // Verifica permissão: em DM, só sender ou recipient podem reagir
+      if (original.channelType === "dm") {
+        if (original.senderId !== auth.userId && original.recipientId !== auth.userId) {
+          client.send("chat:error", { error: "Sem permissão" });
+          return;
+        }
+      }
+
+      // Toggle: tenta DELETE; se removeu nada, INSERT
+      const deleted = await db
+        .delete(messageReactions)
+        .where(
+          and(
+            eqOp(messageReactions.messageId, messageId),
+            eqOp(messageReactions.userId, auth.userId),
+            eqOp(messageReactions.emoji, emoji)
+          )
+        )
+        .returning({ emoji: messageReactions.emoji });
+
+      const removed = deleted.length > 0;
+      if (!removed) {
+        await db.insert(messageReactions).values({
+          messageId,
+          userId: auth.userId,
+          emoji,
+        });
+      }
+
+      // Busca reações agregadas atuais pra propagar (todos os emojis da msg)
+      const rows = await db
+        .select({ emoji: messageReactions.emoji, userId: messageReactions.userId })
+        .from(messageReactions)
+        .where(eqOp(messageReactions.messageId, messageId));
+
+      const agg: Record<string, string[]> = {};
+      for (const r of rows) {
+        if (!agg[r.emoji]) agg[r.emoji] = [];
+        agg[r.emoji].push(r.userId);
+      }
+      const reactions = Object.entries(agg).map(([emoji, userIds]) => ({ emoji, userIds }));
+
+      const payload = {
+        messageId,
+        reactions,
+      };
+
+      // Propaga pra mesma audiência da msg original
+      if (original.channelType === "global") {
+        this.broadcast("chat:reaction:updated", payload);
+      } else if (original.channelType === "dm") {
+        // Manda pros 2 envolvidos se online
+        this.clients.forEach((c) => {
+          const p = this.state.players.get(c.sessionId);
+          if (p && (p.userId === original.senderId || p.userId === original.recipientId)) {
+            c.send("chat:reaction:updated", payload);
+          }
+        });
+      }
+    } catch (err) {
+      console.error("[chat:reaction:toggle] EXCEPTION:", err);
     }
   }
 }

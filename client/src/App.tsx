@@ -162,6 +162,9 @@ export default function App() {
   // === Chat ===
   const [chatOpen, setChatOpen] = useState(false);
   const [liveMessages, setLiveMessages] = useState<ChatMessage[]>([]);
+  // Override de reações por message id (atualiza msgs do histórico que
+  // não estão em liveMessages)
+  const [reactionsOverride, setReactionsOverride] = useState<Map<string, Array<{ emoji: string; userIds: string[] }>>>(new Map());
   // Contagem de mensagens não lidas por canal
   // Key: "global" | "room" | "dm:<userId>"
   const [unreadByChannel, setUnreadByChannel] = useState<Map<string, number>>(new Map());
@@ -495,6 +498,20 @@ export default function App() {
 
       room.onMessage("chat:error", (msg: { error: string }) => {
         setSocialToast({ text: msg?.error || "Falha no chat", tone: "error" });
+      });
+
+      // Reações atualizadas em uma mensagem persistida
+      room.onMessage("chat:reaction:updated", (msg: { messageId: string; reactions: Array<{ emoji: string; userIds: string[] }> }) => {
+        // Atualiza override (cobre tanto msgs em live quanto do histórico)
+        setReactionsOverride((prev) => {
+          const next = new Map(prev);
+          next.set(msg.messageId, msg.reactions);
+          return next;
+        });
+        // Também atualiza liveMessages se a msg já tá lá (consistência)
+        setLiveMessages((prev) =>
+          prev.map((m) => (m.id === msg.messageId ? { ...m, reactions: msg.reactions } : m))
+        );
       });
 
       setAudioStatus("Obtendo token de áudio...");
@@ -1206,12 +1223,16 @@ export default function App() {
             .filter((p) => p.userId)
             .map((p) => ({ userId: p.userId, name: p.name, isMe: p.isMe }))}
           liveMessages={liveMessages}
+          reactionsOverride={reactionsOverride}
           onSend={(channel, content) => {
             roomRef.current?.send("chat:send", {
               channelType: channel.type,
               recipientId: channel.recipientId,
               content,
             });
+          }}
+          onToggleReaction={(messageId, emoji) => {
+            roomRef.current?.send("chat:reaction:toggle", { messageId, emoji });
           }}
           onClose={() => setChatOpen(false)}
           onChannelViewed={(channelKey) => {

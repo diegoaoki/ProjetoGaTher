@@ -3,6 +3,11 @@
  * Envio de mensagens é via Colyseus (room.send("chat:send", ...)).
  */
 
+export interface ReactionAggregate {
+  emoji: string;
+  userIds: string[];
+}
+
 export interface ChatMessage {
   id: string;
   channelType: "global" | "dm" | "room";
@@ -11,7 +16,10 @@ export interface ChatMessage {
   recipientId?: string | null;
   content: string;
   createdAt: string; // ISO timestamp
+  reactions?: ReactionAggregate[];
 }
+
+export const ALLOWED_REACTIONS = ["👍", "❤️", "😂", "😮", "😢", "🎉"];
 
 export interface DmConversation {
   // Identificadores
@@ -90,6 +98,7 @@ function normalizeMessage(raw: any): ChatMessage {
       : typeof raw.created_at === "string"
         ? raw.created_at
         : new Date(raw.created_at).toISOString(),
+    reactions: Array.isArray(raw.reactions) ? raw.reactions : [],
   };
 }
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  ALLOWED_REACTIONS,
   ChatMessage,
   DmConversation,
   fetchDmConversations,
@@ -21,8 +22,12 @@ interface Props {
   onlinePlayers: OnlinePeer[];
   /** Mensagens que o App.tsx recebe via Colyseus (real-time). Append em ordem. */
   liveMessages: ChatMessage[];
+  /** Override de reações por messageId (atualizações em tempo real do server) */
+  reactionsOverride: Map<string, Array<{ emoji: string; userIds: string[] }>>;
   /** Manda mensagem (delega pro App, que envia via room.send). */
   onSend: (channel: { type: "global" | "dm" | "room"; recipientId?: string }, content: string) => void;
+  /** Toggle de reação numa mensagem persistida (global/DM). */
+  onToggleReaction: (messageId: string, emoji: string) => void;
   /** Fecha o painel. */
   onClose: () => void;
   /** Chama quando o usuário visualiza msgs de um canal — pra App zerar o unread. */
@@ -34,8 +39,9 @@ interface Props {
 type Tab = "global" | "room" | "dm";
 
 export default function ChatPanel({
-  httpUrl, token, myUserId, onlinePlayers, liveMessages, onSend, onClose, onChannelViewed, mobile,
+  httpUrl, token, myUserId, onlinePlayers, liveMessages, reactionsOverride, onSend, onToggleReaction, onClose, onChannelViewed, mobile,
 }: Props) {
+  const [pickerOpenFor, setPickerOpenFor] = useState<string | null>(null);
   /**
    * Resolve userId → displayName com 3 níveis de fallback:
    *  1. Nome fornecido (do server, vem em senderName/otherName)
@@ -258,13 +264,72 @@ export default function ChatPanel({
             )}
             {visibleMessages.map((m) => {
               const mine = m.senderId === myUserId;
+              // Reações só pra global/dm — mensagens efêmeras de sala não têm ID persistido
+              const canReact = m.channelType === "global" || m.channelType === "dm";
+              const reactions = reactionsOverride.get(m.id) || m.reactions || [];
               return (
-                <div key={m.id} style={{ ...msgRowStyle, justifyContent: mine ? "flex-end" : "flex-start" }}>
-                  <div style={{ ...msgBubbleStyle, background: mine ? "#2563eb" : "#334155" }}>
+                <div key={m.id} style={{ ...msgRowStyle, flexDirection: "column", alignItems: mine ? "flex-end" : "flex-start" }}>
+                  <div style={{ ...msgBubbleStyle, background: mine ? "#2563eb" : "#334155", position: "relative" }}>
                     {!mine && <div style={msgSenderStyle}>{resolveName(m.senderId, m.senderName)}</div>}
                     <div style={msgContentStyle}>{m.content}</div>
                     <div style={msgTimeStyle}>{formatTime(m.createdAt)}</div>
+                    {canReact && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setPickerOpenFor((cur) => (cur === m.id ? null : m.id));
+                        }}
+                        style={addReactionBtnStyle(mine)}
+                        title="Reagir"
+                      >
+                        😊+
+                      </button>
+                    )}
                   </div>
+
+                  {/* Picker de emoji */}
+                  {pickerOpenFor === m.id && (
+                    <div style={emojiPickerStyle}>
+                      {ALLOWED_REACTIONS.map((emoji) => (
+                        <button
+                          key={emoji}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleReaction(m.id, emoji);
+                            setPickerOpenFor(null);
+                          }}
+                          style={emojiPickerBtnStyle}
+                        >
+                          {emoji}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Pills de reações existentes */}
+                  {reactions.length > 0 && (
+                    <div style={reactionsRowStyle}>
+                      {reactions.map((r) => {
+                        const reacted = r.userIds.includes(myUserId);
+                        const names = r.userIds.map((uid) => resolveName(uid)).join(", ");
+                        return (
+                          <button
+                            key={r.emoji}
+                            onClick={() => onToggleReaction(m.id, r.emoji)}
+                            style={{
+                              ...reactionPillStyle,
+                              background: reacted ? "#2563eb" : "#1e293b",
+                              borderColor: reacted ? "#60a5fa" : "#334155",
+                            }}
+                            title={names}
+                          >
+                            <span>{r.emoji}</span>
+                            <span style={{ fontSize: 11, marginLeft: 3 }}>{r.userIds.length}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -358,6 +423,53 @@ const msgContentStyle: React.CSSProperties = {
 };
 const msgTimeStyle: React.CSSProperties = {
   fontSize: 9, opacity: 0.5, marginTop: 2, textAlign: "right",
+};
+const addReactionBtnStyle = (mine: boolean): React.CSSProperties => ({
+  position: "absolute",
+  top: -10,
+  [mine ? "left" : "right"]: -8,
+  background: "#0f172a",
+  border: "1px solid #475569",
+  borderRadius: 12,
+  color: "#e2e8f0",
+  fontSize: 10,
+  padding: "1px 5px",
+  cursor: "pointer",
+  opacity: 0.7,
+});
+const emojiPickerStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 2,
+  background: "#0f172a",
+  border: "1px solid #334155",
+  borderRadius: 18,
+  padding: 4,
+  marginTop: 2,
+  boxShadow: "0 4px 12px rgba(0,0,0,0.5)",
+};
+const emojiPickerBtnStyle: React.CSSProperties = {
+  background: "transparent",
+  border: "none",
+  fontSize: 18,
+  padding: "2px 6px",
+  cursor: "pointer",
+  borderRadius: 12,
+};
+const reactionsRowStyle: React.CSSProperties = {
+  display: "flex",
+  gap: 4,
+  flexWrap: "wrap",
+  marginTop: 2,
+};
+const reactionPillStyle: React.CSSProperties = {
+  display: "inline-flex",
+  alignItems: "center",
+  border: "1px solid #334155",
+  borderRadius: 12,
+  padding: "1px 6px",
+  color: "#e2e8f0",
+  fontSize: 12,
+  cursor: "pointer",
 };
 const inputAreaStyle: React.CSSProperties = {
   display: "flex", gap: 6, padding: 10,

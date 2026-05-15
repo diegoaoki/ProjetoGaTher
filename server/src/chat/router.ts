@@ -1,7 +1,7 @@
 import { Router, Request, Response } from "express";
-import { and, desc, eq, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
 import { getDb } from "../db/client";
-import { messages, profiles, users } from "../db/schema";
+import { messages, profiles, users, messageReactions } from "../db/schema";
 import { requireAuth } from "../auth/middleware";
 
 /**
@@ -25,6 +25,44 @@ function parsePagination(req: Request): { limit: number; before: Date | null } {
     if (!isNaN(d.getTime())) before = d;
   }
   return { limit, before };
+}
+
+/**
+ * Agrega reações por mensagem em formato { messageId → [{ emoji, userIds }] }.
+ * Uma só query pra todas as msgs em vez de N+1.
+ */
+async function fetchReactionsFor(db: ReturnType<typeof getDb>, messageIds: string[]) {
+  if (messageIds.length === 0) return new Map<string, Array<{ emoji: string; userIds: string[] }>>();
+  const rows = await db
+    .select({
+      messageId: messageReactions.messageId,
+      emoji: messageReactions.emoji,
+      userId: messageReactions.userId,
+    })
+    .from(messageReactions)
+    .where(inArray(messageReactions.messageId, messageIds));
+
+  // messageId → emoji → userIds
+  const byMsg = new Map<string, Map<string, string[]>>();
+  for (const r of rows) {
+    let m = byMsg.get(r.messageId);
+    if (!m) { m = new Map(); byMsg.set(r.messageId, m); }
+    let arr = m.get(r.emoji);
+    if (!arr) { arr = []; m.set(r.emoji, arr); }
+    arr.push(r.userId);
+  }
+  const out = new Map<string, Array<{ emoji: string; userIds: string[] }>>();
+  for (const [msgId, emojiMap] of byMsg) {
+    out.set(msgId, Array.from(emojiMap, ([emoji, userIds]) => ({ emoji, userIds })));
+  }
+  return out;
+}
+
+function attachReactions<T extends { id: string }>(
+  msgs: T[],
+  reactionsByMsg: Map<string, Array<{ emoji: string; userIds: string[] }>>
+) {
+  return msgs.map((m) => ({ ...m, reactions: reactionsByMsg.get(m.id) || [] }));
 }
 
 export function createChatRouter() {
@@ -51,8 +89,8 @@ export function createChatRouter() {
         .where(where)
         .orderBy(desc(messages.createdAt))
         .limit(limit);
-      // Devolve em ordem cronológica (antigos primeiro) — facilita renderização
-      return res.json({ messages: rows.reverse() });
+      const reactionsByMsg = await fetchReactionsFor(db, rows.map((r) => r.id));
+      return res.json({ messages: attachReactions(rows.reverse(), reactionsByMsg) });
     } catch (err: any) {
       console.error("[/messages/global] erro:", err);
       return res.status(500).json({ error: "Falha ao buscar mensagens" });
@@ -87,7 +125,8 @@ export function createChatRouter() {
         .where(where)
         .orderBy(desc(messages.createdAt))
         .limit(limit);
-      return res.json({ messages: rows.reverse() });
+      const reactionsByMsg = await fetchReactionsFor(db, rows.map((r) => r.id));
+      return res.json({ messages: attachReactions(rows.reverse(), reactionsByMsg) });
     } catch (err: any) {
       console.error("[/messages/dm/:id] erro:", err);
       return res.status(500).json({ error: "Falha ao buscar mensagens" });
