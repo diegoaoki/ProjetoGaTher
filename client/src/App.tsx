@@ -1329,7 +1329,6 @@ export default function App() {
               {(["adam", "alex", "amelia", "bob"] as const).map((c) => {
                 const selected = (session.profile.characterId || "") === c;
                 const label = c.charAt(0).toUpperCase() + c.slice(1);
-                const file = label;
                 return (
                   <button
                     key={c}
@@ -1340,7 +1339,6 @@ export default function App() {
                       try {
                         const profile = await updateProfile(HTTP_URL, session.token, { characterId: c });
                         setSession({ ...session, profile });
-                        // Propaga em tempo real pros peers via Colyseus
                         roomRef.current?.send("appearance", { characterId: c });
                       } catch (e: any) {
                         setEditError(e?.message || "Falha ao salvar");
@@ -1352,20 +1350,13 @@ export default function App() {
                     style={{
                       background: selected ? "#2563eb" : "#1e293b",
                       border: selected ? "2px solid #60a5fa" : "1px solid #334155",
-                      borderRadius: 10, padding: 8,
+                      borderRadius: 10, padding: 10,
                       cursor: "pointer",
-                      display: "flex", flexDirection: "column", alignItems: "center", gap: 4,
+                      display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
                     }}
                   >
-                    <div style={{
-                      width: 48, height: 64,
-                      background: `url("/assets/characters/${file}_idle_16x16.png") 0 0 / 384px 32px no-repeat`,
-                      imageRendering: "pixelated" as React.CSSProperties["imageRendering"],
-                      transform: "scale(3)",
-                      transformOrigin: "top left",
-                      marginBottom: 32,
-                    }} />
-                    <span style={{ fontSize: 12, color: "#e2e8f0", marginTop: 8 }}>{label}</span>
+                    <CharacterPreview character={label} />
+                    <span style={{ fontSize: 12, color: "#e2e8f0" }}>{label}</span>
                   </button>
                 );
               })}
@@ -1383,6 +1374,34 @@ export default function App() {
         </div>
       )}
     </div>
+  );
+}
+
+/** Preview do personagem LimeZu pro modal de seleção. Desenha o primeiro
+ *  frame do spritesheet idle_anim em escala 3x. */
+function CharacterPreview({ character }: { character: string }) {
+  const ref = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = ref.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const img = new Image();
+    img.onload = () => {
+      ctx.imageSmoothingEnabled = false;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      // Frame 0 do spritesheet: source 16x32 → dest 48x96 (3x)
+      ctx.drawImage(img, 0, 0, 16, 32, 0, 0, 48, 96);
+    };
+    img.src = `/assets/characters/${character}_idle_anim_16x16.png`;
+  }, [character]);
+  return (
+    <canvas
+      ref={ref}
+      width={48}
+      height={96}
+      style={{ imageRendering: "pixelated", display: "block" }}
+    />
   );
 }
 
