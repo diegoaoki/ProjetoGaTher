@@ -7,6 +7,7 @@ import {
   createFloorTextures,
 } from "./SpriteFactory";
 import { getDefaultLayout, checkCollision, getCurrentRoom } from "./OfficeLayout";
+import { preloadLimezuAssets } from "./AssetLoader";
 
 interface RemotePlayer {
   container: Phaser.GameObjects.Container;
@@ -134,6 +135,12 @@ export class OfficeScene extends Phaser.Scene {
     this.myId = data.myId;
     if (data.bodyColor) this.myBodyColor = data.bodyColor;
     if (data.hairColor) this.myHairColor = data.hairColor;
+  }
+
+  preload() {
+    // Etapa 1: carrega assets do LimeZu antes de criar a scene.
+    // Etapas seguintes (2, 3, 4) vão consumir essas keys.
+    preloadLimezuAssets(this);
   }
 
   create() {
