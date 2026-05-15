@@ -125,6 +125,9 @@ export default function App() {
   // === Painel de admin ===
   const [adminOpen, setAdminOpen] = useState(false);
 
+  // === Confirmação ao clicar em "Sair" ===
+  const [confirmingLogout, setConfirmingLogout] = useState(false);
+
   // === Sessão duplicada (mesma conta em outra aba) ===
   // Quando server retorna erro DUPLICATE_SESSION, abre modal pra forçar entrada.
   const [duplicateSession, setDuplicateSession] = useState(false);
@@ -942,7 +945,13 @@ export default function App() {
           {session.user.isAdmin && (
             <button onClick={() => setAdminOpen(true)} style={iconBtnStyle(false)} title="Painel de administração">🛡️</button>
           )}
-          <button onClick={logout} style={{ ...iconBtnStyle(false), background: "#7f1d1d" }} title="Sair da conta">Sair</button>
+          <button
+            onClick={() => setConfirmingLogout(true)}
+            style={{ ...iconBtnStyle(false), background: "#7f1d1d" }}
+            title="Sair do escritório"
+          >
+            Sair
+          </button>
         </div>
         {audioStatus && <div style={{ fontSize: 11, opacity: 0.8, marginTop: 6, color: "#fbbf24" }}>{audioStatus}</div>}
       </div>
@@ -1117,6 +1126,34 @@ export default function App() {
           currentUserId={session.user.id}
           onClose={() => setAdminOpen(false)}
         />
+      )}
+
+      {confirmingLogout && (
+        <div style={modalStyle} onClick={() => setConfirmingLogout(false)}>
+          <div style={{ ...cardStyle, width: 360 }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ margin: "0 0 8px", fontSize: 20 }}>Sair do escritório?</h2>
+            <p style={{ margin: "0 0 18px", fontSize: 14, opacity: 0.8 }}>
+              Você vai voltar pra tela de login. Sua mesa reservada continua sua.
+            </p>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => setConfirmingLogout(false)}
+                style={{ ...buttonStyle, background: "#334155", color: "#e2e8f0" }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  setConfirmingLogout(false);
+                  logout();
+                }}
+                style={{ ...buttonStyle, background: "#b91c1c", color: "#fff" }}
+              >
+                Sim, sair
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {chatOpen && (
