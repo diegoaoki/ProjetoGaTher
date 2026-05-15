@@ -1002,23 +1002,27 @@ export default function App() {
     <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
       <div ref={containerRef} style={{ position: "absolute", top: 0, left: 0, width: "100vw", height: "100vh", background: "#0f172a" }} />
 
-      {/* HUD esquerdo: só info do user, online e zona */}
-      <div style={hudStyle}>
+      {/* HUD esquerdo: info do user. Compactado em mobile pra não colidir com a barra de mídia. */}
+      <div style={isMobile ? { ...hudStyle, padding: "6px 10px", fontSize: 12 } : hudStyle}>
         <div><strong>{session.profile.displayName}</strong></div>
-        <div style={{ fontSize: 12, opacity: 0.7 }}>{playerCount} no escritório</div>
-        {(() => {
-          const z = ZONE_LABELS[currentZoneId] || { label: currentZoneId, isIsolated: false };
-          return (
-            <div style={{
-              fontSize: 11,
-              marginTop: 4,
-              color: z.isIsolated ? "#60a5fa" : "#94a3b8",
-            }}>
-              {z.isIsolated ? "🔒 " : "📍 "}{z.label}
-              {z.isIsolated && <span style={{ opacity: 0.6 }}> · áudio isolado</span>}
-            </div>
-          );
-        })()}
+        {!isMobile && (
+          <>
+            <div style={{ fontSize: 12, opacity: 0.7 }}>{playerCount} no escritório</div>
+            {(() => {
+              const z = ZONE_LABELS[currentZoneId] || { label: currentZoneId, isIsolated: false };
+              return (
+                <div style={{
+                  fontSize: 11,
+                  marginTop: 4,
+                  color: z.isIsolated ? "#60a5fa" : "#94a3b8",
+                }}>
+                  {z.isIsolated ? "🔒 " : "📍 "}{z.label}
+                  {z.isIsolated && <span style={{ opacity: 0.6 }}> · áudio isolado</span>}
+                </div>
+              );
+            })()}
+          </>
+        )}
         {audioStatus && <div style={{ fontSize: 11, opacity: 0.8, marginTop: 6, color: "#fbbf24" }}>{audioStatus}</div>}
       </div>
 
@@ -1058,8 +1062,8 @@ export default function App() {
         )}
       </div>
 
-      {/* Barra inferior central com os controles principais */}
-      <div style={bottomBarStyle}>
+      {/* Barra de controles principais: rodapé central no desktop, topo central no mobile (pra não colidir com joystick/botão E) */}
+      <div style={isMobile ? { ...bottomBarStyle, top: 16, bottom: "auto" } : bottomBarStyle}>
         <button onClick={toggleMic} style={mediaBtnStyle(micOn, micOn ? "#22c55e" : "#7f1d1d")} title="Microfone">
           {micOn ? "🎤" : "🔇"}
         </button>

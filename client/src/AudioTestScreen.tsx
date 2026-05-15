@@ -178,10 +178,13 @@ export default function AudioTestScreen({ onClose }: Props) {
 }
 
 const overlayStyle: React.CSSProperties = {
+  position: "fixed", inset: 0,
   width: "100vw", height: "100vh",
   display: "flex", alignItems: "center", justifyContent: "center",
-  background: "linear-gradient(135deg, #0f172a, #1e293b)",
+  background: "#0f172af2",
   overflowY: "auto", padding: 16,
+  zIndex: 100,
+  backdropFilter: "blur(4px)",
 };
 const cardStyle: React.CSSProperties = {
   background: "#1e293b", border: "1px solid #334155",
