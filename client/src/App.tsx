@@ -347,7 +347,8 @@ export default function App() {
         },
         scene: [OfficeScene],
         physics: { default: "arcade" },
-        render: { antialias: false, pixelArt: true, powerPreference: "high-performance" },
+        // pixelArt:true será reativado quando colocarmos os avatares/mobília do LimeZu (Etapa 3+)
+        render: { antialias: true, pixelArt: false, powerPreference: "high-performance" },
         fps: { target: 60, forceSetTimeOut: false },
         dom: { createContainer: true },
       });

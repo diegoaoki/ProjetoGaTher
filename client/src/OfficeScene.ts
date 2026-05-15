@@ -147,9 +147,10 @@ export class OfficeScene extends Phaser.Scene {
   create() {
     createFloorTextures(this);
     createFurnitureTextures(this);
-    // Etapa 2: sobrescreve as texturas de móveis com tiles do LimeZu.
-    // Roda DEPOIS de createFurnitureTextures pra substituir as keys.
-    registerFurnitureTextures(this);
+    // Etapa 2 DESATIVADA até termos coordenadas corretas do tileset LimeZu.
+    // Pra ativar: descomenta a linha abaixo. Mapeamento em FurnitureTiles.ts.
+    // Use /?inspect=tiles pra encontrar (col,row) certos dos móveis.
+    // registerFurnitureTextures(this);
     this.drawFloor();
     this.drawWalls();
     this.drawFurniture();
