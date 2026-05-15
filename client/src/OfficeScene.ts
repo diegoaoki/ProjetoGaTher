@@ -1,13 +1,16 @@
 import Phaser from "phaser";
 import { Room } from "colyseus.js";
 import {
-  createAvatarTexture,
-  createAvatarAnimations,
   createFurnitureTextures,
   createFloorTextures,
 } from "./SpriteFactory";
 import { getDefaultLayout, checkCollision, getCurrentRoom } from "./OfficeLayout";
-import { preloadLimezuAssets } from "./AssetLoader";
+import {
+  preloadLimezuAssets,
+  createCharacterAnimations,
+  pickCharacterFor,
+  CharacterId,
+} from "./AssetLoader";
 import { registerFurnitureTextures } from "./FurnitureTiles";
 
 interface RemotePlayer {
@@ -147,8 +150,10 @@ export class OfficeScene extends Phaser.Scene {
   create() {
     createFloorTextures(this);
     createFurnitureTextures(this);
-    // Etapa 2 ignorada — vamos usar o pacote LimeZu pago em vez do free.
+    // Etapa 2 (mobília) — pulada por enquanto.
     // registerFurnitureTextures(this);
+    // Etapa 3 — animações dos personagens LimeZu (4 personagens × 4 direções × {idle, walk})
+    createCharacterAnimations(this);
     this.drawFloor();
     this.drawWalls();
     this.drawFurniture();
@@ -659,15 +664,18 @@ export class OfficeScene extends Phaser.Scene {
 
   private createMyAvatar(player: any) {
     this.myUserId = player.userId || "";
-    this.myTextureKey = `avatar_${this.myBodyColor}_${this.myHairColor}`;
-    createAvatarTexture(this, this.myTextureKey, this.myBodyColor, this.myHairColor);
-    createAvatarAnimations(this, this.myTextureKey);
+    // Avatar é decidido pelo hash do userId — consistente em todas as sessões.
+    // Cores antigas (bodyColor/hairColor) viraram irrelevantes; mantidas no DB por compat.
+    const charId: CharacterId = pickCharacterFor(this.myUserId);
+    this.myTextureKey = charId;
 
-    this.myRing = this.add.circle(0, 4, 22, 0x4ade80, 0);
+    this.myRing = this.add.circle(0, 6, 16, 0x4ade80, 0);
     this.myRing.setStrokeStyle(3, 0x4ade80);
     this.myRing.setVisible(false);
 
-    this.mySprite = this.add.sprite(0, 0, this.myTextureKey, 0);
+    // Sprite usa o spritesheet `${charId}_idle` (frame 0 inicial)
+    this.mySprite = this.add.sprite(0, 0, `${charId}_idle`, 0);
+    this.mySprite.setScale(2); // 16x32 → renderiza 32x64 (visualmente equivalente ao canvas antigo)
 
     this.myNameText = this.add.text(0, -28, player.name + " (você)", {
       fontFamily: "system-ui, -apple-system",
@@ -696,8 +704,10 @@ export class OfficeScene extends Phaser.Scene {
     this.cameras.main.startFollow(this.myContainer, true, 0.1, 0.1);
     this.cameras.main.setZoom(1.3);
 
+    // Tocar idle inicial — animation key: `${charId}_${dir}_idle`
     this.mySprite.play(`${this.myTextureKey}_down_idle`);
 
+    // Mantém appearance no server (cores não afetam visual no novo sistema, mas atualizam snapshot)
     this.room.send("appearance", {
       bodyColor: this.myBodyColor,
       hairColor: this.myHairColor,
@@ -731,52 +741,33 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   /**
-   * Substitui a texture do meu avatar quando troco cores (modal 🎨).
-   * Cria texture+animações novas se ainda não existem pra essa combinação.
+   * Antes substituía a texture quando bodyColor/hairColor mudava.
+   * No sistema novo (LimeZu), o avatar é determinado pelo userId via hash,
+   * então mudanças de cor NÃO afetam visual. Mantida pra compat, mas no-op.
    */
   private refreshMyAvatarTexture(bodyColor: string, hairColor: string) {
-    if (!this.mySprite) return;
     this.myBodyColor = bodyColor;
     this.myHairColor = hairColor;
-    const newKey = `avatar_${bodyColor}_${hairColor}`;
-    if (!this.textures.exists(newKey)) {
-      createAvatarTexture(this, newKey, bodyColor, hairColor);
-      createAvatarAnimations(this, newKey);
-    }
-    this.myTextureKey = newKey;
-    const anim = this.isMoving ? "walk" : "idle";
-    const animKey = `${newKey}_${this.myDirection}_${anim}`;
-    if (this.anims.exists(animKey)) this.mySprite.play(animKey, true);
-    else this.mySprite.setTexture(newKey, 0);
+    // sprite continua o mesmo (charId fixo pelo userId)
   }
 
-  /** Mesma lógica pra peers remotos quando mudam aparência. */
   private refreshRemoteAvatarTexture(rp: RemotePlayer, bodyColor: string, hairColor: string) {
     rp.bodyColor = bodyColor;
     rp.hairColor = hairColor;
-    const newKey = `avatar_${bodyColor}_${hairColor}`;
-    if (!this.textures.exists(newKey)) {
-      createAvatarTexture(this, newKey, bodyColor, hairColor);
-      createAvatarAnimations(this, newKey);
-    }
-    rp.textureKey = newKey;
-    const animKey = `${newKey}_${rp.direction}_idle`;
-    if (this.anims.exists(animKey)) rp.sprite.play(animKey, true);
-    else rp.sprite.setTexture(newKey, 0);
+    // idem — char não muda
   }
 
   private createRemoteAvatar(sessionId: string, player: any) {
-    const bodyColor = player.color || "#60a5fa";
-    const hairColor = player.hairColor || "#3b2c20";
-    const textureKey = `avatar_${bodyColor}_${hairColor}`;
-    createAvatarTexture(this, textureKey, bodyColor, hairColor);
-    createAvatarAnimations(this, textureKey);
+    const userId: string = player.userId || "";
+    const charId: CharacterId = pickCharacterFor(userId);
+    const textureKey = charId;
 
-    const ring = this.add.circle(0, 4, 22, 0x4ade80, 0);
+    const ring = this.add.circle(0, 6, 16, 0x4ade80, 0);
     ring.setStrokeStyle(3, 0x4ade80);
     ring.setVisible(false);
 
-    const sprite = this.add.sprite(0, 0, textureKey, 0);
+    const sprite = this.add.sprite(0, 0, `${charId}_idle`, 0);
+    sprite.setScale(2);
 
     const nameText = this.add.text(0, -28, player.name, {
       fontFamily: "system-ui, -apple-system",
@@ -789,11 +780,13 @@ export class OfficeScene extends Phaser.Scene {
 
     const container = this.add.container(player.x, player.y, [ring, sprite, nameText]);
     container.setDepth(player.y);
-    sprite.play(`${textureKey}_down_idle`);
+    sprite.play(`${charId}_down_idle`);
 
     this.remotePlayers.set(sessionId, {
       container, sprite, ring, nameText,
-      bodyColor, hairColor, textureKey,
+      bodyColor: player.color || "",
+      hairColor: player.hairColor || "",
+      textureKey, // charId (usado pra montar key da anim no update)
       targetX: player.x, targetY: player.y,
       direction: player.direction || "down",
     });
