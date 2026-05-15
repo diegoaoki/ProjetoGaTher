@@ -128,6 +128,20 @@ export default function App() {
   // === Confirmação ao clicar em "Sair" ===
   const [confirmingLogout, setConfirmingLogout] = useState(false);
 
+  // Aviso do browser ao fechar aba/janela quando dentro do escritório.
+  // O browser mostra dialog padrão ("Sair do site?") — não dá pra customizar
+  // a mensagem desde 2017, mas a confirmação aparece.
+  useEffect(() => {
+    if (conn !== "connected") return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      // Chrome/Edge ainda exigem returnValue setado (mesmo deprecated)
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [conn]);
+
   // === Sessão duplicada (mesma conta em outra aba) ===
   // Quando server retorna erro DUPLICATE_SESSION, abre modal pra forçar entrada.
   const [duplicateSession, setDuplicateSession] = useState(false);
