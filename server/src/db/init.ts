@@ -79,7 +79,7 @@ export async function initDb(): Promise<void> {
     // Migration automática: se a versão do layout de mesas mudou, limpa
     // reservas (porque as coordenadas mudaram e as antigas viraram lixo).
     // Bump a string abaixo toda vez que mudar posições/quantidade de mesas.
-    const DESK_LAYOUT_VERSION = "2026-05-14-rooms";
+    const DESK_LAYOUT_VERSION = "2026-05-15-bigmap";
     const meta = await client.query(
       `SELECT value FROM app_meta WHERE key = $1`,
       ["desk_layout_version"]

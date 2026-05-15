@@ -24,6 +24,6 @@ export class Desk extends Schema {
 export class OfficeState extends Schema {
   @type({ map: Player }) players = new MapSchema<Player>();
   @type({ map: Desk }) desks = new MapSchema<Desk>();
-  @type("number") worldWidth: number = 1024;
-  @type("number") worldHeight: number = 1024;
+  @type("number") worldWidth: number = 2560;
+  @type("number") worldHeight: number = 1760;
 }

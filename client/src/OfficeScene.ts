@@ -40,8 +40,10 @@ interface DeskOverlay {
 
 const SPEED = 180;
 const SYNC_INTERVAL = 50;
-const WORLD_W = 1024;
-const WORLD_H = 1024;
+// Tamanho do mundo lido do layout (Fase A: 80×55 tiles = 2560×1760 px).
+// Default mantido caso layout falhe — não deve acontecer em produção.
+const WORLD_W = 2560;
+const WORLD_H = 1760;
 const PLAYER_HALF = 12;
 const DESK_CLAIM_RADIUS = 70;
 

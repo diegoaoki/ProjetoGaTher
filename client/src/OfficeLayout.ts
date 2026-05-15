@@ -1,11 +1,18 @@
 /**
- * Layout declarativo do escritório com hitboxes pra colisão e zonas
- * isoladas (cada zona tem áudio independente — quem está em zonas
- * diferentes não se ouve, independente da distância).
+ * Layout do escritório virtual (Fase A do prompt-escritorio.txt).
+ *
+ * Mapa: 80×55 tiles (32px cada) = 2560×1760 px.
+ * 15 zonas distribuídas em 3 colunas:
+ *   Esquerda  (col 0-19):  Diretoria 1, Diretoria 2, Recepção, Copa, Segurança
+ *   Centro    (col 20-59): Desenvolvimento, Dados, Infra, Financeiro
+ *   Direita   (col 60-79): Reunião XG, 4× Reunião P, 2× Reunião M, 2× Reunião G
+ *   Inferior  (col 0-59):  Lounge (faixa)
+ *
+ * Convenção de coordenadas: pixels. 1 tile = 32 px.
  */
 
 export interface Hitbox {
-  offsetX: number; // deslocamento do centro do sprite
+  offsetX: number;
   offsetY: number;
   w: number;
   h: number;
@@ -17,23 +24,20 @@ export interface FurnitureItem {
   y: number;
   depth?: number;
   hitbox?: Hitbox;
-  tag?: "tv" | "meeting-zone";
-  // Pra mesas reserváveis: id estável que bate com o catálogo do server
+  tag?: string;
   deskId?: string;
 }
 
-/** Parede com colisão. Usada pra delimitar salas (com vãos pra entrar). */
 export interface Wall {
-  x: number;       // canto superior esquerdo
+  x: number;
   y: number;
   w: number;
   h: number;
 }
 
-/** Zona com áudio isolado. Se você está numa Room, só ouve quem também está. */
 export interface Room {
-  id: string;         // ex: "meeting-large", "open"
-  label: string;      // ex: "Sala grande", "Open space" — mostrado no HUD
+  id: string;
+  label: string;
   x: number;
   y: number;
   w: number;
@@ -49,7 +53,6 @@ export interface OfficeLayoutData {
   rooms: Room[];
 }
 
-// Hitboxes padronizadas por tipo de móvel
 const HITBOXES: Record<string, Hitbox> = {
   desk:        { offsetX: -48, offsetY: -10, w: 96, h: 32 },
   chair:       { offsetX: -16, offsetY: -10, w: 32, h: 24 },
@@ -61,118 +64,140 @@ const HITBOXES: Record<string, Hitbox> = {
   tv:          { offsetX: -36, offsetY: -28, w: 72, h: 14 },
 };
 
-/**
- * Mapa atual:
- *   - Sala Grande (esquerda superior): 2 mesas privadas (desk-1, desk-2)
- *   - Sala Pequena A (esquerda meio): 1 mesa privada (desk-3)
- *   - Sala Pequena B (esquerda baixo): 1 mesa privada (desk-4)
- *   - Open space (direita): 4 mesas (desk-5 a desk-8) + lounge no canto
- *
- * IDs das mesas DEVEM bater com server/src/desks.ts.
- */
+const TILE = 32;
+const WALL_T = 8;
 
-export function getDefaultLayout(): OfficeLayoutData {
-  const items: FurnitureItem[] = [];
+// === Definições de zonas em TILES (depois convertidas pra px) ===
+type ZoneDef = {
+  id: string;
+  label: string;
+  x: number; y: number;
+  w: number; h: number;
+  /** Vão na parede (lado, posição em tiles dentro do lado, largura do vão).
+   *  side: "top" | "bottom" | "left" | "right". Pode ter múltiplos. */
+  openings?: Array<{ side: "top" | "bottom" | "left" | "right"; pos: number; width?: number }>;
+};
 
-  const addItem = (type: string, x: number, y: number, depth?: number, tag?: FurnitureItem["tag"]) => {
-    items.push({ type, x, y, depth, hitbox: HITBOXES[type], tag });
-  };
+const ZONES: ZoneDef[] = [
+  // === Coluna esquerda ===
+  { id: "office_1",       label: "Diretoria 1",        x: 0,  y: 0,  w: 20, h: 9,
+    openings: [{ side: "right", pos: 4 }] },
+  { id: "office_2",       label: "Diretoria 2",        x: 0,  y: 9,  w: 20, h: 9,
+    openings: [{ side: "right", pos: 4 }] },
+  { id: "lobby",          label: "Recepção",           x: 0,  y: 18, w: 14, h: 8,
+    openings: [{ side: "right", pos: 4, width: 4 }, { side: "bottom", pos: 4, width: 4 }] },
+  { id: "kitchen",        label: "Copa",               x: 0,  y: 26, w: 14, h: 12,
+    openings: [{ side: "right", pos: 4, width: 4 }] },
+  { id: "security_room",  label: "Segurança",          x: 0,  y: 38, w: 14, h: 5,
+    openings: [{ side: "right", pos: 2 }] },
 
-  // === Mesas reserváveis (8 total) ===
-  const desks: Array<[string, number, number]> = [
-    // Sala grande
-    ["desk-1", 160, 200],
-    ["desk-2", 320, 200],
-    // Sala pequena A
-    ["desk-3", 220, 480],
-    // Sala pequena B
-    ["desk-4", 220, 680],
-    // Open space
-    ["desk-5", 600, 220],
-    ["desk-6", 780, 220],
-    ["desk-7", 600, 420],
-    ["desk-8", 780, 420],
+  // === Coluna central ===
+  { id: "dev_area",       label: "Desenvolvimento",    x: 20, y: 0,  w: 40, h: 11,
+    openings: [{ side: "left", pos: 5, width: 3 }] },
+  { id: "data_area",      label: "Dados",              x: 20, y: 11, w: 40, h: 10,
+    openings: [{ side: "left", pos: 4, width: 3 }] },
+  { id: "infra_area",     label: "Infra",              x: 20, y: 21, w: 40, h: 10,
+    openings: [{ side: "left", pos: 4, width: 3 }] },
+  { id: "finance_area",   label: "Financeiro",         x: 20, y: 31, w: 40, h: 11,
+    openings: [{ side: "left", pos: 5, width: 3 }] },
+
+  // === Coluna direita: reuniões ===
+  { id: "meeting_xg",     label: "Reunião XG",         x: 60, y: 0,  w: 20, h: 11,
+    openings: [{ side: "left", pos: 5 }] },
+  { id: "meeting_p1",     label: "Reunião P1",         x: 60, y: 11, w: 20, h: 5,
+    openings: [{ side: "left", pos: 2 }] },
+  { id: "meeting_p2",     label: "Reunião P2",         x: 60, y: 16, w: 20, h: 5,
+    openings: [{ side: "left", pos: 2 }] },
+  { id: "meeting_p3",     label: "Reunião P3",         x: 60, y: 21, w: 20, h: 5,
+    openings: [{ side: "left", pos: 2 }] },
+  { id: "meeting_p4",     label: "Reunião P4",         x: 60, y: 26, w: 20, h: 5,
+    openings: [{ side: "left", pos: 2 }] },
+  { id: "meeting_m1",     label: "Reunião M1",         x: 60, y: 31, w: 20, h: 6,
+    openings: [{ side: "left", pos: 2 }] },
+  { id: "meeting_m2",     label: "Reunião M2",         x: 60, y: 37, w: 20, h: 6,
+    openings: [{ side: "left", pos: 2 }] },
+  { id: "meeting_g1",     label: "Reunião G1",         x: 60, y: 43, w: 20, h: 6,
+    openings: [{ side: "left", pos: 2 }] },
+  { id: "meeting_g2",     label: "Reunião G2",         x: 60, y: 49, w: 20, h: 6,
+    openings: [{ side: "left", pos: 2 }] },
+
+  // === Lounge (faixa inferior) ===
+  { id: "lounge",         label: "Lounge",             x: 0,  y: 43, w: 60, h: 12,
+    openings: [{ side: "top", pos: 8, width: 4 }, { side: "top", pos: 30, width: 4 }] },
+];
+
+/** Gera as 4 paredes de uma zona com vãos (openings) onde definido. */
+function wallsForZone(z: ZoneDef): Wall[] {
+  const out: Wall[] = [];
+  const x = z.x * TILE;
+  const y = z.y * TILE;
+  const w = z.w * TILE;
+  const h = z.h * TILE;
+
+  const sides: Array<{ side: "top" | "bottom" | "left" | "right"; segments: Wall[] }> = [
+    { side: "top",    segments: [{ x, y, w, h: WALL_T }] },
+    { side: "bottom", segments: [{ x, y: y + h - WALL_T, w, h: WALL_T }] },
+    { side: "left",   segments: [{ x, y, w: WALL_T, h }] },
+    { side: "right",  segments: [{ x: x + w - WALL_T, y, w: WALL_T, h }] },
   ];
-  desks.forEach(([id, x, y]) => {
-    items.push({ type: "desk", x, y, depth: 1, hitbox: HITBOXES.desk, deskId: id });
-    items.push({ type: "monitor", x, y: y - 18, depth: 2 });
-    addItem("chair", x, y + 36, 0);
-  });
 
-  // === Lounge (open space, canto inferior direito) ===
-  addItem("sofa", 780, 800, 1);
-  addItem("coffeeTable", 780, 860, 2);
-  addItem("plant", 730, 770, 3);
-  addItem("plant", 850, 770, 3);
+  for (const s of sides) {
+    const opening = z.openings?.find((o) => o.side === s.side);
+    if (!opening) {
+      out.push(...s.segments);
+      continue;
+    }
+    const gapWidth = (opening.width ?? 2) * TILE;
+    const gapStart = opening.pos * TILE;
 
-  // === Decoração das salas ===
-  addItem("whiteboard", 240, 80, 0);     // sala grande
-  addItem("plant", 80, 80, 3);
-  addItem("plant", 400, 80, 3);
-  addItem("bookshelf", 80, 480, 1);      // sala pequena A
-  addItem("bookshelf", 80, 680, 1);      // sala pequena B
-  addItem("plant", 480, 920, 3);         // open space
-  addItem("plant", 920, 920, 3);
-
-  return {
-    width: 1024,
-    height: 1024,
-    floorRegions: [
-      // Salas com tapete pra dar identidade visual
-      { x: 60, y: 60, w: 380, h: 320, type: "rug" },   // sala grande
-      { x: 60, y: 400, w: 320, h: 180, type: "rug" },  // sala pequena A
-      { x: 60, y: 600, w: 320, h: 180, type: "rug" },  // sala pequena B
-      { x: 720, y: 760, w: 220, h: 180, type: "rug" }, // lounge
-    ],
-    furniture: items,
-    walls: WALLS,
-    rooms: ROOMS,
-  };
+    // Quebra a parede em 2 segmentos com vão no meio
+    const seg = s.segments[0];
+    if (s.side === "top" || s.side === "bottom") {
+      // horizontal
+      out.push({ x: seg.x, y: seg.y, w: gapStart, h: seg.h });
+      out.push({ x: seg.x + gapStart + gapWidth, y: seg.y, w: seg.w - gapStart - gapWidth, h: seg.h });
+    } else {
+      // vertical
+      out.push({ x: seg.x, y: seg.y, w: seg.w, h: gapStart });
+      out.push({ x: seg.x, y: seg.y + gapStart + gapWidth, w: seg.w, h: seg.h - gapStart - gapWidth });
+    }
+  }
+  return out;
 }
 
-// =================================================================
-//  Paredes (com colisão). Cada sala é uma caixa com um vão de 80px
-//  pra avatar entrar/sair. WALL_THICKNESS = 8px.
-// =================================================================
-const WT = 8; // espessura padrão da parede
+export function getDefaultLayout(): OfficeLayoutData {
+  const W_TILES = 80;
+  const H_TILES = 55;
+  const items: FurnitureItem[] = [];
 
-const WALLS: Wall[] = [
-  // === Sala Grande (60,60) → (440,380). Vão na lateral direita, y 200-280 ===
-  // top
-  { x: 60, y: 60, w: 380, h: WT },
-  // left
-  { x: 60, y: 60, w: WT, h: 320 },
-  // bottom
-  { x: 60, y: 372, w: 380, h: WT },
-  // right (com vão): de y=60 até y=200, e de y=280 até y=380
-  { x: 432, y: 60, w: WT, h: 140 },
-  { x: 432, y: 280, w: WT, h: 100 },
+  // Gera paredes a partir das zonas + bordas externas
+  const walls: Wall[] = [];
+  for (const z of ZONES) {
+    walls.push(...wallsForZone(z));
+  }
 
-  // === Sala Pequena A (60,400) → (380,580). Vão direita y 460-540 ===
-  { x: 60, y: 400, w: 320, h: WT },
-  { x: 60, y: 400, w: WT, h: 180 },
-  { x: 60, y: 572, w: 320, h: WT },
-  { x: 372, y: 400, w: WT, h: 60 },
-  { x: 372, y: 540, w: WT, h: 40 },
+  // Rooms em pixels (pra colisão / áudio isolado)
+  const rooms: Room[] = ZONES.map((z) => ({
+    id: z.id,
+    label: z.label,
+    x: z.x * TILE,
+    y: z.y * TILE,
+    w: z.w * TILE,
+    h: z.h * TILE,
+  }));
 
-  // === Sala Pequena B (60,600) → (380,780). Vão direita y 660-740 ===
-  { x: 60, y: 600, w: 320, h: WT },
-  { x: 60, y: 600, w: WT, h: 180 },
-  { x: 60, y: 772, w: 320, h: WT },
-  { x: 372, y: 600, w: WT, h: 60 },
-  { x: 372, y: 740, w: WT, h: 40 },
-];
+  // Tapetes nas zonas (pra dar identidade visual diferente do parquet padrão)
+  const floorRegions: OfficeLayoutData["floorRegions"] = [];
 
-// =================================================================
-//  Zonas com áudio isolado.
-//  Player dentro de uma room só ouve quem está na mesma.
-//  Player fora de qualquer room = zone "open".
-// =================================================================
-const ROOMS: Room[] = [
-  { id: "meeting-large", label: "Sala grande",   x: 60,  y: 60,  w: 380, h: 320 },
-  { id: "meeting-a",     label: "Sala pequena A", x: 60,  y: 400, w: 320, h: 180 },
-  { id: "meeting-b",     label: "Sala pequena B", x: 60,  y: 600, w: 320, h: 180 },
-];
+  return {
+    width: W_TILES * TILE,
+    height: H_TILES * TILE,
+    floorRegions,
+    furniture: items,
+    walls,
+    rooms,
+  };
+}
 
 /**
  * Verifica colisão entre um retângulo (avatar) e qualquer hitbox de móvel
@@ -189,7 +214,6 @@ export function checkCollision(
   const pTop = py - playerHalfSize / 2;
   const pBottom = py + playerHalfSize;
 
-  // Móveis
   for (const item of layout.furniture) {
     if (!item.hitbox) continue;
     const hb = item.hitbox;
@@ -202,7 +226,6 @@ export function checkCollision(
     }
   }
 
-  // Paredes (hitbox direto: x/y/w/h é o retângulo bloqueante)
   for (const wall of layout.walls) {
     if (pRight > wall.x && pLeft < wall.x + wall.w && pBottom > wall.y && pTop < wall.y + wall.h) {
       return true;
@@ -212,21 +235,17 @@ export function checkCollision(
   return false;
 }
 
-/**
- * Retorna a Room atual do player. Se está fora de qualquer room
- * delimitada, retorna a zona padrão "open".
- */
+/** Retorna a Room atual do player; "open" se está fora de qualquer zona. */
 export function getCurrentRoom(px: number, py: number, layout: OfficeLayoutData): Room {
   for (const room of layout.rooms) {
     if (px >= room.x && px <= room.x + room.w && py >= room.y && py <= room.y + room.h) {
       return room;
     }
   }
-  // Zona implícita "open" — todo lugar fora das salas
-  return { id: "open", label: "Open space", x: 0, y: 0, w: layout.width, h: layout.height };
+  return { id: "open", label: "Corredor", x: 0, y: 0, w: layout.width, h: layout.height };
 }
 
-// Compatibilidade com chamadas antigas (OfficeScene ainda usa getCurrentZone)
+// Compatibilidade com chamadas antigas
 export function getCurrentZone(px: number, py: number, layout: OfficeLayoutData): { id: string; tag: string } | null {
   const room = getCurrentRoom(px, py, layout);
   return { id: room.id, tag: "room" };

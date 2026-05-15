@@ -70,22 +70,12 @@ interface AuthData {
 }
 
 /**
- * Spawn points conhecidos como SEGUROS (longe de qualquer móvel).
- * Usado apenas como fallback — se o user tem mesa reservada, spawna nela.
+ * Spawn points na Recepção do novo mapa (Fase A do prompt-escritorio.txt).
+ * Recepção fica em (0, 576) – (448, 832). Spawnamos no centro com jitter.
  */
 const SPAWN_POINTS: Array<[number, number]> = [
-  [450, 420],
-  [400, 420],
-  [500, 420],
-  [550, 420],
-  [380, 680],
-  [480, 680],
-  [580, 680],
-  [380, 720],
-  [480, 720],
-  [580, 720],
-  [620, 420],
-  [340, 680],
+  [200, 700], [240, 700], [180, 720], [260, 720],
+  [200, 750], [240, 750], [220, 680], [220, 770],
 ];
 
 export class OfficeRoom extends Room<OfficeState> {

@@ -18,16 +18,11 @@ export interface DeskInfo {
   y: number;
 }
 
-export const DESKS: DeskInfo[] = [
-  { id: "desk-1", x: 160, y: 200 },
-  { id: "desk-2", x: 320, y: 200 },
-  { id: "desk-3", x: 220, y: 480 },
-  { id: "desk-4", x: 220, y: 680 },
-  { id: "desk-5", x: 600, y: 220 },
-  { id: "desk-6", x: 780, y: 220 },
-  { id: "desk-7", x: 600, y: 420 },
-  { id: "desk-8", x: 780, y: 420 },
-];
+/**
+ * Fase A do mapa grande: array vazio enquanto não temos mesas posicionadas
+ * (Fase B vai re-popular com mesas em dev_area, data_area, infra_area, finance_area).
+ */
+export const DESKS: DeskInfo[] = [];
 
 const DESK_BY_ID = new Map(DESKS.map((d) => [d.id, d]));
 
