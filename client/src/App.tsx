@@ -129,6 +129,54 @@ export default function App() {
   // === Confirmação ao clicar em "Sair" ===
   const [confirmingLogout, setConfirmingLogout] = useState(false);
 
+  // === Menu de configurações (engrenagem) ===
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  // === Toast unificado pra mensagens efêmeras do HUD ===
+  const [hudToast, setHudToast] = useState<string | null>(null);
+  useEffect(() => {
+    if (!hudToast) return;
+    const t = setTimeout(() => setHudToast(null), 2500);
+    return () => clearTimeout(t);
+  }, [hudToast]);
+
+  // ENTER (fora de inputs) → toggla o chat
+  useEffect(() => {
+    if (conn !== "connected") return;
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
+      if (e.key === "Enter") {
+        e.preventDefault();
+        setChatOpen((v) => !v);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [conn]);
+
+  // Dica rápida de controles ao entrar (some em 5s)
+  useEffect(() => {
+    if (conn !== "connected") return;
+    setHudToast(isMobile
+      ? "Joystick pra andar • E pra reservar mesa"
+      : "WASD pra mover • Enter abre o chat • E reserva mesa");
+  }, [conn, isMobile]);
+
+  // Mostra toast pequeno em vez do bloco azul quando câmera está deslocada
+  const cameraToastShownRef = useRef(false);
+  useEffect(() => {
+    if (cameraFollowing) {
+      cameraToastShownRef.current = false;
+      return;
+    }
+    // Só mostra UMA vez por desfocar — depois fica em silêncio
+    if (!cameraToastShownRef.current) {
+      cameraToastShownRef.current = true;
+      setHudToast("Câmera deslocada — aperte C ou ande pra voltar");
+    }
+  }, [cameraFollowing]);
+
   // Pede permissão de notificações na primeira vez que conecta no escritório.
   // Cacheado em localStorage — não pede de novo nas próximas sessões.
   useEffect(() => {
@@ -951,6 +999,7 @@ export default function App() {
     <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
       <div ref={containerRef} style={{ position: "absolute", top: 0, left: 0, width: "100vw", height: "100vh", background: "#0f172a" }} />
 
+      {/* HUD esquerdo: só info do user, online e zona */}
       <div style={hudStyle}>
         <div><strong>{session.profile.displayName}</strong></div>
         <div style={{ fontSize: 12, opacity: 0.7 }}>{playerCount} no escritório</div>
@@ -967,51 +1016,65 @@ export default function App() {
             </div>
           );
         })()}
-        <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-          <button onClick={toggleMic} style={iconBtnStyle(micOn)} title="Microfone">{micOn ? "🎤" : "🔇"}</button>
-          <button onClick={toggleCam} style={iconBtnStyle(camOn)} title="Câmera">{camOn ? "📹" : "🚫"}</button>
-          <button onClick={toggleScreen} style={iconBtnStyle(screenOn)} title="Compartilhar tela">{screenOn ? "🛑" : "🖥️"}</button>
-          <button onClick={() => setSidebarOpen((v) => !v)} style={iconBtnStyle(sidebarOpen)} title="Quem está online">👥</button>
-          <button
-            onClick={() => setChatOpen((v) => !v)}
-            style={{ ...iconBtnStyle(chatOpen), position: "relative" }}
-            title="Chat"
-          >
-            💬
-            {totalUnread > 0 && (
-              <span style={{
-                position: "absolute", top: -4, right: -4,
-                background: "#ef4444", color: "#fff",
-                fontSize: 9, fontWeight: 700,
-                borderRadius: 8, padding: "1px 5px",
-                minWidth: 14, textAlign: "center",
-              }}>
-                {totalUnread > 99 ? "99+" : totalUnread}
-              </span>
-            )}
-          </button>
-          {myDeskId && (
-            <button
-              onClick={() => roomRef.current?.send("teleport:to-desk", { deskId: myDeskId })}
-              style={iconBtnStyle(false)}
-              title={`Ir pra mesa ${labelOf(myDeskId)}`}
-            >
-              📍
-            </button>
-          )}
-          <button onClick={() => setEditingAvatar(true)} style={iconBtnStyle(false)} title="Editar avatar">🎨</button>
-          {session.user.isAdmin && (
-            <button onClick={() => setAdminOpen(true)} style={iconBtnStyle(false)} title="Painel de administração">🛡️</button>
-          )}
-          <button
-            onClick={() => setConfirmingLogout(true)}
-            style={{ ...iconBtnStyle(false), background: "#7f1d1d" }}
-            title="Sair do escritório"
-          >
-            Sair
-          </button>
-        </div>
         {audioStatus && <div style={{ fontSize: 11, opacity: 0.8, marginTop: 6, color: "#fbbf24" }}>{audioStatus}</div>}
+      </div>
+
+      {/* Engrenagem ⚙️ canto superior direito com submenu */}
+      <div style={{ position: "absolute", top: 16, right: 16, zIndex: 12 }}>
+        <button
+          onClick={() => setSettingsOpen((v) => !v)}
+          style={pillBtnStyle(settingsOpen)}
+          title="Configurações"
+        >
+          ⚙️
+        </button>
+        {settingsOpen && (
+          <div style={settingsMenuStyle} onClick={() => setSettingsOpen(false)}>
+            <button onClick={() => setEditingAvatar(true)} style={menuItemStyle}>🎨 Editar avatar</button>
+            <button onClick={() => setSidebarOpen(true)} style={menuItemStyle}>👥 Quem está online</button>
+            {session.user.isAdmin && (
+              <button onClick={() => setAdminOpen(true)} style={menuItemStyle}>🛡️ Admin</button>
+            )}
+            {myDeskId && (
+              <button
+                onClick={() => roomRef.current?.send("teleport:to-desk", { deskId: myDeskId })}
+                style={menuItemStyle}
+              >
+                📍 Ir pra minha mesa
+              </button>
+            )}
+            <div style={{ height: 1, background: "#334155", margin: "4px 0" }} />
+            <button
+              onClick={() => setConfirmingLogout(true)}
+              style={{ ...menuItemStyle, color: "#f87171" }}
+            >
+              🚪 Sair do escritório
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Barra inferior central com os controles principais */}
+      <div style={bottomBarStyle}>
+        <button onClick={toggleMic} style={mediaBtnStyle(micOn, micOn ? "#22c55e" : "#7f1d1d")} title="Microfone">
+          {micOn ? "🎤" : "🔇"}
+        </button>
+        <button onClick={toggleCam} style={mediaBtnStyle(camOn, camOn ? "#22c55e" : "#7f1d1d")} title="Câmera">
+          {camOn ? "📹" : "🚫"}
+        </button>
+        <button onClick={toggleScreen} style={mediaBtnStyle(screenOn, screenOn ? "#2563eb" : "#1e293b")} title="Compartilhar tela">
+          🖥️
+        </button>
+        <button
+          onClick={() => setChatOpen((v) => !v)}
+          style={{ ...mediaBtnStyle(chatOpen, chatOpen ? "#2563eb" : "#1e293b"), position: "relative" }}
+          title="Chat (Enter)"
+        >
+          💬
+          {totalUnread > 0 && (
+            <span style={badgeOnMediaBtn}>{totalUnread > 99 ? "99+" : totalUnread}</span>
+          )}
+        </button>
       </div>
 
       {sidebarOpen && (
@@ -1088,17 +1151,7 @@ export default function App() {
       }} />
 
 
-      {!isMobile && (
-        <div style={hintStyle}>
-          WASD/setas pra mover • <kbd style={kbdStyle}>botão direito</kbd> arrasta a câmera • <kbd style={kbdStyle}>C</kbd> centraliza
-        </div>
-      )}
 
-      {!cameraFollowing && !isMobile && (
-        <div style={cameraHintStyle}>
-          Câmera deslocada — aperte <kbd style={kbdStyle}>C</kbd> ou mova com <kbd style={kbdStyle}>WASD</kbd> pra voltar
-        </div>
-      )}
 
       {nearbyDesk && (
         <div style={deskHintStyle}>
@@ -1122,6 +1175,10 @@ export default function App() {
         <div style={{ ...socialToastStyle, borderColor: socialToast.tone === "error" ? "#f87171" : "#60a5fa" }}>
           {socialToast.text}
         </div>
+      )}
+
+      {hudToast && (
+        <div style={hudToastStyle}>{hudToast}</div>
       )}
 
       {incomingInvite && (
@@ -1491,6 +1548,85 @@ const sidebarActionBtn: React.CSSProperties = {
   color: "#e2e8f0", fontSize: 12, cursor: "pointer",
   padding: "2px 6px", borderRadius: 4,
 };
+/* === Estilos do HUD novo === */
+const bottomBarStyle: React.CSSProperties = {
+  position: "absolute",
+  bottom: 24, left: "50%",
+  transform: "translateX(-50%)",
+  display: "flex", gap: 10,
+  background: "#0f172abf",
+  border: "1px solid #334155",
+  borderRadius: 999,
+  padding: "8px 12px",
+  zIndex: 11,
+  backdropFilter: "blur(8px)",
+  boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+};
+const mediaBtnStyle = (active: boolean, color: string): React.CSSProperties => ({
+  width: 48, height: 48,
+  borderRadius: "50%",
+  border: active ? `2px solid ${color}` : "2px solid #334155",
+  background: active ? `${color}33` : "#1e293b",
+  color: "#e2e8f0",
+  fontSize: 20,
+  cursor: "pointer",
+  display: "flex", alignItems: "center", justifyContent: "center",
+  transition: "all 0.15s ease",
+});
+const badgeOnMediaBtn: React.CSSProperties = {
+  position: "absolute", top: -2, right: -2,
+  background: "#ef4444", color: "#fff",
+  fontSize: 10, fontWeight: 700,
+  borderRadius: 10, padding: "2px 6px",
+  minWidth: 16, textAlign: "center",
+  border: "2px solid #0f172a",
+};
+const pillBtnStyle = (active: boolean): React.CSSProperties => ({
+  width: 42, height: 42,
+  borderRadius: "50%",
+  border: "1px solid #334155",
+  background: active ? "#334155" : "#1e293bbf",
+  color: "#e2e8f0",
+  fontSize: 18,
+  cursor: "pointer",
+  display: "flex", alignItems: "center", justifyContent: "center",
+  backdropFilter: "blur(8px)",
+});
+const settingsMenuStyle: React.CSSProperties = {
+  position: "absolute", top: 50, right: 0,
+  background: "#1e293bf2",
+  border: "1px solid #334155",
+  borderRadius: 8,
+  padding: 6, minWidth: 200,
+  display: "flex", flexDirection: "column",
+  gap: 2,
+  boxShadow: "0 8px 24px rgba(0,0,0,0.5)",
+  backdropFilter: "blur(8px)",
+};
+const menuItemStyle: React.CSSProperties = {
+  background: "transparent",
+  border: "none",
+  textAlign: "left",
+  padding: "8px 12px",
+  fontSize: 13,
+  color: "#e2e8f0",
+  cursor: "pointer",
+  borderRadius: 4,
+};
+const hudToastStyle: React.CSSProperties = {
+  position: "absolute",
+  bottom: 92, left: "50%",
+  transform: "translateX(-50%)",
+  background: "#1e293bee",
+  border: "1px solid #60a5fa",
+  borderRadius: 8,
+  padding: "6px 12px",
+  fontSize: 12,
+  color: "#e2e8f0",
+  zIndex: 13,
+  boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+};
+
 const socialToastStyle: React.CSSProperties = {
   position: "absolute", top: "12%", left: "50%",
   transform: "translateX(-50%)",
