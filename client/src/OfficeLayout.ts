@@ -88,11 +88,10 @@ const ZONES: ZoneDef[] = [
   { id: "office_2",       label: "Diretoria 2",        x: 0,  y: 9,  w: 20, h: 9,
     openings: [{ side: "right", pos: 4 }] },
   { id: "lobby",          label: "Recepção",           x: 0,  y: 18, w: 14, h: 8,
-    openings: [{ side: "right", pos: 4, width: 4 }, { side: "bottom", pos: 4, width: 4 }] },
+    openings: [{ side: "right", pos: 4, width: 4 }] },
   { id: "kitchen",        label: "Copa",               x: 0,  y: 26, w: 14, h: 12,
     openings: [{ side: "right", pos: 4, width: 4 }] },
-  { id: "security_room",  label: "Segurança",          x: 0,  y: 38, w: 14, h: 5,
-    openings: [{ side: "right", pos: 2 }] },
+  { id: "security_room",  label: "Segurança",          x: 0,  y: 38, w: 14, h: 5 },
 
   // === Coluna central — open space, sem paredes (departamentos fundidos) ===
   { id: "dev_area",       label: "Desenvolvimento",    x: 20, y: 0,  w: 40, h: 11, noWalls: true },
@@ -120,9 +119,11 @@ const ZONES: ZoneDef[] = [
   { id: "meeting_g2",     label: "Reunião G2",         x: 60, y: 49, w: 20, h: 6,
     openings: [{ side: "left", pos: 2 }] },
 
-  // === Lounge (faixa inferior) ===
-  { id: "lounge",         label: "Lounge",             x: 0,  y: 43, w: 60, h: 12,
-    openings: [{ side: "top", pos: 8, width: 4 }, { side: "top", pos: 30, width: 4 }] },
+  // === Lounge (faixa inferior) — w=58 deixa um corredor de 2 tiles (x=58-60)
+  //     entre o lounge e as salas de reunião. Aberturas top dentro do open
+  //     space dos departamentos pra não conflitar com a Segurança. ===
+  { id: "lounge",         label: "Lounge",             x: 0,  y: 43, w: 58, h: 12,
+    openings: [{ side: "top", pos: 22, width: 4 }, { side: "top", pos: 40, width: 4 }] },
 ];
 
 /**

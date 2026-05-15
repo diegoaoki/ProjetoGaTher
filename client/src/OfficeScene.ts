@@ -257,6 +257,21 @@ export class OfficeScene extends Phaser.Scene {
 
     this.cameras.main.setBackgroundColor("#1a1a2e");
     this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
+
+    // Zoom in/out via roda do mouse e teclas + / -
+    const ZOOM_MIN = 0.4;
+    const ZOOM_MAX = 1.8;
+    const applyZoom = (next: number) => {
+      const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next));
+      this.cameras.main.setZoom(clamped);
+    };
+    this.input.on("wheel", (_p: unknown, _o: unknown, _dx: number, dy: number) => {
+      applyZoom(this.cameras.main.zoom - dy * 0.0015);
+    });
+    this.input.keyboard!.addKey("MINUS").on("down", () => applyZoom(this.cameras.main.zoom - 0.15));
+    this.input.keyboard!.addKey("PLUS").on("down", () => applyZoom(this.cameras.main.zoom + 0.15));
+    this.input.keyboard!.addKey("EQUALS").on("down", () => applyZoom(this.cameras.main.zoom + 0.15));
+    this.input.keyboard!.addKey("ZERO").on("down", () => applyZoom(1.3));
   }
 
   private startPan(screenX: number, screenY: number) {

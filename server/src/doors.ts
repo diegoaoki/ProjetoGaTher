@@ -36,8 +36,7 @@ export const DOORS: DoorConfig[] = [
   // Reunião XG (vão na lateral esquerda)
   v("door-meeting_xg", 60, 5, "meeting_xg"),
 
-  // Segurança (vão lateral direita)
-  v("door-security", 14, 40, "security_room", true),
+  // (Segurança removida — sala vedada, sem porta)
 
   // Reuniões P (vão lateral esquerda, pos 2)
   v("door-meeting_p1", 60, 13, "meeting_p1"),
@@ -55,4 +54,4 @@ export const DOORS: DoorConfig[] = [
 ];
 
 export const DOOR_OPEN_RADIUS_PX = 96;   // 3 tiles
-export const DOOR_CLOSE_TIMEOUT_MS = 3000;
+export const DOOR_CLOSE_TIMEOUT_MS = 1200;
