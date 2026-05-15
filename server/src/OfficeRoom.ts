@@ -1,6 +1,6 @@
 import { Room, Client } from "@colyseus/core";
 import { eq } from "drizzle-orm";
-import { OfficeState, Player, Desk, Door } from "./schema";
+import { OfficeState, Player, Desk, Door, LockedRoom, AccessRequest, SecurityNPC } from "./schema";
 import { DOORS, DOOR_OPEN_RADIUS_PX, DOOR_CLOSE_TIMEOUT_MS } from "./doors";
 import { verifyAuthToken } from "./auth/jwt";
 import { getDb } from "./db/client";
@@ -54,7 +54,40 @@ interface ChatReactionToggleMessage {
   emoji: string;
 }
 
+interface RoomLockMessage {
+  roomId: string;
+}
+
+interface AccessRequestMessage {
+  roomId: string;
+}
+
+interface AccessRespondMessage {
+  roomId: string;
+  requesterId: string;
+  accepted: boolean;
+}
+
 const ALLOWED_REACTION_EMOJIS = new Set(["👍", "❤️", "😂", "😮", "😢", "🎉"]);
+
+/**
+ * Salas que podem ser trancadas via cadeado. Bounds em pixels (precisa ficar
+ * em sync com OfficeLayout.ts no client — se mudar layout das salas, atualiza
+ * aqui também). Usado por `getRoomAt` no handleMove pra detectar entrada não
+ * autorizada em sala trancada.
+ */
+const LOCKABLE_ROOMS: Record<string, { x: number; y: number; w: number; h: number }> = {
+  meeting_xg: { x: 60 * 32, y: 0,         w: 20 * 32, h: 17 * 32 },
+  meeting_m1: { x: 60 * 32, y: 17 * 32,   w: 20 * 32, h: 12 * 32 },
+  meeting_g1: { x: 60 * 32, y: 29 * 32,   w: 20 * 32, h: 13 * 32 },
+  meeting_g2: { x: 60 * 32, y: 42 * 32,   w: 20 * 32, h: 13 * 32 },
+};
+
+/**
+ * Throttle pra "room:blocked" — server só notifica cliente 1x a cada 2s
+ * pra não floodar quando o player segura tecla contra a porta trancada.
+ */
+const BLOCKED_NOTIFY_THROTTLE_MS = 2000;
 
 interface JoinOptions {
   token?: string;
@@ -93,6 +126,15 @@ export class OfficeRoom extends Room<OfficeState> {
 
   /** Timestamp (ms) da última vez que cada porta teve player próximo. */
   private doorLastActivity = new Map<string, number>();
+
+  /**
+   * Cadeado: userIds aprovados a entrar em cada sala trancada (além do dono).
+   * Reset quando a sala é destrancada. Não persiste em DB — efêmero.
+   */
+  private allowedInRoom = new Map<string, Set<string>>();
+
+  /** Throttle do "room:blocked": último envio por sessionId (ms epoch). */
+  private lastBlockedNotify = new Map<string, number>();
 
   async onCreate(_options: any) {
     console.log(`[OfficeRoom] criada: ${this.roomId}`);
@@ -221,6 +263,20 @@ export class OfficeRoom extends Room<OfficeState> {
     this.onMessage<ChatReactionToggleMessage>("chat:reaction:toggle", (client, msg) =>
       this.handleChatReactionToggle(client, msg)
     );
+
+    // Cadeado de sala de reunião
+    this.onMessage<RoomLockMessage>("room:lock", (client, msg) =>
+      this.handleRoomLock(client, msg)
+    );
+    this.onMessage<RoomLockMessage>("room:unlock", (client, msg) =>
+      this.handleRoomUnlock(client, msg)
+    );
+    this.onMessage<AccessRequestMessage>("room:request-access", (client, msg) =>
+      this.handleAccessRequest(client, msg)
+    );
+    this.onMessage<AccessRespondMessage>("room:respond-access", (client, msg) =>
+      this.handleAccessRespond(client, msg)
+    );
   }
 
   async onAuth(_client: Client, options: JoinOptions): Promise<AuthData> {
@@ -311,13 +367,23 @@ export class OfficeRoom extends Room<OfficeState> {
   onLeave(client: Client, consented: boolean) {
     console.log(`[OfficeRoom] ${client.sessionId} saiu (consented=${consented})`);
     this.state.players.delete(client.sessionId);
+    this.lastBlockedNotify.delete(client.sessionId);
     // Limpa activeUsers SÓ se este client é o atualmente registrado.
     // Quando há force takeover, o novo client já tomou o slot e não devemos limpá-lo.
     const auth = client.userData as AuthData | undefined;
     if (auth?.userId && this.activeUsers.get(auth.userId) === client) {
       this.activeUsers.delete(auth.userId);
     }
-    // NÃO libera mesas — reservas persistem mesmo offline.
+    // Remove pedidos de acesso pendentes desse user (o dono não consegue
+    // mais responder porque o requester sumiu)
+    if (auth?.userId) {
+      const keysToDelete: string[] = [];
+      this.state.accessRequests.forEach((req, key) => {
+        if (req.requesterId === auth.userId) keysToDelete.push(key);
+      });
+      for (const k of keysToDelete) this.state.accessRequests.delete(k);
+    }
+    // NÃO libera mesas nem destranca salas — persistem mesmo offline.
   }
 
   onDispose() {
@@ -373,10 +439,53 @@ export class OfficeRoom extends Room<OfficeState> {
     const newX = Math.max(0, Math.min(this.state.worldWidth, msg.x));
     const newY = Math.max(0, Math.min(this.state.worldHeight, msg.y));
 
+    // Validação de cadeado: se o move-to entra numa sala trancada e o player
+    // não é o dono nem foi aprovado, mantém posição anterior e notifica.
+    const destRoom = this.getLockableRoomAt(newX, newY);
+    const currentRoom = this.getLockableRoomAt(player.x, player.y);
+    if (destRoom && destRoom !== currentRoom) {
+      const lock = this.state.lockedRooms.get(destRoom);
+      const auth = client.userData as AuthData | undefined;
+      const userId = auth?.userId || "";
+      const allowed =
+        !lock ||
+        lock.lockedBy === userId ||
+        this.allowedInRoom.get(destRoom)?.has(userId);
+      if (!allowed) {
+        const now = Date.now();
+        const last = this.lastBlockedNotify.get(client.sessionId) || 0;
+        if (now - last > BLOCKED_NOTIFY_THROTTLE_MS) {
+          this.lastBlockedNotify.set(client.sessionId, now);
+          client.send("room:blocked", {
+            roomId: destRoom,
+            lockedByName: lock.lockedByName,
+          });
+        }
+        // Atualiza só direction/isMoving — posição fica
+        player.direction = msg.direction;
+        player.isMoving = false;
+        return;
+      }
+    }
+
     player.x = newX;
     player.y = newY;
     player.direction = msg.direction;
     player.isMoving = msg.isMoving;
+  }
+
+  /** Retorna o roomId da sala lockable que contém o ponto, ou null. */
+  private getLockableRoomAt(x: number, y: number): string | null {
+    for (const [id, b] of Object.entries(LOCKABLE_ROOMS)) {
+      if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return id;
+    }
+    return null;
+  }
+
+  /** Coords da porta de uma sala (centro em pixels) — null se sala não tem porta. */
+  private getRoomDoorPos(roomId: string): { x: number; y: number } | null {
+    const door = DOORS.find((d) => d.roomTag === roomId);
+    return door ? { x: door.x, y: door.y } : null;
   }
 
   /** Procura no state quem é dono da mesa reservada pelo userId. */
@@ -642,6 +751,202 @@ export class OfficeRoom extends Room<OfficeState> {
       console.log(`[invite:respond] ${responder.name} accepted=${accepted}`);
     } catch (err) {
       console.error("[invite:respond] EXCEPTION:", err);
+    }
+  }
+
+  // ============================================================
+  //  Cadeado de sala de reunião
+  //  - Qualquer ocupante da sala pode trancar (vira "dono" da sessão).
+  //  - Dono destranca a qualquer momento. Sai da sala = não destranca
+  //    automaticamente (intencional — protege contra "saí pra pegar café").
+  //  - Outros usuários esbarram na porta → `room:blocked` → pedem entrada.
+  //  - Dono recebe `access:request-incoming` → aceita/recusa.
+  //  - Se aceito, requester é teleportado pra dentro + entra em allowedInRoom.
+  // ============================================================
+
+  private handleRoomLock(client: Client, msg: RoomLockMessage) {
+    try {
+      const auth = client.userData as AuthData | undefined;
+      const player = this.state.players.get(client.sessionId);
+      if (!auth || !player) return;
+
+      const roomId = String(msg?.roomId || "");
+      if (!LOCKABLE_ROOMS[roomId]) {
+        client.send("room:error", { error: "Essa sala não pode ser trancada" });
+        return;
+      }
+
+      // Tem que estar dentro da sala
+      const myRoom = this.getLockableRoomAt(player.x, player.y);
+      if (myRoom !== roomId) {
+        client.send("room:error", { error: "Você precisa estar dentro da sala pra trancar" });
+        return;
+      }
+
+      if (this.state.lockedRooms.has(roomId)) {
+        client.send("room:error", { error: "Sala já está trancada" });
+        return;
+      }
+
+      const lock = new LockedRoom();
+      lock.roomId = roomId;
+      lock.lockedBy = auth.userId;
+      lock.lockedByName = auth.displayName;
+      lock.lockedAt = Date.now();
+      this.state.lockedRooms.set(roomId, lock);
+      this.allowedInRoom.set(roomId, new Set());
+
+      // Spawna NPC na frente da porta (do lado de fora da sala, levemente afastado)
+      const doorPos = this.getRoomDoorPos(roomId);
+      if (doorPos) {
+        const npc = new SecurityNPC();
+        npc.roomId = roomId;
+        // Salas de reunião têm porta na lateral esquerda (vão vertical) → NPC
+        // do lado de FORA é x-24 (oeste da porta). direction "right" pra encarar
+        // quem se aproxima do open space.
+        npc.x = doorPos.x - 24;
+        npc.y = doorPos.y;
+        npc.direction = "right";
+        this.state.securityNPCs.set(roomId, npc);
+      }
+
+      console.log(`[room:lock] ${auth.email} trancou ${roomId}`);
+    } catch (err) {
+      console.error("[room:lock] EXCEPTION:", err);
+    }
+  }
+
+  private handleRoomUnlock(client: Client, msg: RoomLockMessage) {
+    try {
+      const auth = client.userData as AuthData | undefined;
+      if (!auth) return;
+
+      const roomId = String(msg?.roomId || "");
+      const lock = this.state.lockedRooms.get(roomId);
+      if (!lock) {
+        client.send("room:error", { error: "Sala não está trancada" });
+        return;
+      }
+      // Dono ou admin
+      if (lock.lockedBy !== auth.userId && !isAdminEmail(auth.email)) {
+        client.send("room:error", { error: "Só quem trancou pode destrancar" });
+        return;
+      }
+
+      this.state.lockedRooms.delete(roomId);
+      this.state.securityNPCs.delete(roomId);
+      this.allowedInRoom.delete(roomId);
+
+      // Remove pedidos pendentes pra essa sala
+      const keysToDelete: string[] = [];
+      this.state.accessRequests.forEach((req, key) => {
+        if (req.roomId === roomId) keysToDelete.push(key);
+      });
+      for (const k of keysToDelete) this.state.accessRequests.delete(k);
+
+      console.log(`[room:unlock] ${auth.email} destrancou ${roomId}`);
+    } catch (err) {
+      console.error("[room:unlock] EXCEPTION:", err);
+    }
+  }
+
+  private handleAccessRequest(client: Client, msg: AccessRequestMessage) {
+    try {
+      const auth = client.userData as AuthData | undefined;
+      const player = this.state.players.get(client.sessionId);
+      if (!auth || !player) return;
+
+      const roomId = String(msg?.roomId || "");
+      const lock = this.state.lockedRooms.get(roomId);
+      if (!lock) {
+        client.send("room:error", { error: "Sala não está mais trancada" });
+        return;
+      }
+      if (lock.lockedBy === auth.userId) return; // dono não pede a si mesmo
+
+      // Idempotente: se já tem pedido pendente desse user, atualiza timestamp
+      const key = `${roomId}:${auth.userId}`;
+      let req = this.state.accessRequests.get(key);
+      if (!req) {
+        req = new AccessRequest();
+        req.roomId = roomId;
+        req.requesterId = auth.userId;
+        req.requesterSessionId = client.sessionId;
+        req.requesterName = auth.displayName;
+        this.state.accessRequests.set(key, req);
+      }
+      req.requesterSessionId = client.sessionId; // sempre atualiza (user pode ter reconectado)
+      req.createdAt = Date.now();
+
+      // Notifica o dono (se online)
+      const ownerClient = this.clients.find((c) => {
+        const p = this.state.players.get(c.sessionId);
+        return p?.userId === lock.lockedBy;
+      });
+      if (ownerClient) {
+        ownerClient.send("access:request-incoming", {
+          roomId,
+          requesterId: auth.userId,
+          requesterName: auth.displayName,
+        });
+      }
+
+      console.log(`[room:request-access] ${auth.email} -> ${roomId}`);
+    } catch (err) {
+      console.error("[room:request-access] EXCEPTION:", err);
+    }
+  }
+
+  private handleAccessRespond(client: Client, msg: AccessRespondMessage) {
+    try {
+      const auth = client.userData as AuthData | undefined;
+      if (!auth) return;
+
+      const roomId = String(msg?.roomId || "");
+      const requesterId = String(msg?.requesterId || "");
+      const accepted = !!msg?.accepted;
+
+      const lock = this.state.lockedRooms.get(roomId);
+      if (!lock) return;
+      if (lock.lockedBy !== auth.userId) return; // só dono responde
+
+      const key = `${roomId}:${requesterId}`;
+      const req = this.state.accessRequests.get(key);
+      if (!req) return;
+
+      // Acha o requester (pode ter trocado de sessionId)
+      const requesterClient = this.clients.find((c) => {
+        const p = this.state.players.get(c.sessionId);
+        return p?.userId === requesterId;
+      });
+
+      if (accepted) {
+        // Adiciona à whitelist + teleporta pra dentro da sala (no centro)
+        let allowed = this.allowedInRoom.get(roomId);
+        if (!allowed) {
+          allowed = new Set();
+          this.allowedInRoom.set(roomId, allowed);
+        }
+        allowed.add(requesterId);
+
+        if (requesterClient) {
+          const requesterPlayer = this.state.players.get(requesterClient.sessionId);
+          if (requesterPlayer) {
+            const bounds = LOCKABLE_ROOMS[roomId];
+            // Teleporta pro centro da sala — server-autoritativo, não passa por handleMove
+            requesterPlayer.x = bounds.x + bounds.w / 2;
+            requesterPlayer.y = bounds.y + bounds.h / 2;
+          }
+          requesterClient.send("access:response", { roomId, accepted: true });
+        }
+      } else if (requesterClient) {
+        requesterClient.send("access:response", { roomId, accepted: false });
+      }
+
+      this.state.accessRequests.delete(key);
+      console.log(`[room:respond-access] ${auth.email} ${accepted ? "aceitou" : "recusou"} ${requesterId} em ${roomId}`);
+    } catch (err) {
+      console.error("[room:respond-access] EXCEPTION:", err);
     }
   }
 

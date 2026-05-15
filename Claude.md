@@ -220,7 +220,15 @@ npm run build      # build de produção
 ✅ **Fase 6b (parte 1) — Mesas reserváveis com persistência**: tecla E reserva/libera, mesa fica do dono mesmo offline, spawna na mesa reservada ao entrar.
 ✅ **Fase 6b (parte 2) — Sidebar online + convites + teletransporte**: botão 👥 abre sidebar, cada usuário tem 📍 (ir até) e 👋 (convidar). Teletransporte server-autoritativo. Botão 📍 'minha mesa' no HUD se você tem reserva.
 ✅ **Fase 7 — Salas isoladas com paredes**: 3 salas de reunião (1 grande + 2 pequenas) + open space. Paredes com colisão, vãos pra entrar. Áudio isolado por zona — quem está em zona diferente é mutado. Mesas redistribuídas (4 no open, 4 nas salas).
-🚧 **Backlog**: chat de texto, esqueci-a-senha (precisa SMTP), mobile responsivo, editor de mapas
+🚧 **Backlog**:
+- esqueci-a-senha (precisa SMTP)
+- mobile responsivo
+- editor de mapas
+- menu de contexto (right-click) em outro player com opção "vir para cá" — chama o outro até a minha posição (semelhante ao convite, mas sem modal aceitar/recusar — ou com, a definir)
+- revisar visual da Recepção — atualmente só sofás + mesa de centro, falta cara de recepção (balcão de atendimento, plantas decorativas, totem/quadro de boas-vindas, possivelmente cadeiras de espera adicionais)
+- revisar visual da Copa — hoje parece sala de reunião por causa da mesa redonda + cadeiras em volta. Deveria parecer cozinha completa usando o asset pago LimeZu Modern Interiors (em `Downloads/Assets Pagos/moderninteriors-win/`, NÃO o Free): bancada com pia, fogão, geladeira, armários, microondas, mesa de refeição lateral. Os bookshelves placeholders atuais ("fridge", "stove", "coffee_machine", "microwave") precisam virar sprites corretos
+- NPC segurança com pathfinding real (A* entre móveis/paredes) — substituir o atual "teletransporte + fade" da feature de cadeado de sala. Precisa grid de navegação + algoritmo evitando furniture hitboxes e walls dinâmicas (portas fechadas)
+- visual da sala de Segurança — hoje só tem desk + 2 monitores + cadeira (placeholder). Falta cara de sala de segurança: painel de câmeras (múltiplos monitores em "wall mount" mostrando feeds do mapa), rack de equipamentos, walkie-talkie/telefone na mesa, possivelmente armário de armas/equipamentos. Usar asset pago moderninteriors-win se houver sprites de segurança/CCTV
 
 ## Decisões técnicas e seus porquês
 

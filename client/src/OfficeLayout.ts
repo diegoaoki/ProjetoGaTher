@@ -92,7 +92,8 @@ const ZONES: ZoneDef[] = [
     openings: [{ side: "right", pos: 4 }] },
   { id: "kitchen",        label: "Copa",               x: 0,  y: 26, w: 14, h: 12,
     openings: [{ side: "right", pos: 4 }] },
-  { id: "security_room",  label: "Segurança",          x: 0,  y: 38, w: 14, h: 5 },
+  { id: "security_room",  label: "Segurança",          x: 0,  y: 38, w: 14, h: 5,
+    openings: [{ side: "right", pos: 2 }] },
 
   // === Coluna central — open space, sem paredes (departamentos fundidos) ===
   { id: "dev_area",       label: "Desenvolvimento",    x: 20, y: 0,  w: 40, h: 11, noWalls: true },
@@ -100,31 +101,21 @@ const ZONES: ZoneDef[] = [
   { id: "infra_area",     label: "Infra",              x: 20, y: 21, w: 40, h: 10, noWalls: true },
   { id: "finance_area",   label: "Financeiro",         x: 20, y: 31, w: 40, h: 11, noWalls: true },
 
-  // === Coluna direita: reuniões ===
-  { id: "meeting_xg",     label: "Reunião XG",         x: 60, y: 0,  w: 20, h: 11,
+  // === Coluna direita: reuniões (P1, P2 e M2 removidas — restam 4 salas grandes) ===
+  { id: "meeting_xg",     label: "Reunião XG",         x: 60, y: 0,  w: 20, h: 17,
+    openings: [{ side: "left", pos: 8 }] },
+  { id: "meeting_m1",     label: "Reunião M1",         x: 60, y: 17, w: 20, h: 12,
     openings: [{ side: "left", pos: 5 }] },
-  { id: "meeting_p1",     label: "Reunião P1",         x: 60, y: 11, w: 20, h: 5,
-    openings: [{ side: "left", pos: 2 }] },
-  { id: "meeting_p2",     label: "Reunião P2",         x: 60, y: 16, w: 20, h: 5,
-    openings: [{ side: "left", pos: 2 }] },
-  { id: "meeting_p3",     label: "Reunião P3",         x: 60, y: 21, w: 20, h: 5,
-    openings: [{ side: "left", pos: 2 }] },
-  { id: "meeting_p4",     label: "Reunião P4",         x: 60, y: 26, w: 20, h: 5,
-    openings: [{ side: "left", pos: 2 }] },
-  { id: "meeting_m1",     label: "Reunião M1",         x: 60, y: 31, w: 20, h: 6,
-    openings: [{ side: "left", pos: 2 }] },
-  { id: "meeting_m2",     label: "Reunião M2",         x: 60, y: 37, w: 20, h: 6,
-    openings: [{ side: "left", pos: 2 }] },
-  { id: "meeting_g1",     label: "Reunião G1",         x: 60, y: 43, w: 20, h: 6,
-    openings: [{ side: "left", pos: 2 }] },
-  { id: "meeting_g2",     label: "Reunião G2",         x: 60, y: 49, w: 20, h: 6,
-    openings: [{ side: "left", pos: 2 }] },
+  { id: "meeting_g1",     label: "Reunião G1",         x: 60, y: 29, w: 20, h: 13,
+    openings: [{ side: "left", pos: 5 }] },
+  { id: "meeting_g2",     label: "Reunião G2",         x: 60, y: 42, w: 20, h: 13,
+    openings: [{ side: "left", pos: 5 }] },
 
   // === Lounge (faixa inferior) — w=58 deixa um corredor de 2 tiles (x=58-60)
   //     entre o lounge e as salas de reunião. 4 aberturas top dentro do open
   //     space dos departamentos (x ≥ 14) pra não conflitar com a Segurança. ===
   { id: "lounge",         label: "Lounge",             x: 0,  y: 43, w: 58, h: 12,
-    openings: [{ side: "top", pos: 27, width: 4 }] },
+    openings: [{ side: "top", pos: 36, width: 4 }] },
 ];
 
 /**
@@ -330,20 +321,15 @@ export function getDefaultLayout(): OfficeLayoutData {
   };
 
   // Reunião XG (sala grande, executiva): mesa central + TV na parede norte
-  buildMeetingRoom(70, 5);
+  buildMeetingRoom(70, 8);
   items.push({ type: "tv", x: 70 * TILE, y: 1 * TILE, depth: 1, hitbox: HITBOXES.tv });
-  items.push({ type: "plant", x: 62 * TILE, y: 9 * TILE, depth: 1, hitbox: HITBOXES.plant });
+  items.push({ type: "plant", x: 62 * TILE, y: 15 * TILE, depth: 1, hitbox: HITBOXES.plant });
 
-  // Demais reuniões (P/M/G) — todas com a mesma mesa de reunião no centro
+  // Demais reuniões (M/G) — todas com a mesma mesa de reunião no centro
   const meetingRooms = [
-    { y: 13, h: 5 }, // p1
-    { y: 18, h: 5 }, // p2
-    { y: 23, h: 5 }, // p3
-    { y: 28, h: 5 }, // p4
-    { y: 33, h: 6 }, // m1
-    { y: 39, h: 6 }, // m2
-    { y: 45, h: 6 }, // g1
-    { y: 51, h: 6 }, // g2
+    { y: 17, h: 12 }, // m1
+    { y: 29, h: 13 }, // g1
+    { y: 42, h: 13 }, // g2
   ];
   for (const m of meetingRooms) {
     buildMeetingRoom(70, m.y + Math.floor(m.h / 2));

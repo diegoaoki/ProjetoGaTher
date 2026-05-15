@@ -1,4 +1,4 @@
-import { Schema, MapSchema, type } from "@colyseus/schema";
+import { Schema, MapSchema, ArraySchema, type } from "@colyseus/schema";
 
 export class Player extends Schema {
   @type("string") id: string = "";        // sessionId do Colyseus
@@ -37,10 +37,51 @@ export class Door extends Schema {
   @type("number") gapTiles: number = 2;   // largura do vão em tiles (default 2)
 }
 
+/**
+ * Sala de reunião trancada via cadeado. Quem tranca vira "dono" da sessão
+ * (lockedBy). Outros precisam pedir entrada (AccessRequest) e o dono libera.
+ * key do MapSchema = roomId (ex: "meeting_xg").
+ */
+export class LockedRoom extends Schema {
+  @type("string") roomId: string = "";
+  @type("string") lockedBy: string = "";       // userId
+  @type("string") lockedByName: string = "";
+  @type("number") lockedAt: number = 0;        // ms epoch
+}
+
+/**
+ * Pedido pendente de acesso a sala trancada. Aparece como toast pro dono.
+ * key do MapSchema = `${roomId}:${requesterId}` (idempotente — se mesmo user
+ * pedir 2x, atualiza em vez de duplicar).
+ */
+export class AccessRequest extends Schema {
+  @type("string") roomId: string = "";
+  @type("string") requesterId: string = "";    // userId
+  @type("string") requesterSessionId: string = "";
+  @type("string") requesterName: string = "";
+  @type("number") createdAt: number = 0;
+}
+
+/**
+ * NPC virtual de segurança que aparece na porta da sala trancada.
+ * Não é Player — não tem userId, não conecta ao LiveKit, não move.
+ * Apenas posição + flag pro client renderizar com fade-in/out.
+ * key do MapSchema = roomId (1 NPC por sala trancada).
+ */
+export class SecurityNPC extends Schema {
+  @type("string") roomId: string = "";
+  @type("number") x: number = 0;               // centro em pixels
+  @type("number") y: number = 0;
+  @type("string") direction: string = "down";  // pra qual lado o sprite olha
+}
+
 export class OfficeState extends Schema {
   @type({ map: Player }) players = new MapSchema<Player>();
   @type({ map: Desk }) desks = new MapSchema<Desk>();
   @type({ map: Door }) doors = new MapSchema<Door>();
+  @type({ map: LockedRoom }) lockedRooms = new MapSchema<LockedRoom>();
+  @type({ map: AccessRequest }) accessRequests = new MapSchema<AccessRequest>();
+  @type({ map: SecurityNPC }) securityNPCs = new MapSchema<SecurityNPC>();
   @type("number") worldWidth: number = 2560;
   @type("number") worldHeight: number = 1760;
 }

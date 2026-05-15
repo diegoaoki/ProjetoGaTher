@@ -257,6 +257,18 @@ export default function App() {
   // === Convites ===
   const [incomingInvite, setIncomingInvite] = useState<{ fromSessionId: string; fromName: string } | null>(null);
   const [socialToast, setSocialToast] = useState<{ text: string; tone: "info" | "error" } | null>(null);
+
+  // === Cadeado de salas de reunião ===
+  // lockedRooms: snapshot do state.lockedRooms do Colyseus pra renderizar HUD/UI
+  const [lockedRooms, setLockedRooms] = useState<Map<string, { lockedBy: string; lockedByName: string }>>(new Map());
+  // Modal de pedido de entrada (eu esbarrei em sala trancada)
+  const [accessRequestModal, setAccessRequestModal] = useState<{ roomId: string; lockedByName: string } | null>(null);
+  // Toast pro dono quando alguém pede pra entrar
+  const [incomingAccessRequest, setIncomingAccessRequest] = useState<{ roomId: string; requesterId: string; requesterName: string } | null>(null);
+  // Salas que EU fui aprovado (recebido via access:response accepted) — usado
+  // pro client-side prediction não me bloquear ao reentrar. Limpa quando a
+  // sala é destrancada (não precisa mais).
+  const myAllowedRoomsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!socialToast) return;
     const t = setTimeout(() => setSocialToast(null), 3000);
@@ -510,6 +522,62 @@ export default function App() {
       });
       room.onMessage("teleport:error", (msg: { error: string }) => {
         setSocialToast({ text: msg?.error || "Falha no teleporte", tone: "error" });
+      });
+
+      // === Cadeado de salas ===
+      // Server rejeitou entrada na sala porque tá trancada — abre modal pedir entrada
+      room.onMessage("room:blocked", (msg: { roomId: string; lockedByName: string }) => {
+        setAccessRequestModal({ roomId: msg.roomId, lockedByName: msg.lockedByName });
+      });
+      // Dono recebe pedido — guarda pra mostrar toast com Aceitar/Recusar
+      room.onMessage("access:request-incoming", (msg: { roomId: string; requesterId: string; requesterName: string }) => {
+        setIncomingAccessRequest(msg);
+        showNotificationIfHidden({
+          title: "🔒 Pedido de entrada",
+          body: `${msg.requesterName} quer entrar na sala`,
+          tag: `access:${msg.roomId}`,
+        });
+      });
+      // Requester recebe resposta
+      room.onMessage("access:response", (msg: { roomId: string; accepted: boolean }) => {
+        setSocialToast({
+          text: msg.accepted ? "Entrada autorizada — você foi pra dentro" : "Pedido recusado",
+          tone: msg.accepted ? "info" : "error",
+        });
+        if (msg.accepted) {
+          myAllowedRoomsRef.current.add(msg.roomId);
+          sceneRef.current?.setMyAllowedRooms(new Set(myAllowedRoomsRef.current));
+        }
+      });
+      // Erros do fluxo de cadeado
+      room.onMessage("room:error", (msg: { error: string }) => {
+        setSocialToast({ text: msg?.error || "Falha no cadeado", tone: "error" });
+      });
+
+      // Sincroniza lockedRooms do state pra HUD + scene (prediction local)
+      const syncLockedToScene = () => {
+        const m = new Map<string, string>();
+        state.lockedRooms.forEach((l: any, id: string) => m.set(id, l.lockedBy));
+        sceneRef.current?.setLockedRooms(m);
+      };
+      state.lockedRooms.onAdd((lock: any, roomId: string) => {
+        setLockedRooms((prev) => {
+          const next = new Map(prev);
+          next.set(roomId, { lockedBy: lock.lockedBy, lockedByName: lock.lockedByName });
+          return next;
+        });
+        syncLockedToScene();
+      });
+      state.lockedRooms.onRemove((_lock: any, roomId: string) => {
+        setLockedRooms((prev) => {
+          const next = new Map(prev);
+          next.delete(roomId);
+          return next;
+        });
+        // Limpa a permissão local — sala destrancada, não precisa mais
+        myAllowedRoomsRef.current.delete(roomId);
+        sceneRef.current?.setMyAllowedRooms(new Set(myAllowedRoomsRef.current));
+        syncLockedToScene();
       });
 
       // Chat: novas mensagens entram em real-time
@@ -1052,6 +1120,28 @@ export default function App() {
                 📍 Ir pra minha mesa
               </button>
             )}
+            {/* Cadeado: só aparece dentro de sala de reunião lockable */}
+            {["meeting_xg", "meeting_m1", "meeting_g1", "meeting_g2"].includes(currentZoneId) && (
+              (() => {
+                const lock = lockedRooms.get(currentZoneId);
+                const isOwner = lock && lock.lockedBy === session.user.id;
+                if (lock && !isOwner) return null; // Não-dono dentro de sala trancada não pode destrancar
+                return (
+                  <button
+                    onClick={() => {
+                      if (lock) {
+                        roomRef.current?.send("room:unlock", { roomId: currentZoneId });
+                      } else {
+                        roomRef.current?.send("room:lock", { roomId: currentZoneId });
+                      }
+                    }}
+                    style={menuItemStyle}
+                  >
+                    {lock ? "🔓 Destrancar sala" : "🔒 Trancar sala"}
+                  </button>
+                );
+              })()
+            )}
             <div style={{ height: 1, background: "#334155", margin: "4px 0" }} />
             <button
               onClick={() => setConfirmingLogout(true)}
@@ -1218,6 +1308,77 @@ export default function App() {
                     accepted: true,
                   });
                   setIncomingInvite(null);
+                }}
+                style={buttonStyle}
+              >
+                Aceitar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal "Sala trancada — pedir entrada?" (eu esbarrei na porta) */}
+      {accessRequestModal && (
+        <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+          <div style={{ ...cardStyle, width: 380 }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ margin: "0 0 8px", fontSize: 20 }}>🔒 Sala trancada</h2>
+            <p style={{ margin: "0 0 18px", fontSize: 14 }}>
+              Essa sala foi trancada por <strong>{accessRequestModal.lockedByName}</strong>.
+              Quer pedir pra entrar? O segurança vai avisar.
+            </p>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => setAccessRequestModal(null)}
+                style={{ ...buttonStyle, background: "#334155", color: "#e2e8f0" }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => {
+                  roomRef.current?.send("room:request-access", { roomId: accessRequestModal.roomId });
+                  setSocialToast({ text: "Pedido enviado — aguardando resposta", tone: "info" });
+                  setAccessRequestModal(null);
+                }}
+                style={buttonStyle}
+              >
+                Pedir entrada
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast/modal pro dono: "X quer entrar — Aceitar/Recusar" */}
+      {incomingAccessRequest && (
+        <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+          <div style={{ ...cardStyle, width: 380 }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ margin: "0 0 8px", fontSize: 20 }}>🔒 Pedido de entrada</h2>
+            <p style={{ margin: "0 0 18px", fontSize: 14 }}>
+              <strong>{incomingAccessRequest.requesterName}</strong> quer entrar na sala que você trancou.
+            </p>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => {
+                  roomRef.current?.send("room:respond-access", {
+                    roomId: incomingAccessRequest.roomId,
+                    requesterId: incomingAccessRequest.requesterId,
+                    accepted: false,
+                  });
+                  setIncomingAccessRequest(null);
+                }}
+                style={{ ...buttonStyle, background: "#334155", color: "#e2e8f0" }}
+              >
+                Recusar
+              </button>
+              <button
+                onClick={() => {
+                  roomRef.current?.send("room:respond-access", {
+                    roomId: incomingAccessRequest.roomId,
+                    requesterId: incomingAccessRequest.requesterId,
+                    accepted: true,
+                  });
+                  setIncomingAccessRequest(null);
                 }}
                 style={buttonStyle}
               >

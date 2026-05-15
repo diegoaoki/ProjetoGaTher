@@ -60,27 +60,20 @@ export const DOORS: DoorConfig[] = [
   // Copa (kitchen y=26, opening pos=4 → tile absoluto 30)
   v("door-kitchen", 14, 30, "right", "kitchen"),
 
+  // Segurança (y=38, opening pos=2 → tile absoluto 40). Reaberta pra que o
+  // NPC guarda possa "sair" dessa sala quando alguém tranca sala de reunião.
+  v("door-security_room", 14, 40, "right", "security_room"),
+
   // Reunião XG (vão na lateral esquerda)
-  v("door-meeting_xg", 60, 5, "left", "meeting_xg"),
+  v("door-meeting_xg", 60, 8, "left", "meeting_xg"),
 
-  // (Segurança removida — sala vedada, sem porta)
-
-  // Reuniões P (vão lateral esquerda, pos 2)
-  v("door-meeting_p1", 60, 13, "left", "meeting_p1"),
-  v("door-meeting_p2", 60, 18, "left", "meeting_p2"),
-  v("door-meeting_p3", 60, 23, "left", "meeting_p3"),
-  v("door-meeting_p4", 60, 28, "left", "meeting_p4"),
-
-  // Reuniões M
-  v("door-meeting_m1", 60, 33, "left", "meeting_m1"),
-  v("door-meeting_m2", 60, 39, "left", "meeting_m2"),
-
-  // Reuniões G
-  v("door-meeting_g1", 60, 45, "left", "meeting_g1"),
-  v("door-meeting_g2", 60, 51, "left", "meeting_g2"),
+  // Reuniões restantes (M1/G1/G2 — P1, P2, M2 removidas pra ampliar as outras)
+  v("door-meeting_m1", 60, 22, "left", "meeting_m1"),
+  v("door-meeting_g1", 60, 34, "left", "meeting_g1"),
+  v("door-meeting_g2", 60, 47, "left", "meeting_g2"),
 
   // Lounge: 1 porta horizontal grande no centro (vão de 4 tiles)
-  h("door-lounge", 27, 43, "top", "lounge", 4),
+  h("door-lounge", 36, 43, "top", "lounge", 4),
 ];
 
 export const DOOR_OPEN_RADIUS_PX = 96;   // 3 tiles
