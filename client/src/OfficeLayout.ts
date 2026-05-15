@@ -115,7 +115,7 @@ const ZONES: ZoneDef[] = [
   //     entre o lounge e as salas de reunião. 4 aberturas top dentro do open
   //     space dos departamentos (x ≥ 14) pra não conflitar com a Segurança. ===
   { id: "lounge",         label: "Lounge",             x: 0,  y: 43, w: 58, h: 12,
-    openings: [{ side: "top", pos: 36, width: 4 }] },
+    openings: [{ side: "top", pos: 36, width: 5.2 }] },
 ];
 
 /**
@@ -182,7 +182,7 @@ function wallsForZone(z: ZoneDef): Wall[] {
       out.push(...s.segments);
       continue;
     }
-    const gapWidth = (opening.width ?? 2) * TILE;
+    const gapWidth = (opening.width ?? 2.6) * TILE;
     const gapStart = opening.pos * TILE;
 
     // Quebra a parede em 2 segmentos com vão no meio

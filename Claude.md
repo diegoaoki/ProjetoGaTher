@@ -229,6 +229,19 @@ npm run build      # build de produção
 - revisar visual da Copa — hoje parece sala de reunião por causa da mesa redonda + cadeiras em volta. Deveria parecer cozinha completa usando o asset pago LimeZu Modern Interiors (em `Downloads/Assets Pagos/moderninteriors-win/`, NÃO o Free): bancada com pia, fogão, geladeira, armários, microondas, mesa de refeição lateral. Os bookshelves placeholders atuais ("fridge", "stove", "coffee_machine", "microwave") precisam virar sprites corretos
 - NPC segurança com pathfinding real (A* entre móveis/paredes) — substituir o atual "teletransporte + fade" da feature de cadeado de sala. Precisa grid de navegação + algoritmo evitando furniture hitboxes e walls dinâmicas (portas fechadas)
 - visual da sala de Segurança — hoje só tem desk + 2 monitores + cadeira (placeholder). Falta cara de sala de segurança: painel de câmeras (múltiplos monitores em "wall mount" mostrando feeds do mapa), rack de equipamentos, walkie-talkie/telefone na mesa, possivelmente armário de armas/equipamentos. Usar asset pago moderninteriors-win se houver sprites de segurança/CCTV
+- áudio/microfone: relatos de microfone abafado. Adicionar UI pra (a) escolher dispositivo de entrada (microfone) — `enumerateDevices` + `<select>` no painel de áudio/vídeo, (b) ajustar ganho do microfone, (c) ajustar volume de saída/peers
+- câmera: quando estiver dentro de sala (não open space), trazer cards de vídeo dos peers pra "primeiro plano" — destaque maior que o atual, possivelmente layout em grid centralizado
+- câmera: opção "espelhar" o vídeo local (transform scaleX(-1)) — toggle no painel de áudio/vídeo. Padrão típico é espelhar pra que o user veja a si mesmo "natural"
+- volume: aumentar limite máximo do ganho do peer (LiveKit limita a 1.0 por default — dá pra subir até 2.0 com Web Audio API) e adicionar slider individual por peer
+- redesign do mapa baseado em print de referência enviado pelo user (verificar Downloads/Erro.jpeg ou similar — não localizado ainda) — possivelmente reorganizar departamentos, mobília, cores
+- sidebar: além de online, mostrar usuários offline (consulta tabela `users` no Postgres). Necessário endpoint novo (GET /users) que retorne todos com flag isOnline derivada de activeUsers do OfficeRoom
+- sidebar (offline): botão "ir até a mesa de X" — se o user tem mesa reservada, teleporta o solicitante pra lá. Se não tem, opção desabilitada
+- sidebar: indicador visual de "está falando agora" (ícone tipo 🎙️ animado) — já temos eventos `ActiveSpeakersChanged` do LiveKit em SpatialAudio.ts mas não estamos propagando pro App. Adicionar callback `onActiveSpeakersChanged` e renderizar badge na sidebar
+- mesa = zona de áudio: quando 2+ pessoas claim a mesma mesa (ou estão "ao redor" de uma mesa com hitbox expandida), elas formam uma zona de áudio isolada — só ouvem entre si, quem está fora não escuta. Hoje as mesas são single-claim e o áudio é só por zona (sala/open space)
+- NOTA: alguns dos pedidos do user já existem no produto. Confirmar com ele se entendi certo:
+  - "mesas requisitadas" — JÁ EXISTE (tecla E pra reservar/liberar; reservas persistem em desk_reservations). Talvez ele queira fluxo diferente (modal/click em vez de E?)
+  - "salas com áudio só pra quem está dentro" — JÁ EXISTE (Fase 7, zoneId no Player, SpatialAudio bloqueia entre zonas diferentes)
+  - "alerta pra enviar pra pessoa" — talvez já cubra com chat DM + convite via 👋 na sidebar. Confirmar se quer notificação push/sonora extra
 
 ## Decisões técnicas e seus porquês
 

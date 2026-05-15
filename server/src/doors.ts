@@ -20,7 +20,7 @@ export interface DoorConfig {
 /** Porta vertical (atravessa parede vertical).
  *  side: "right" (zona à esquerda, porta no lado direito da zona) ou "left".
  *  gapTiles: largura do vão em tiles (default 2). */
-function v(doorId: string, cxTile: number, vGapStartTile: number, side: "right" | "left", roomTag: string, gapTiles = 2, restricted = false): DoorConfig {
+function v(doorId: string, cxTile: number, vGapStartTile: number, side: "right" | "left", roomTag: string, gapTiles = 2.6, restricted = false): DoorConfig {
   const offset = side === "right" ? -WALL_T / 2 : WALL_T / 2;
   return {
     doorId,
@@ -36,7 +36,7 @@ function v(doorId: string, cxTile: number, vGapStartTile: number, side: "right" 
 /** Porta horizontal (atravessa parede horizontal).
  *  cyTile = y da parede; side "top" = zona abaixo, "bottom" = acima.
  *  gapTiles: largura do vão em tiles (default 2). */
-function h(doorId: string, hGapStartTile: number, cyTile: number, side: "top" | "bottom", roomTag: string, gapTiles = 2, restricted = false): DoorConfig {
+function h(doorId: string, hGapStartTile: number, cyTile: number, side: "top" | "bottom", roomTag: string, gapTiles = 2.6, restricted = false): DoorConfig {
   const offset = side === "top" ? WALL_T / 2 : -WALL_T / 2;
   return {
     doorId,
@@ -51,8 +51,8 @@ function h(doorId: string, hGapStartTile: number, cyTile: number, side: "top" | 
 
 export const DOORS: DoorConfig[] = [
   // Diretorias (vão na lateral direita das salas)
-  v("door-office_1", 20, 4, "right", "office_1", 2, true),
-  v("door-office_2", 20, 13, "right", "office_2", 2, true),
+  v("door-office_1", 20, 4, "right", "office_1", 2.6, true),
+  v("door-office_2", 20, 13, "right", "office_2", 2.6, true),
 
   // Recepção (lobby y=18, opening pos=4 → tile absoluto 22)
   v("door-lobby", 14, 22, "right", "lobby"),
@@ -73,7 +73,7 @@ export const DOORS: DoorConfig[] = [
   v("door-meeting_g2", 60, 47, "left", "meeting_g2"),
 
   // Lounge: 1 porta horizontal grande no centro (vão de 4 tiles)
-  h("door-lounge", 36, 43, "top", "lounge", 4),
+  h("door-lounge", 36, 43, "top", "lounge", 5.2),
 ];
 
 export const DOOR_OPEN_RADIUS_PX = 96;   // 3 tiles

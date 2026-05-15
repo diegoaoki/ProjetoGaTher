@@ -1120,28 +1120,6 @@ export default function App() {
                 📍 Ir pra minha mesa
               </button>
             )}
-            {/* Cadeado: só aparece dentro de sala de reunião lockable */}
-            {["meeting_xg", "meeting_m1", "meeting_g1", "meeting_g2"].includes(currentZoneId) && (
-              (() => {
-                const lock = lockedRooms.get(currentZoneId);
-                const isOwner = lock && lock.lockedBy === session.user.id;
-                if (lock && !isOwner) return null; // Não-dono dentro de sala trancada não pode destrancar
-                return (
-                  <button
-                    onClick={() => {
-                      if (lock) {
-                        roomRef.current?.send("room:unlock", { roomId: currentZoneId });
-                      } else {
-                        roomRef.current?.send("room:lock", { roomId: currentZoneId });
-                      }
-                    }}
-                    style={menuItemStyle}
-                  >
-                    {lock ? "🔓 Destrancar sala" : "🔒 Trancar sala"}
-                  </button>
-                );
-              })()
-            )}
             <div style={{ height: 1, background: "#334155", margin: "4px 0" }} />
             <button
               onClick={() => setConfirmingLogout(true)}
@@ -1164,6 +1142,28 @@ export default function App() {
         <button onClick={toggleScreen} style={mediaBtnStyle(screenOn, screenOn ? "#2563eb" : "#1e293b")} title="Compartilhar tela">
           🖥️
         </button>
+        {/* Cadeado: aparece automaticamente quando entra em sala de reunião lockable */}
+        {["meeting_xg", "meeting_m1", "meeting_g1", "meeting_g2"].includes(currentZoneId) && (() => {
+          const lock = lockedRooms.get(currentZoneId);
+          const isOwner = lock && lock.lockedBy === session.user.id;
+          // Não-dono dentro de sala trancada não vê botão (não pode destrancar)
+          if (lock && !isOwner) return null;
+          return (
+            <button
+              onClick={() => {
+                if (lock) {
+                  roomRef.current?.send("room:unlock", { roomId: currentZoneId });
+                } else {
+                  roomRef.current?.send("room:lock", { roomId: currentZoneId });
+                }
+              }}
+              style={mediaBtnStyle(!!lock, lock ? "#dc2626" : "#1e293b")}
+              title={lock ? "Destrancar sala" : "Trancar sala"}
+            >
+              {lock ? "🔓" : "🔒"}
+            </button>
+          );
+        })()}
         <button
           onClick={() => setChatOpen((v) => !v)}
           style={{ ...mediaBtnStyle(chatOpen, chatOpen ? "#2563eb" : "#1e293b"), position: "relative" }}
