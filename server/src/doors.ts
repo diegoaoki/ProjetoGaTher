@@ -51,8 +51,8 @@ function h(doorId: string, hGapStartTile: number, cyTile: number, side: "top" | 
 
 export const DOORS: DoorConfig[] = [
   // Diretorias (vão na lateral direita das salas)
-  v("door-office_1", 20, 4, "right", "office_1", true),
-  v("door-office_2", 20, 13, "right", "office_2", true),
+  v("door-office_1", 20, 4, "right", "office_1", 2, true),
+  v("door-office_2", 20, 13, "right", "office_2", 2, true),
 
   // Recepção (lobby y=18, opening pos=4 → tile absoluto 22)
   v("door-lobby", 14, 22, "right", "lobby"),
