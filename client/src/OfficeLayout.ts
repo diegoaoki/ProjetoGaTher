@@ -54,18 +54,19 @@ export interface OfficeLayoutData {
 }
 
 const HITBOXES: Record<string, Hitbox> = {
-  desk:        { offsetX: -48, offsetY: -10, w: 96, h: 32 },
-  chair:       { offsetX: -16, offsetY: -10, w: 32, h: 24 },
-  sofa:        { offsetX: -40, offsetY: -16, w: 80, h: 32 },
-  coffeeTable: { offsetX: -24, offsetY: -10, w: 48, h: 20 },
-  plant:       { offsetX: -14, offsetY: -8,  w: 28, h: 24 },
-  whiteboard:  { offsetX: -40, offsetY: -20, w: 80, h: 12 },
-  bookshelf:   { offsetX: -24, offsetY: -28, w: 48, h: 56 },
-  tv:          { offsetX: -36, offsetY: -28, w: 72, h: 14 },
+  desk:         { offsetX: -48, offsetY: -10, w: 96, h: 32 },
+  chair:        { offsetX: -16, offsetY: -10, w: 32, h: 24 },
+  sofa:         { offsetX: -40, offsetY: -16, w: 80, h: 32 },
+  coffeeTable:  { offsetX: -24, offsetY: -10, w: 48, h: 20 },
+  meetingTable: { offsetX: -80, offsetY: -22, w: 160, h: 56 },
+  plant:        { offsetX: -14, offsetY: -8,  w: 28, h: 24 },
+  whiteboard:   { offsetX: -40, offsetY: -20, w: 80, h: 12 },
+  bookshelf:    { offsetX: -24, offsetY: -28, w: 48, h: 56 },
+  tv:           { offsetX: -36, offsetY: -28, w: 72, h: 14 },
 };
 
 const TILE = 32;
-export const WALL_T = 16;
+export const WALL_T = 12;
 
 // === Definições de zonas em TILES (depois convertidas pra px) ===
 type ZoneDef = {
@@ -124,10 +125,10 @@ const ZONES: ZoneDef[] = [
   //     space dos departamentos (x ≥ 14) pra não conflitar com a Segurança. ===
   { id: "lounge",         label: "Lounge",             x: 0,  y: 43, w: 58, h: 12,
     openings: [
-      { side: "top", pos: 14, width: 4 },
-      { side: "top", pos: 26, width: 4 },
-      { side: "top", pos: 38, width: 4 },
-      { side: "top", pos: 50, width: 4 },
+      { side: "top", pos: 14, width: 2 },
+      { side: "top", pos: 26, width: 2 },
+      { side: "top", pos: 38, width: 2 },
+      { side: "top", pos: 50, width: 2 },
     ] },
 ];
 
@@ -175,7 +176,7 @@ function wallsForZone(z: ZoneDef): Wall[] {
       out.push(...s.segments);
       continue;
     }
-    const gapWidth = (opening.width ?? 1) * TILE;
+    const gapWidth = (opening.width ?? 2) * TILE;
     const gapStart = opening.pos * TILE;
 
     // Quebra a parede em 2 segmentos com vão no meio
@@ -253,16 +254,17 @@ export function getDefaultLayout(): OfficeLayoutData {
   items.push({ type: "bookshelf", x: 22 * TILE, y: 33 * TILE, depth: 1, hitbox: HITBOXES.bookshelf });
   items.push({ type: "plant", x: 58 * TILE, y: 40 * TILE, depth: 1, hitbox: HITBOXES.plant });
 
-  // --- DIRETORIAS (office_1, office_2) — mesa executiva grande + visitante ---
+  // --- DIRETORIAS (office_1, office_2) — sala inteira é "assumida" pelo admin
+  //     que reserva a mesa. deskId admin-only no server (ver desks.ts). ---
   // Office 1 (x=0-20, y=0-9)
-  items.push({ type: "desk", x: 8 * TILE, y: 4 * TILE, depth: 1, hitbox: HITBOXES.desk });
+  items.push({ type: "desk", x: 8 * TILE, y: 4 * TILE, depth: 1, hitbox: HITBOXES.desk, deskId: "office_1" });
   items.push({ type: "monitor", x: 8 * TILE, y: 4 * TILE - 18, depth: 2 });
   items.push({ type: "chair", x: 8 * TILE, y: 5 * TILE + 16, depth: 0, hitbox: HITBOXES.chair });
   items.push({ type: "chair", x: 12 * TILE, y: 4 * TILE, depth: 0, hitbox: HITBOXES.chair }); // visitante
   items.push({ type: "bookshelf", x: 2 * TILE, y: 2 * TILE, depth: 1, hitbox: HITBOXES.bookshelf });
   items.push({ type: "plant", x: 17 * TILE, y: 7 * TILE, depth: 1, hitbox: HITBOXES.plant });
   // Office 2
-  items.push({ type: "desk", x: 8 * TILE, y: 13 * TILE, depth: 1, hitbox: HITBOXES.desk });
+  items.push({ type: "desk", x: 8 * TILE, y: 13 * TILE, depth: 1, hitbox: HITBOXES.desk, deskId: "office_2" });
   items.push({ type: "monitor", x: 8 * TILE, y: 13 * TILE - 18, depth: 2 });
   items.push({ type: "chair", x: 8 * TILE, y: 14 * TILE + 16, depth: 0, hitbox: HITBOXES.chair });
   items.push({ type: "chair", x: 12 * TILE, y: 13 * TILE, depth: 0, hitbox: HITBOXES.chair });
@@ -298,38 +300,38 @@ export function getDefaultLayout(): OfficeLayoutData {
   items.push({ type: "monitor", x: 8 * TILE, y: 41 * TILE - 18, depth: 2 });
   items.push({ type: "chair", x: 5 * TILE, y: 42 * TILE, depth: 0, hitbox: HITBOXES.chair });
 
-  // --- REUNIÃO XG (sala grande, executiva) ---
-  items.push({ type: "desk", x: 70 * TILE, y: 4 * TILE, depth: 1, hitbox: HITBOXES.desk });
-  items.push({ type: "desk", x: 70 * TILE, y: 6 * TILE, depth: 1, hitbox: HITBOXES.desk });
-  // Cadeiras em volta
-  [66, 70, 74].forEach((tx) => {
-    items.push({ type: "chair", x: tx * TILE, y: 3 * TILE, depth: 0, hitbox: HITBOXES.chair });
-    items.push({ type: "chair", x: tx * TILE, y: 8 * TILE, depth: 0, hitbox: HITBOXES.chair });
-  });
+  // --- TODAS AS SALAS DE REUNIÃO — mesa retangular grande no centro + cadeiras ao redor ---
+  // Helper: mesa de reunião 5×2 tiles + 3 cadeiras em cima/baixo + 1 em cada extremidade
+  const buildMeetingRoom = (cx: number, cy: number) => {
+    items.push({ type: "meetingTable", x: cx * TILE, y: cy * TILE, depth: 1, hitbox: HITBOXES.meetingTable });
+    // 3 cadeiras topo + 3 cadeiras embaixo (alinhadas com tampo da mesa)
+    [-2, 0, 2].forEach((dx) => {
+      items.push({ type: "chair", x: (cx + dx) * TILE, y: (cy - 1.5) * TILE, depth: 0, hitbox: HITBOXES.chair });
+      items.push({ type: "chair", x: (cx + dx) * TILE, y: (cy + 1.5) * TILE, depth: 0, hitbox: HITBOXES.chair });
+    });
+    // cabeceiras (extremidades) — 1 cadeira de cada lado
+    items.push({ type: "chair", x: (cx - 3) * TILE, y: cy * TILE, depth: 0, hitbox: HITBOXES.chair });
+    items.push({ type: "chair", x: (cx + 3) * TILE, y: cy * TILE, depth: 0, hitbox: HITBOXES.chair });
+  };
+
+  // Reunião XG (sala grande, executiva): mesa central + TV na parede norte
+  buildMeetingRoom(70, 5);
   items.push({ type: "tv", x: 70 * TILE, y: 1 * TILE, depth: 1, hitbox: HITBOXES.tv });
   items.push({ type: "plant", x: 62 * TILE, y: 9 * TILE, depth: 1, hitbox: HITBOXES.plant });
 
-  // --- REUNIÕES P / M / G (coluna direita) — cada uma com mesa+cadeiras ---
-  const meetings = [
-    { y: 13, h: 5, chairs: 4 }, // p1
-    { y: 18, h: 5, chairs: 4 }, // p2
-    { y: 23, h: 5, chairs: 4 }, // p3
-    { y: 28, h: 5, chairs: 4 }, // p4
-    { y: 33, h: 6, chairs: 6 }, // m1
-    { y: 39, h: 6, chairs: 6 }, // m2
-    { y: 45, h: 6, chairs: 8 }, // g1
-    { y: 51, h: 6, chairs: 8 }, // g2
+  // Demais reuniões (P/M/G) — todas com a mesma mesa de reunião no centro
+  const meetingRooms = [
+    { y: 13, h: 5 }, // p1
+    { y: 18, h: 5 }, // p2
+    { y: 23, h: 5 }, // p3
+    { y: 28, h: 5 }, // p4
+    { y: 33, h: 6 }, // m1
+    { y: 39, h: 6 }, // m2
+    { y: 45, h: 6 }, // g1
+    { y: 51, h: 6 }, // g2
   ];
-  for (const m of meetings) {
-    const cx = 70;
-    const cy = m.y + Math.floor(m.h / 2);
-    items.push({ type: "coffeeTable", x: cx * TILE, y: cy * TILE, depth: 1, hitbox: HITBOXES.coffeeTable });
-    // Distribui cadeiras em volta
-    const half = Math.floor(m.chairs / 2);
-    for (let i = 0; i < half; i++) {
-      items.push({ type: "chair", x: (cx - 2 + i) * TILE, y: (cy - 1) * TILE, depth: 0, hitbox: HITBOXES.chair });
-      items.push({ type: "chair", x: (cx - 2 + i) * TILE, y: (cy + 1) * TILE, depth: 0, hitbox: HITBOXES.chair });
-    }
+  for (const m of meetingRooms) {
+    buildMeetingRoom(70, m.y + Math.floor(m.h / 2));
   }
 
   // --- LOUNGE (faixa inferior, 0-60 horizontal, 43-55 vertical) ---
@@ -396,7 +398,7 @@ export function checkCollision(
 ): boolean {
   const pLeft = px - playerHalfSize;
   const pRight = px + playerHalfSize;
-  const pTop = py - playerHalfSize / 2;
+  const pTop = py - playerHalfSize;       // simétrico — mesmo encosto em cima e em baixo
   const pBottom = py + playerHalfSize;
 
   for (const item of layout.furniture) {

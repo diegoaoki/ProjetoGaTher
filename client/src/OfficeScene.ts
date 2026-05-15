@@ -92,6 +92,7 @@ export class OfficeScene extends Phaser.Scene {
   private wasd!: { W: Phaser.Input.Keyboard.Key; A: Phaser.Input.Keyboard.Key; S: Phaser.Input.Keyboard.Key; D: Phaser.Input.Keyboard.Key };
 
   private lastSync = 0;
+  private movingSince = 0;     // timestamp (ms) quando começou a se mover continuamente
   private isMoving = false;
 
   private layout = getDefaultLayout();
@@ -654,7 +655,7 @@ export class OfficeScene extends Phaser.Scene {
   private renderDoor(doorId: string, door: { x: number; y: number; orientation: string; open: boolean }) {
     let rect = this.doorVisuals.get(doorId);
     // Tamanho: 1 tile na direção do vão, espessura igual à parede
-    const span = 32; // 1 tile
+    const span = 64; // 2 tiles
     const thickness = WALL_T;
     const isVertical = door.orientation === "vertical";
     const w = isVertical ? thickness : span;
@@ -685,7 +686,7 @@ export class OfficeScene extends Phaser.Scene {
     state.doors.forEach((door: any) => {
       if (door.open) return;
       const isVertical = door.orientation === "vertical";
-      const span = 32;
+      const span = 64;
       const thickness = WALL_T;
       const w = isVertical ? thickness : span;
       const h = isVertical ? span : thickness;
@@ -1007,9 +1008,18 @@ export class OfficeScene extends Phaser.Scene {
       this.recenterCamera();
     }
 
+    // Boost: a cada 3s de movimento contínuo, aumenta multiplicador em 0.5x (cap 3x)
     if (this.isMoving) {
-      const dx = vx * SPEED * dt;
-      const dy = vy * SPEED * dt;
+      if (this.movingSince === 0) this.movingSince = time;
+    } else {
+      this.movingSince = 0;
+    }
+    const heldMs = this.movingSince > 0 ? time - this.movingSince : 0;
+    const speedMul = Math.min(3, 1 + Math.floor(heldMs / 3000) * 0.5);
+
+    if (this.isMoving) {
+      const dx = vx * SPEED * speedMul * dt;
+      const dy = vy * SPEED * speedMul * dt;
       const moved = this.tryMove(this.myContainer.x, this.myContainer.y, dx, dy);
       this.myContainer.x = Phaser.Math.Clamp(moved.x, PLAYER_HALF, WORLD_W - PLAYER_HALF);
       this.myContainer.y = Phaser.Math.Clamp(moved.y, PLAYER_HALF, WORLD_H - PLAYER_HALF);

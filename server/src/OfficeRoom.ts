@@ -7,6 +7,7 @@ import { getDb } from "./db/client";
 import { profiles, users, deskReservations, messages, messageReactions } from "./db/schema";
 import { and, eq as eqOp } from "drizzle-orm";
 import { DESKS, getDeskById, getSeatPosition } from "./desks";
+import { isAdminEmail } from "./auth/admin";
 
 interface MoveMessage {
   x: number;
@@ -396,6 +397,12 @@ export class OfficeRoom extends Room<OfficeState> {
     const deskInfo = getDeskById(deskId);
     if (!deskInfo) {
       client.send("desk:error", { error: "Mesa inválida" });
+      return;
+    }
+
+    // Diretorias e similares são adminOnly — só ADMIN_EMAILS reservam.
+    if (deskInfo.adminOnly && !isAdminEmail(auth.email)) {
+      client.send("desk:error", { error: "Só administradores podem reservar essa sala" });
       return;
     }
 

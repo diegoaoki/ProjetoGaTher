@@ -255,6 +255,7 @@ export function createFurnitureTextures(scene: Phaser.Scene) {
   createPlant(scene);
   createSofa(scene);
   createCoffeeTable(scene);
+  createMeetingTable(scene);
   createRug(scene);
   createWhiteboard(scene);
   createBookshelf(scene);
@@ -357,6 +358,28 @@ function createSofa(scene: Phaser.Scene) {
   rect(ctx, W - 5, 16, 3, 3, "#3a1f0a", SCALE);
   rect(ctx, 1, 19, W - 2, 1, "#00000044", SCALE);
   scene.textures.addCanvas("sofa", canvas);
+}
+
+/** Mesa de reunião retangular grande (5 tiles × 2 tiles = 160×64 px).
+ *  Estilo madeira escura com pratinho/frutas no centro. */
+function createMeetingTable(scene: Phaser.Scene) {
+  if (scene.textures.exists("meetingTable")) return;
+  const SCALE = 2, W = 80, H = 32;
+  const { canvas, ctx } = makeCanvas(W * SCALE, H * SCALE);
+  // tampo (madeira escura)
+  rect(ctx, 0, 4, W, 22, "#5c3f25", SCALE);
+  rect(ctx, 0, 4, W, 1, "#7a5a3e", SCALE);  // highlight topo
+  rect(ctx, 0, 25, W, 1, "#3d2817", SCALE); // sombra inferior
+  // veios sutis da madeira
+  for (let y = 8; y < 24; y += 4) rect(ctx, 2, y, W - 4, 1, "#4a3320", SCALE);
+  // pratinho central
+  rect(ctx, W / 2 - 4, 13, 8, 4, "#e8e8e8", SCALE);
+  rect(ctx, W / 2 - 4, 13, 8, 1, "#ffffff", SCALE);
+  rect(ctx, W / 2 - 3, 14, 6, 2, "#e8a070", SCALE); // "comida" laranja
+  // sombra ao chão
+  rect(ctx, 2, 26, W - 4, 4, "#2a1c10", SCALE);
+  rect(ctx, 1, 30, W - 2, 2, "#00000055", SCALE);
+  scene.textures.addCanvas("meetingTable", canvas);
 }
 
 function createCoffeeTable(scene: Phaser.Scene) {

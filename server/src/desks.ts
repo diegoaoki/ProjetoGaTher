@@ -16,6 +16,8 @@ export interface DeskInfo {
   id: string;
   x: number;
   y: number;
+  /** Se true, só admins (ADMIN_EMAILS) podem reservar. Usado pras diretorias. */
+  adminOnly?: boolean;
 }
 
 /**
@@ -57,6 +59,9 @@ export const DESKS: DeskInfo[] = [
   { id: "desk-21", x: 36 * TILE, y: 36 * TILE },
   { id: "desk-22", x: 42 * TILE, y: 36 * TILE },
   { id: "desk-23", x: 48 * TILE, y: 36 * TILE },
+  // Diretorias — só admin pode reservar. "Assumir a sala" no nível do user.
+  { id: "office_1", x: 8 * TILE, y: 4 * TILE, adminOnly: true },
+  { id: "office_2", x: 8 * TILE, y: 13 * TILE, adminOnly: true },
 ];
 
 const DESK_BY_ID = new Map(DESKS.map((d) => [d.id, d]));
