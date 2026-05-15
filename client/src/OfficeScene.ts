@@ -8,6 +8,7 @@ import {
 } from "./SpriteFactory";
 import { getDefaultLayout, checkCollision, getCurrentRoom } from "./OfficeLayout";
 import { preloadLimezuAssets } from "./AssetLoader";
+import { registerFurnitureTextures } from "./FurnitureTiles";
 
 interface RemotePlayer {
   container: Phaser.GameObjects.Container;
@@ -146,6 +147,9 @@ export class OfficeScene extends Phaser.Scene {
   create() {
     createFloorTextures(this);
     createFurnitureTextures(this);
+    // Etapa 2: sobrescreve as texturas de móveis com tiles do LimeZu.
+    // Roda DEPOIS de createFurnitureTextures pra substituir as keys.
+    registerFurnitureTextures(this);
     this.drawFloor();
     this.drawWalls();
     this.drawFurniture();
