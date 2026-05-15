@@ -4,7 +4,7 @@ import {
   createFurnitureTextures,
   createFloorTextures,
 } from "./SpriteFactory";
-import { getDefaultLayout, checkCollision, getCurrentRoom } from "./OfficeLayout";
+import { getDefaultLayout, checkCollision, getCurrentRoom, WALL_T } from "./OfficeLayout";
 import {
   preloadLimezuAssets,
   createCharacterAnimations,
@@ -526,12 +526,25 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   private drawWalls() {
-    // Paredes desenhadas como retângulos cinza-escuro, depth alta pra ficarem
-    // por cima do chão/tapetes mas abaixo de móveis e avatares na mesma linha.
+    // Paredes desenhadas como retângulos cinza-escuro com sombra interna.
+    // Depth dinâmico = y do bottom da parede, pra avatar passar atrás quando
+    // está acima da parede (efeito "sumir atrás" típico de top-down).
     this.layout.walls.forEach((w) => {
-      const wall = this.add.rectangle(w.x + w.w / 2, w.y + w.h / 2, w.w, w.h, 0x4a5568);
-      wall.setStrokeStyle(1, 0x2d3748);
-      wall.setDepth(-5);
+      const cx = w.x + w.w / 2;
+      const cy = w.y + w.h / 2;
+      // base escura
+      const wall = this.add.rectangle(cx, cy, w.w, w.h, 0x3d4a5e);
+      wall.setStrokeStyle(2, 0x1e2533);
+      wall.setDepth(w.y + w.h - 1);
+      // brilho no topo (efeito 3d simples)
+      const isHorizontal = w.h === WALL_T;
+      if (isHorizontal) {
+        const hl = this.add.rectangle(cx, w.y + 2, w.w - 4, 2, 0x6b7d96, 0.6);
+        hl.setDepth(w.y + w.h - 1);
+      } else {
+        const hl = this.add.rectangle(w.x + 2, cy, 2, w.h - 4, 0x6b7d96, 0.6);
+        hl.setDepth(w.y + w.h - 1);
+      }
     });
 
     // Labels flutuantes em cima de cada sala
@@ -640,9 +653,9 @@ export class OfficeScene extends Phaser.Scene {
   /** Renderiza a porta + atualiza wall dinâmico de colisão. */
   private renderDoor(doorId: string, door: { x: number; y: number; orientation: string; open: boolean }) {
     let rect = this.doorVisuals.get(doorId);
-    // Tamanho: 2 tiles na direção do vão, espessura igual ao wall (8px)
+    // Tamanho: 1 tile na direção do vão, espessura igual à parede
     const span = 32; // 1 tile
-    const thickness = 8;
+    const thickness = WALL_T;
     const isVertical = door.orientation === "vertical";
     const w = isVertical ? thickness : span;
     const h = isVertical ? span : thickness;
@@ -673,7 +686,7 @@ export class OfficeScene extends Phaser.Scene {
       if (door.open) return;
       const isVertical = door.orientation === "vertical";
       const span = 32;
-      const thickness = 8;
+      const thickness = WALL_T;
       const w = isVertical ? thickness : span;
       const h = isVertical ? span : thickness;
       walls.push({ x: door.x - w / 2, y: door.y - h / 2, w, h });

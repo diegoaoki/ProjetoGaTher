@@ -65,7 +65,7 @@ const HITBOXES: Record<string, Hitbox> = {
 };
 
 const TILE = 32;
-const WALL_T = 8;
+export const WALL_T = 16;
 
 // === Definições de zonas em TILES (depois convertidas pra px) ===
 type ZoneDef = {
@@ -88,9 +88,9 @@ const ZONES: ZoneDef[] = [
   { id: "office_2",       label: "Diretoria 2",        x: 0,  y: 9,  w: 20, h: 9,
     openings: [{ side: "right", pos: 4 }] },
   { id: "lobby",          label: "Recepção",           x: 0,  y: 18, w: 14, h: 8,
-    openings: [{ side: "right", pos: 4, width: 4 }] },
+    openings: [{ side: "right", pos: 4 }] },
   { id: "kitchen",        label: "Copa",               x: 0,  y: 26, w: 14, h: 12,
-    openings: [{ side: "right", pos: 4, width: 4 }] },
+    openings: [{ side: "right", pos: 4 }] },
   { id: "security_room",  label: "Segurança",          x: 0,  y: 38, w: 14, h: 5 },
 
   // === Coluna central — open space, sem paredes (departamentos fundidos) ===
@@ -120,49 +120,38 @@ const ZONES: ZoneDef[] = [
     openings: [{ side: "left", pos: 2 }] },
 
   // === Lounge (faixa inferior) — w=58 deixa um corredor de 2 tiles (x=58-60)
-  //     entre o lounge e as salas de reunião. Aberturas top dentro do open
-  //     space dos departamentos pra não conflitar com a Segurança. ===
+  //     entre o lounge e as salas de reunião. 4 aberturas top dentro do open
+  //     space dos departamentos (x ≥ 14) pra não conflitar com a Segurança. ===
   { id: "lounge",         label: "Lounge",             x: 0,  y: 43, w: 58, h: 12,
-    openings: [{ side: "top", pos: 22, width: 4 }, { side: "top", pos: 40, width: 4 }] },
+    openings: [
+      { side: "top", pos: 14, width: 4 },
+      { side: "top", pos: 26, width: 4 },
+      { side: "top", pos: 38, width: 4 },
+      { side: "top", pos: 50, width: 4 },
+    ] },
 ];
 
 /**
- * Considera dois walls "duplicados adjacentes" se forem da mesma orientação,
- * estiverem encostados (gap ≤ WALL_T) e tiverem sobreposição significativa no
- * eixo paralelo. Resolve o caso "parede com parede" entre zonas vizinhas.
- *
- * Estratégia: ao adicionar um candidato, se já existem adjacentes, escolhe
- * manter o conjunto com menor área total — assim openings (segmentos menores)
- * vencem paredes sólidas adjacentes, preservando a passagem.
+ * Dedup conservador: duas walls são consideradas "a mesma parede dupla" só
+ * se cobrem EXATAMENTE o mesmo range na direção paralela e estão a até WALL_T
+ * de distância na perpendicular. Casos parciais (uma cobre só parte da outra)
+ * são mantidos separados — caso contrário criaríamos buracos onde uma sala
+ * adjacente perderia parte da sua parede.
  */
 function pushWallDedup(walls: Wall[], cand: Wall): void {
   const candH = cand.h === WALL_T && cand.w > WALL_T;
   const candV = cand.w === WALL_T && cand.h > WALL_T;
-  const adjacentIdxs: number[] = [];
-  let totalAdjacentArea = 0;
-  for (let i = 0; i < walls.length; i++) {
-    const w = walls[i];
+  for (const w of walls) {
     const wH = w.h === WALL_T && w.w > WALL_T;
     const wV = w.w === WALL_T && w.h > WALL_T;
-    if (candH && wH && Math.abs(w.y - cand.y) <= WALL_T) {
-      const overlapX = Math.max(0, Math.min(w.x + w.w, cand.x + cand.w) - Math.max(w.x, cand.x));
-      if (overlapX > WALL_T) { adjacentIdxs.push(i); totalAdjacentArea += w.w * w.h; }
-    } else if (candV && wV && Math.abs(w.x - cand.x) <= WALL_T) {
-      const overlapY = Math.max(0, Math.min(w.y + w.h, cand.y + cand.h) - Math.max(w.y, cand.y));
-      if (overlapY > WALL_T) { adjacentIdxs.push(i); totalAdjacentArea += w.w * w.h; }
+    if (candH && wH && Math.abs(w.y - cand.y) <= WALL_T && w.x === cand.x && w.w === cand.w) {
+      return; // exata duplicata horizontal — descarta
+    }
+    if (candV && wV && Math.abs(w.x - cand.x) <= WALL_T && w.y === cand.y && w.h === cand.h) {
+      return; // exata duplicata vertical — descarta
     }
   }
-  if (adjacentIdxs.length === 0) {
-    walls.push(cand);
-    return;
-  }
-  const candArea = cand.w * cand.h;
-  if (candArea < totalAdjacentArea) {
-    // Candidato cobre menos (tem mais opening) → mantém candidato, remove existentes
-    for (let i = adjacentIdxs.length - 1; i >= 0; i--) walls.splice(adjacentIdxs[i], 1);
-    walls.push(cand);
-  }
-  // Senão: já tem existentes melhores, descarta candidato silenciosamente
+  walls.push(cand);
 }
 
 /** Gera as 4 paredes de uma zona com vãos (openings) onde definido. */

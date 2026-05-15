@@ -33,6 +33,12 @@ export const DOORS: DoorConfig[] = [
   v("door-office_1", 20, 4, "office_1", true),
   v("door-office_2", 20, 13, "office_2", true),
 
+  // Recepção (lobby y=18, opening pos=4 → tile absoluto 22)
+  v("door-lobby", 14, 22, "lobby"),
+
+  // Copa (kitchen y=26, opening pos=4 → tile absoluto 30)
+  v("door-kitchen", 14, 30, "kitchen"),
+
   // Reunião XG (vão na lateral esquerda)
   v("door-meeting_xg", 60, 5, "meeting_xg"),
 
