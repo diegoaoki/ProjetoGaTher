@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import Phaser from "phaser";
 import { Client, Room } from "colyseus.js";
 import { OfficeScene } from "./OfficeScene";
+import { getDeskCatalog } from "./OfficeLayout";
 import { SpatialAudio } from "./SpatialAudio";
 import LoginScreen from "./LoginScreen";
 import AdminPanel from "./AdminPanel";
@@ -556,6 +557,10 @@ export default function App() {
       });
       room.onMessage("invite:error", (msg: { error: string }) => {
         setSocialToast({ text: msg?.error || "Falha no convite", tone: "error" });
+      });
+      // Convite aceito por mim → ando até o convidador (rota A*, sem teleporte)
+      room.onMessage("invite:walk-to", (msg: { x: number; y: number }) => {
+        sceneRef.current?.navigateTo(msg.x, msg.y);
       });
       room.onMessage("teleport:error", (msg: { error: string }) => {
         setSocialToast({ text: msg?.error || "Falha no teleporte", tone: "error" });
@@ -1268,7 +1273,10 @@ export default function App() {
               )}
               {myDeskId && (
                 <button
-                  onClick={() => roomRef.current?.send("teleport:to-desk", { deskId: myDeskId })}
+                  onClick={() => {
+                    const desk = getDeskCatalog().find((d) => d.id === myDeskId);
+                    if (desk && sceneRef.current) sceneRef.current.navigateTo(desk.x, desk.y + 28);
+                  }}
                   style={menuItemStyle}
                 >
                   📍 Ir pra minha mesa
@@ -1387,7 +1395,13 @@ export default function App() {
                         💬
                       </button>
                       <button
-                        onClick={() => roomRef.current?.send("teleport:to-player", { targetSessionId: p.sessionId })}
+                        onClick={() => {
+                          const peer = (roomRef.current as any)?.state?.players?.get?.(p.sessionId);
+                          if (peer && sceneRef.current) {
+                            sceneRef.current.navigateTo(peer.x, peer.y);
+                            setSidebarOpen(false);
+                          }
+                        }}
                         style={sidebarActionBtn}
                         title={`Ir até ${p.name}`}
                       >

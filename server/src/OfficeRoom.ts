@@ -821,11 +821,11 @@ export class OfficeRoom extends Room<OfficeState> {
         });
       }
 
-      // Se aceito, teletransporta o convidado pra perto do convidador (server-autoritativo)
+      // Se aceito, NÃO teleporta: manda o alvo (perto do convidador) pro
+      // client do convidado, que calcula a rota A* e anda até lá.
       if (accepted && inviter) {
         const pos = this.pickSpotNear(inviter.x, inviter.y);
-        responder.x = pos.x;
-        responder.y = pos.y;
+        client.send("invite:walk-to", { x: pos.x, y: pos.y });
       }
       console.log(`[invite:respond] ${responder.name} accepted=${accepted}`);
     } catch (err) {

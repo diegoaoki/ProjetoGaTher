@@ -5,6 +5,7 @@ import {
   createFloorTextures,
 } from "./SpriteFactory";
 import { getDefaultLayout, checkCollision, getCurrentRoom, WALL_T } from "./OfficeLayout";
+import { findPath } from "./pathfinding";
 import {
   preloadLimezuAssets,
   createCharacterAnimations,
@@ -75,6 +76,16 @@ export class OfficeScene extends Phaser.Scene {
   private doorVisuals = new Map<string, Phaser.GameObjects.Rectangle>();
   /** Walls dinâmicos a partir das portas fechadas — usados em checkCollision. */
   private dynamicWalls: Array<{ x: number; y: number; w: number; h: number }> = [];
+
+  // === Navegação automática (rota com A*) ===
+  /** Waypoints restantes em pixels; null = sem rota ativa. */
+  private navPath: Array<{ x: number; y: number }> | null = null;
+  /** Destino final (pra fallback de teleporte se ficar preso). */
+  private navGoal: { x: number; y: number } | null = null;
+  /** Linha desenhada da rota. */
+  private navGraphics?: Phaser.GameObjects.Graphics;
+  /** Acumula tempo "sem progredir" pra abortar com fallback. */
+  private navStuckMs = 0;
 
   // === NPCs de segurança (cadeado) ===
   private securityNpcs = new Map<string, Phaser.GameObjects.Container>();
@@ -1029,12 +1040,83 @@ export class OfficeScene extends Phaser.Scene {
     return { x: curX, y: curY };
   }
 
+  // ============================================================
+  //  Navegação automática: calcula rota A* desviando de móveis/paredes,
+  //  desenha a linha e o avatar segue sozinho (update() dirige o vx/vy).
+  //  Qualquer input manual (WASD/joystick) cancela. Sem rota → fallback
+  //  teleporte (a ação nunca falha em silêncio).
+  // ============================================================
+  public navigateTo(tx: number, ty: number) {
+    if (!this.myContainer) return;
+    const gx = Phaser.Math.Clamp(tx, PLAYER_HALF, WORLD_W - PLAYER_HALF);
+    const gy = Phaser.Math.Clamp(ty, PLAYER_HALF, WORLD_H - PLAYER_HALF);
+    this.navGoal = { x: gx, y: gy };
+    this.navStuckMs = 0;
+
+    const path = findPath(
+      { x: this.myContainer.x, y: this.myContainer.y },
+      { x: gx, y: gy },
+      this.layout
+    );
+
+    if (!path || path.length === 0) {
+      // Sem rota → teleporta direto (fallback) pra ação não falhar.
+      this.teleportTo(gx, gy);
+      this.cancelNavigation();
+      return;
+    }
+    this.navPath = path;
+    if (!this.navGraphics) {
+      this.navGraphics = this.add.graphics();
+      this.navGraphics.setDepth(50); // acima do piso, abaixo de avatares/UI
+    }
+  }
+
+  public cancelNavigation() {
+    this.navPath = null;
+    this.navGoal = null;
+    this.navStuckMs = 0;
+    this.navGraphics?.clear();
+  }
+
+  /** Teleporte server-autoritativo-light: move e sincroniza imediatamente. */
+  private teleportTo(x: number, y: number) {
+    if (!this.myContainer) return;
+    this.myContainer.x = Phaser.Math.Clamp(x, PLAYER_HALF, WORLD_W - PLAYER_HALF);
+    this.myContainer.y = Phaser.Math.Clamp(y, PLAYER_HALF, WORLD_H - PLAYER_HALF);
+    this.myContainer.setDepth(this.myContainer.y);
+    this.room.send("move", {
+      x: this.myContainer.x,
+      y: this.myContainer.y,
+      direction: this.myDirection,
+      isMoving: false,
+    });
+  }
+
+  /** Redesenha a linha da rota: da minha posição pelos waypoints restantes. */
+  private drawNavLine() {
+    if (!this.navGraphics || !this.navPath || !this.myContainer) return;
+    const g = this.navGraphics;
+    g.clear();
+    g.lineStyle(3, 0x38bdf8, 0.85);
+    g.beginPath();
+    g.moveTo(this.myContainer.x, this.myContainer.y);
+    for (const p of this.navPath) g.lineTo(p.x, p.y);
+    g.strokePath();
+    // Marcador no destino
+    const last = this.navPath[this.navPath.length - 1];
+    g.fillStyle(0x38bdf8, 0.9);
+    g.fillCircle(last.x, last.y, 5);
+  }
+
   update(time: number, delta: number) {
     if (!this.myContainer) return;
 
     const dt = delta / 1000;
     let vx = 0, vy = 0;
     let newDir = this.myDirection;
+    const navBeforeX = this.myContainer.x;
+    const navBeforeY = this.myContainer.y;
 
     // Se o usuário está digitando em algum input HTML (chat, modal),
     // ignora WASD/setas pra não mover o avatar com as letras digitadas.
@@ -1063,7 +1145,39 @@ export class OfficeScene extends Phaser.Scene {
       }
     }
 
-    if (vx !== 0 && vy !== 0) {
+    // Autopilot: se há rota ativa e o usuário NÃO está dando input manual,
+    // o avatar segue a rota. Qualquer input manual cancela a navegação.
+    const manualInput = vx !== 0 || vy !== 0;
+    let navDriving = false;
+    if (this.navPath) {
+      if (manualInput) {
+        this.cancelNavigation();
+      } else {
+        const px = this.myContainer.x;
+        const py = this.myContainer.y;
+        // Consome waypoints já alcançados
+        while (this.navPath.length > 0) {
+          const wp = this.navPath[0];
+          if (Math.hypot(wp.x - px, wp.y - py) <= 10) this.navPath.shift();
+          else break;
+        }
+        if (this.navPath.length === 0) {
+          this.cancelNavigation();
+        } else {
+          const wp = this.navPath[0];
+          const ddx = wp.x - px;
+          const ddy = wp.y - py;
+          const d = Math.hypot(ddx, ddy) || 1;
+          vx = ddx / d;
+          vy = ddy / d;
+          if (Math.abs(ddx) > Math.abs(ddy)) newDir = ddx > 0 ? "right" : "left";
+          else newDir = ddy > 0 ? "down" : "up";
+          navDriving = true;
+        }
+      }
+    }
+
+    if (!navDriving && vx !== 0 && vy !== 0) {
       vx *= 0.7071;
       vy *= 0.7071;
     }
@@ -1092,6 +1206,24 @@ export class OfficeScene extends Phaser.Scene {
       this.myContainer.x = Phaser.Math.Clamp(moved.x, PLAYER_HALF, WORLD_W - PLAYER_HALF);
       this.myContainer.y = Phaser.Math.Clamp(moved.y, PLAYER_HALF, WORLD_H - PLAYER_HALF);
       this.myContainer.setDepth(this.myContainer.y);
+    }
+
+    // Acompanhamento da rota: detecta "preso" (porta que não abriu, peer
+    // bloqueando) e cai pro fallback de teleporte; senão redesenha a linha.
+    if (this.navPath) {
+      const progressed = Math.hypot(
+        this.myContainer.x - navBeforeX,
+        this.myContainer.y - navBeforeY
+      );
+      if (progressed < 0.5) this.navStuckMs += delta;
+      else this.navStuckMs = 0;
+
+      if (this.navStuckMs > 1800 && this.navGoal) {
+        this.teleportTo(this.navGoal.x, this.navGoal.y);
+        this.cancelNavigation();
+      } else {
+        this.drawNavLine();
+      }
     }
 
     if (newDir !== this.myDirection || this.isMoving !== wasMoving) {
