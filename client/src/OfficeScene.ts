@@ -40,6 +40,7 @@ interface DeskOverlay {
 }
 
 const SPEED = 180;
+const NPC_SPEED = 130; // guarda anda um pouco mais devagar que o player
 const SYNC_INTERVAL = 50;
 // Tamanho do mundo lido do layout (Fase A: 80×55 tiles = 2560×1760 px).
 // Default mantido caso layout falhe — não deve acontecer em produção.
@@ -89,6 +90,12 @@ export class OfficeScene extends Phaser.Scene {
 
   // === NPCs de segurança (cadeado) ===
   private securityNpcs = new Map<string, Phaser.GameObjects.Container>();
+  /** Rota ativa de cada NPC: anda do posto de segurança até a porta (e
+   *  volta ao ser removido). roomId → estado da navegação. */
+  private securityNpcNav = new Map<
+    string,
+    { path: Array<{ x: number; y: number }>; onDone?: () => void }
+  >();
 
   // === Joystick virtual (mobile) — sobrescreve teclado quando ativo ===
   private virtualVx = 0;
@@ -698,17 +705,27 @@ export class OfficeScene extends Phaser.Scene {
    * corpo azul-marinho + cabeça bege + emoji 🛡️ flutuando. Substituir por
    * asset moderninteriors-win quando integrar pack pago (ver backlog).
    */
+  /** Centro livre da sala de Segurança — origem de onde o guarda "sai". */
+  private securityOrigin(): { x: number; y: number } {
+    const sec = this.layout.rooms.find((r) => r.id === "security_room");
+    if (sec) return { x: sec.x + sec.w / 2, y: sec.y + sec.h / 2 };
+    return { x: 7 * 32, y: 40 * 32 }; // fallback (tiles aproximados)
+  }
+
   private spawnSecurityNpc(roomId: string, npc: { x: number; y: number; direction: string }) {
-    // Idempotente — se já existe (race condition), só atualiza posição
+    // Idempotente — se já existe (race condition), só atualiza o destino
     const existing = this.securityNpcs.get(roomId);
     if (existing) {
-      existing.x = npc.x;
-      existing.y = npc.y;
+      const p = findPath({ x: existing.x, y: existing.y }, { x: npc.x, y: npc.y }, this.layout);
+      if (p && p.length) this.securityNpcNav.set(roomId, { path: p });
+      else { existing.x = npc.x; existing.y = npc.y; existing.setDepth(npc.y); }
       return;
     }
 
-    const container = this.add.container(npc.x, npc.y);
-    container.setDepth(npc.y);
+    // Guarda "sai" da sala de Segurança e CAMINHA até o posto (porta).
+    const origin = this.securityOrigin();
+    const container = this.add.container(origin.x, origin.y);
+    container.setDepth(origin.y);
     container.setAlpha(0);
 
     // Corpo (uniforme azul-marinho)
@@ -729,26 +746,83 @@ export class OfficeScene extends Phaser.Scene {
     container.add([body, head, badge, nameText]);
     this.securityNpcs.set(roomId, container);
 
-    // Fade-in 200ms (suporta o "teletransporte + fade" do plano)
-    this.tweens.add({
-      targets: container,
-      alpha: 1,
-      duration: 200,
-      ease: "Linear",
-    });
+    // Fade-in rápido (some o "pop") e calcula a rota até o posto.
+    this.tweens.add({ targets: container, alpha: 1, duration: 200, ease: "Linear" });
+
+    const path = findPath(origin, { x: npc.x, y: npc.y }, this.layout);
+    if (path && path.length) {
+      this.securityNpcNav.set(roomId, { path });
+    } else {
+      // Sem rota → vai direto pro posto (fallback, não trava o cadeado)
+      container.x = npc.x;
+      container.y = npc.y;
+      container.setDepth(npc.y);
+    }
   }
 
-  /** Remove o NPC com fade-out (200ms) — destrói no complete. */
+  /**
+   * Remove o NPC: ele CAMINHA de volta pra sala de Segurança e só então
+   * é destruído. Sem rota → fade-out (fallback).
+   */
   private removeSecurityNpc(roomId: string) {
     const container = this.securityNpcs.get(roomId);
     if (!container) return;
     this.securityNpcs.delete(roomId);
+
+    const back = findPath(
+      { x: container.x, y: container.y },
+      this.securityOrigin(),
+      this.layout
+    );
+    if (back && back.length) {
+      this.securityNpcNav.set(`__leaving__${roomId}`, {
+        path: back,
+        onDone: () => container.destroy(),
+      });
+      // guarda o container nesse "slot de saída" pra o advance achar
+      this.securityNpcs.set(`__leaving__${roomId}`, container);
+      return;
+    }
     this.tweens.add({
       targets: container,
       alpha: 0,
       duration: 200,
       ease: "Linear",
       onComplete: () => container.destroy(),
+    });
+  }
+
+  /** Avança cada NPC de segurança ao longo da rota (chamado no update). */
+  private advanceSecurityNpcs(dtSec: number) {
+    if (this.securityNpcNav.size === 0) return;
+    const step = NPC_SPEED * dtSec;
+    this.securityNpcNav.forEach((nav, key) => {
+      const c = this.securityNpcs.get(key);
+      if (!c) {
+        this.securityNpcNav.delete(key);
+        return;
+      }
+      const wp = nav.path[0];
+      if (!wp) {
+        this.securityNpcNav.delete(key);
+        if (nav.onDone) {
+          this.securityNpcs.delete(key);
+          nav.onDone();
+        }
+        return;
+      }
+      const dx = wp.x - c.x;
+      const dy = wp.y - c.y;
+      const d = Math.hypot(dx, dy);
+      if (d <= step || d < 2) {
+        c.x = wp.x;
+        c.y = wp.y;
+        nav.path.shift();
+      } else {
+        c.x += (dx / d) * step;
+        c.y += (dy / d) * step;
+      }
+      c.setDepth(c.y);
     });
   }
 
@@ -1266,6 +1340,8 @@ export class OfficeScene extends Phaser.Scene {
         rp.sprite.play(key, true);
       }
     });
+
+    this.advanceSecurityNpcs(dt);
 
     if (this.onPositionsUpdate) {
       const peerInfo = new Map<string, { x: number; y: number; zoneId: string; bubbleId: string }>();
