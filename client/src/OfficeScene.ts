@@ -1337,6 +1337,43 @@ export class OfficeScene extends Phaser.Scene {
     this.setGhost(!this.ghostMode);
   }
 
+  /** Efeito de "nascimento" do avatar (visitante): pop + anel + flash. */
+  private spawnBirthFx(
+    container: Phaser.GameObjects.Container,
+    x: number,
+    y: number
+  ) {
+    container.setScale(0);
+    container.setAlpha(0);
+    this.tweens.add({
+      targets: container,
+      scale: 1,
+      alpha: 1,
+      duration: 480,
+      ease: "Back.easeOut",
+    });
+    const ring = this.add.circle(x, y, 10, 0x38bdf8, 0);
+    ring.setStrokeStyle(3, 0x38bdf8, 0.9);
+    ring.setDepth(y + 1);
+    this.tweens.add({
+      targets: ring,
+      scale: 5,
+      alpha: 0,
+      duration: 600,
+      ease: "Cubic.easeOut",
+      onComplete: () => ring.destroy(),
+    });
+    const flash = this.add.circle(x, y, 24, 0xffffff, 0.65);
+    flash.setDepth(y + 1);
+    this.tweens.add({
+      targets: flash,
+      alpha: 0,
+      scale: 1.7,
+      duration: 340,
+      onComplete: () => flash.destroy(),
+    });
+  }
+
   private handleClaimKey() {
     if (!this.myContainer) return;
     const state: any = this.room.state;
@@ -1408,6 +1445,7 @@ export class OfficeScene extends Phaser.Scene {
 
     this.myContainer = this.add.container(spawnX, spawnY, [this.myRing, this.mySprite, this.myNameText]);
     this.myContainer.setDepth(spawnY);
+    if (player.role === "visitor") this.spawnBirthFx(this.myContainer, spawnX, spawnY);
 
     this.cameras.main.startFollow(this.myContainer, true, 0.1, 0.1);
     this.cameras.main.setZoom(1.3);
@@ -1505,6 +1543,7 @@ export class OfficeScene extends Phaser.Scene {
     const container = this.add.container(player.x, player.y, [ring, sprite, nameText]);
     container.setDepth(player.y);
     sprite.play(`${charId}_down_idle`);
+    if (player.role === "visitor") this.spawnBirthFx(container, player.x, player.y);
 
     this.remotePlayers.set(sessionId, {
       container, sprite, ring, nameText,

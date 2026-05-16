@@ -1742,6 +1742,7 @@ export default function App() {
               onClick={() => {
                 try { navigator.clipboard?.writeText(visitorCodeModal); } catch {}
                 setSocialToast({ text: "Código copiado", tone: "info" });
+                setVisitorCodeModal(null);
               }}
               style={{ ...buttonStyle, marginBottom: 8 }}
             >

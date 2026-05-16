@@ -627,10 +627,21 @@ export class OfficeRoom extends Room<OfficeState> {
 
     // Visitante nunca tem mesa reservada (não pode reservar).
     const reservedDesk = auth.role === "visitor" ? undefined : this.findReservedDeskFor(auth.userId);
+    // Visitante via código: já nasce ao lado do host (se ele estiver
+    // online) — evita "nasce na recepção e sai correndo".
+    let hostSpawn: { x: number; y: number } | null = null;
+    if (auth.role === "visitor" && auth.visitorHost) {
+      const hc = this.activeUsers.get(auth.visitorHost);
+      const hp = hc ? this.state.players.get(hc.sessionId) : undefined;
+      if (hp) hostSpawn = this.pickSpotNear(hp.x, hp.y);
+    }
     if (reservedDesk) {
       const seat = this.deskSeatPos(reservedDesk);
       player.x = seat.x;
       player.y = seat.y;
+    } else if (hostSpawn) {
+      player.x = hostSpawn.x;
+      player.y = hostSpawn.y;
     } else {
       const spawnIdx = this.state.players.size % SPAWN_POINTS.length;
       const [sx, sy] = SPAWN_POINTS[spawnIdx];
