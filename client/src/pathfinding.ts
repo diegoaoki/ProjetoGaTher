@@ -67,49 +67,95 @@ export function findPath(
 ): Pt[] | null {
   const gridW = Math.ceil(layout.width / CELL);
   const gridH = Math.ceil(layout.height / CELL);
-  const blocked = (x: number, y: number) => cellBlocked(x, y, layout);
+  const N = gridW * gridH;
+
+  // Memoiza o teste de bloqueio (checkCollision é caro): 0=desconhecido,
+  // 1=livre, 2=bloqueado. Evita recalcular a mesma célula várias vezes.
+  const bmemo = new Uint8Array(N);
+  const blockedId = (id: number): boolean => {
+    let v = bmemo[id];
+    if (v === 0) {
+      v = cellBlocked(id % gridW, (id / gridW) | 0, layout) ? 2 : 1;
+      bmemo[id] = v;
+    }
+    return v === 2;
+  };
+  const blocked = (x: number, y: number) => blockedId(y * gridW + x);
 
   const s0 = nearestFree(Math.floor(start.x / CELL), Math.floor(start.y / CELL), gridW, gridH, blocked);
   const g0 = nearestFree(Math.floor(goal.x / CELL), Math.floor(goal.y / CELL), gridW, gridH, blocked);
   if (!s0 || !g0) return null;
   if (s0.x === g0.x && s0.y === g0.y) return [goal];
 
-  const idx = (x: number, y: number) => y * gridW + x;
-  const open: number[] = [s0.x + s0.y * gridW]; // heap simples (array + sort)
-  const gScore = new Map<number, number>();
-  const fScore = new Map<number, number>();
-  const came = new Map<number, number>();
-  gScore.set(idx(s0.x, s0.y), 0);
-  fScore.set(idx(s0.x, s0.y), Math.hypot(g0.x - s0.x, g0.y - s0.y));
+  const startId = s0.y * gridW + s0.x;
+  const goalId = g0.y * gridW + g0.x;
+
+  const gScore = new Float64Array(N).fill(Infinity);
+  const came = new Int32Array(N).fill(-1);
+  const closed = new Uint8Array(N);
+  gScore[startId] = 0;
+
+  // Binary min-heap (por fScore) — termina em O(E log V), sem cap de iter.
+  const heapId: number[] = [];
+  const heapF: number[] = [];
+  const hpush = (id: number, f: number) => {
+    heapId.push(id);
+    heapF.push(f);
+    let i = heapId.length - 1;
+    while (i > 0) {
+      const p = (i - 1) >> 1;
+      if (heapF[p] <= heapF[i]) break;
+      [heapF[p], heapF[i]] = [heapF[i], heapF[p]];
+      [heapId[p], heapId[i]] = [heapId[i], heapId[p]];
+      i = p;
+    }
+  };
+  const hpop = (): number => {
+    const top = heapId[0];
+    const lastId = heapId.pop()!;
+    const lastF = heapF.pop()!;
+    if (heapId.length > 0) {
+      heapId[0] = lastId;
+      heapF[0] = lastF;
+      let i = 0;
+      const n = heapId.length;
+      for (;;) {
+        const l = 2 * i + 1;
+        const r = l + 1;
+        let m = i;
+        if (l < n && heapF[l] < heapF[m]) m = l;
+        if (r < n && heapF[r] < heapF[m]) m = r;
+        if (m === i) break;
+        [heapF[m], heapF[i]] = [heapF[i], heapF[m]];
+        [heapId[m], heapId[i]] = [heapId[i], heapId[m]];
+        i = m;
+      }
+    }
+    return top;
+  };
+
+  const h = (x: number, y: number) => Math.hypot(g0.x - x, g0.y - y);
+  hpush(startId, h(s0.x, s0.y));
 
   const NEI = [
     [1, 0], [-1, 0], [0, 1], [0, -1],
     [1, 1], [1, -1], [-1, 1], [-1, -1],
   ];
-  const goalId = idx(g0.x, g0.y);
-  let iterations = 0;
-  const MAX_ITER = gridW * gridH; // limite de segurança
 
-  while (open.length > 0) {
-    if (++iterations > MAX_ITER) return null;
-    // pega o nó de menor fScore (O(n) — grid pequeno, ok)
-    let bestI = 0;
-    for (let i = 1; i < open.length; i++) {
-      if ((fScore.get(open[i]) ?? Infinity) < (fScore.get(open[bestI]) ?? Infinity)) bestI = i;
-    }
-    const current = open.splice(bestI, 1)[0];
+  while (heapId.length > 0) {
+    const current = hpop();
+    if (closed[current]) continue;
+    closed[current] = 1;
+
     if (current === goalId) {
-      // reconstrói
       const cells: Pt[] = [];
-      let c: number | undefined = current;
-      while (c !== undefined) {
-        const cx = c % gridW;
-        const cy = Math.floor(c / gridW);
-        cells.push({ x: cx * CELL + CELL / 2, y: cy * CELL + CELL / 2 });
-        c = came.get(c);
+      let c = current;
+      while (c !== -1) {
+        cells.push({ x: (c % gridW) * CELL + CELL / 2, y: ((c / gridW) | 0) * CELL + CELL / 2 });
+        c = came[c];
       }
       cells.reverse();
-      cells[cells.length - 1] = { x: goal.x, y: goal.y }; // ponto exato no fim
+      cells[cells.length - 1] = { x: goal.x, y: goal.y };
 
       // String-pulling: descarta waypoints com linha de visão direta
       const out: Pt[] = [];
@@ -125,24 +171,21 @@ export function findPath(
     }
 
     const cx = current % gridW;
-    const cy = Math.floor(current / gridW);
+    const cy = (current / gridW) | 0;
     for (const [ox, oy] of NEI) {
       const nx = cx + ox;
       const ny = cy + oy;
       if (nx < 0 || ny < 0 || nx >= gridW || ny >= gridH) continue;
-      if (blocked(nx, ny)) continue;
-      // Diagonal: não corta quina (ambos ortogonais precisam estar livres)
-      if (ox !== 0 && oy !== 0) {
-        if (blocked(cx + ox, cy) || blocked(cx, cy + oy)) continue;
-      }
-      const nId = idx(nx, ny);
+      const nId = ny * gridW + nx;
+      if (closed[nId] || blockedId(nId)) continue;
+      // Diagonal: não corta quina
+      if (ox !== 0 && oy !== 0 && (blocked(cx + ox, cy) || blocked(cx, cy + oy))) continue;
       const step = ox !== 0 && oy !== 0 ? 1.4142 : 1;
-      const tentative = (gScore.get(current) ?? Infinity) + step;
-      if (tentative < (gScore.get(nId) ?? Infinity)) {
-        came.set(nId, current);
-        gScore.set(nId, tentative);
-        fScore.set(nId, tentative + Math.hypot(g0.x - nx, g0.y - ny));
-        if (!open.includes(nId)) open.push(nId);
+      const tentative = gScore[current] + step;
+      if (tentative < gScore[nId]) {
+        came[nId] = current;
+        gScore[nId] = tentative;
+        hpush(nId, tentative + h(nx, ny));
       }
     }
   }
