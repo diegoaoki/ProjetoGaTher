@@ -9,7 +9,7 @@ import { and, eq as eqOp } from "drizzle-orm";
 import { DESKS, getDeskById, getSeatPosition } from "./desks";
 import { isAdminEmail } from "./auth/admin";
 import { markOnline, markOffline } from "./presence";
-import { authorizeVisitor, isVisitorAuthorized } from "./visitorAuth";
+import { authorizeVisitor, isVisitorAuthorized, loadVisitorAuth } from "./visitorAuth";
 
 interface MoveMessage {
   x: number;
@@ -202,6 +202,8 @@ export class OfficeRoom extends Room<OfficeState> {
 
     // Cache da mobília do editor (pra spawn na mesa respeitar mesa movida)
     await this.loadMapOverride();
+    // Cache das autorizações de visitante (persistem até meia-noite BRT)
+    await loadVisitorAuth();
 
     // Hidrata reservas de mesa do DB pro state. Mesas sem dono não vão pro
     // MapSchema — quando alguém reserva, é adicionada; quando libera, removida.

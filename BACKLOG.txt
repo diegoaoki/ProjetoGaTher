@@ -60,7 +60,8 @@ FEATURES PEDIDAS PELO USER (2026-05-16)
   visitante nao reserva mesa; audio MUDO TOTAL ate um host autorizar
   (painel escolher host -> visitor:request -> modal host ->
   visitor:respond -> visitorOk -> audio espacial normal).
-  Autorizacao persiste ate meia-noite BRT (visitorAuth.ts, em memoria).
+  Autorizacao persiste ate meia-noite BRT (visitorAuth.ts, cache +
+  app_meta/visitor_auth, sobrevive a restart do Railway).
   Setar VISITOR_PASSWORD no Railway pro caminho de senha.
 
 [FEITO] Sala de Seguranca bloqueada pra todos
