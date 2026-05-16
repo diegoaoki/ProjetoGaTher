@@ -77,6 +77,16 @@ export default function ChatPanel({
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  // Autofoco no campo de mensagem ao abrir o chat e ao trocar de canal —
+  // assim o usuário digita e o Enter já envia (sem o Enter global, que
+  // abre/fecha o chat, interferir por falta de foco no input).
+  useEffect(() => {
+    if (tab === "dm" && !activeDmUserId) return; // input desabilitado
+    const id = window.setTimeout(() => inputRef.current?.focus(), 0);
+    return () => window.clearTimeout(id);
+  }, [tab, activeDmUserId]);
 
   // === Histórico inicial ===
   useEffect(() => {
@@ -338,6 +348,8 @@ export default function ChatPanel({
 
           <div style={inputAreaStyle}>
             <input
+              ref={inputRef}
+              autoFocus
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => {
