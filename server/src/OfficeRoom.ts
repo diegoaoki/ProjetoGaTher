@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { OfficeState, Player, Desk, Door, LockedRoom, AccessRequest, SecurityNPC } from "./schema";
 import { DOORS, DOOR_OPEN_RADIUS_PX, DOOR_CLOSE_TIMEOUT_MS } from "./doors";
 import { verifyAuthToken } from "./auth/jwt";
-import { getDb } from "./db/client";
+import { getDb, getPool } from "./db/client";
 import { profiles, users, deskReservations, messages, messageReactions } from "./db/schema";
 import { and, eq as eqOp } from "drizzle-orm";
 import { DESKS, getDeskById, getSeatPosition } from "./desks";
@@ -145,6 +145,39 @@ export class OfficeRoom extends Room<OfficeState> {
    */
   private activeUsers = new Map<string, Client>();
 
+  /**
+   * Mobília salva pelo editor de mapa (app_meta "map_layout"). Usada só pra
+   * achar a posição atual de uma mesa (deskId) — o spawn na mesa reservada
+   * tem que respeitar onde o admin moveu a mesa. Cacheado; recarregado no
+   * onCreate e quando chega "map:reload".
+   */
+  private mapFurniture: Array<{ deskId?: string; type?: string; x: number; y: number }> = [];
+
+  /** Carrega/atualiza o cache da mobília do editor (best-effort). */
+  private async loadMapOverride() {
+    try {
+      const r = await getPool().query(`SELECT value FROM app_meta WHERE key = $1`, ["map_layout"]);
+      const raw = r.rows[0]?.value;
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed?.furniture)) this.mapFurniture = parsed.furniture;
+    } catch (e) {
+      console.warn("[OfficeRoom] loadMapOverride falhou:", e);
+    }
+  }
+
+  /**
+   * Posição do assento de uma mesa, respeitando o editor: se o admin moveu
+   * a mesa (deskId no override), usa a posição salva; senão, o desks.ts.
+   */
+  private deskSeatPos(desk: { id: string; x: number; y: number }): { x: number; y: number } {
+    const moved = this.mapFurniture.find((f) => f.deskId === desk.id);
+    if (moved && typeof moved.x === "number" && typeof moved.y === "number") {
+      return { x: moved.x, y: moved.y + 36 };
+    }
+    return getSeatPosition(desk as any);
+  }
+
   /** Timestamp (ms) da última vez que cada porta teve player próximo. */
   private doorLastActivity = new Map<string, number>();
 
@@ -164,6 +197,9 @@ export class OfficeRoom extends Room<OfficeState> {
     console.log(`[OfficeRoom] criada: ${this.roomId}`);
     this.setState(new OfficeState());
     this.setPatchRate(1000 / 20);
+
+    // Cache da mobília do editor (pra spawn na mesa respeitar mesa movida)
+    await this.loadMapOverride();
 
     // Hidrata reservas de mesa do DB pro state. Mesas sem dono não vão pro
     // MapSchema — quando alguém reserva, é adicionada; quando libera, removida.
@@ -332,9 +368,10 @@ export class OfficeRoom extends Room<OfficeState> {
     // Cadeado de sala de reunião
     // Editor de mapa: um admin salvou via PUT /map → avisa todos pra
     // recarregarem o layout do server. Gate por ADMIN_EMAILS.
-    this.onMessage("map:reload", (client) => {
+    this.onMessage("map:reload", async (client) => {
       const auth = client.userData as AuthData | undefined;
       if (auth?.email && isAdminEmail(auth.email)) {
+        await this.loadMapOverride(); // atualiza cache (mesas movidas)
         this.broadcast("map:updated", {});
       }
     });
@@ -434,7 +471,7 @@ export class OfficeRoom extends Room<OfficeState> {
     // Se o user tem uma mesa reservada, spawna ao lado dela. Senão usa fallback.
     const reservedDesk = this.findReservedDeskFor(auth.userId);
     if (reservedDesk) {
-      const seat = getSeatPosition(reservedDesk);
+      const seat = this.deskSeatPos(reservedDesk);
       player.x = seat.x;
       player.y = seat.y;
     } else {
