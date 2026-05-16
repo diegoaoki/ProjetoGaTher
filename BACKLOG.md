@@ -67,7 +67,7 @@ Legenda: 🔴 prioridade · 🐞 bug · 🟢 feito (mantido como referência) ·
 - mesa = zona de áudio: 2+ pessoas na mesma mesa (ou ao redor, hitbox expandida) formam zona isolada — só ouvem entre si. Hoje mesas são single-claim e áudio só por zona
 
 ### Sidebar
-- mostrar usuários **offline** (consulta `users` no Postgres). Precisa endpoint novo `GET /users` com flag `isOnline` derivada de `activeUsers`
+- 🟢 [FEITO `1f8d269`] mostrar usuários **offline** — `GET /users` (presence.ts + endpoint autenticado); sidebar mescla diretório com state.players, bolinha verde/cinza, ações só pros online
 - (offline) botão "ir até a mesa de X" — se o user tem mesa reservada, teleporta o solicitante; senão, opção desabilitada
 - indicador "está falando agora" (🎙️ animado) — *parcialmente feito: badge via `activeSpeakerIds` já existe; revisar se está completo*
 

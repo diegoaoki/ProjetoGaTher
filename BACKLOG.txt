@@ -139,8 +139,9 @@ Audio / camera:
     single-claim e audio so por zona
 
 Sidebar:
-  - mostrar usuarios offline (consulta users no Postgres). Precisa
-    endpoint novo GET /users com flag isOnline derivada de activeUsers
+  - [FEITO 1f8d269] mostrar usuarios offline - GET /users (presence.ts +
+    endpoint autenticado); sidebar mescla diretorio com state.players,
+    bolinha verde/cinza, acoes so pros online
   - (offline) botao "ir ate a mesa de X" - se o user tem mesa reservada,
     teleporta o solicitante; senao, opcao desabilitada
   - indicador "esta falando agora" (microfone animado) - parcialmente

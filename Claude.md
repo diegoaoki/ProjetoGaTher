@@ -239,7 +239,7 @@ npm run build      # build de produção
 - câmera: opção "espelhar" o vídeo local (transform scaleX(-1)) — toggle no painel de áudio/vídeo. Padrão típico é espelhar pra que o user veja a si mesmo "natural"
 - volume: aumentar limite máximo do ganho do peer (LiveKit limita a 1.0 por default — dá pra subir até 2.0 com Web Audio API) e adicionar slider individual por peer
 - redesign do mapa baseado em print de referência enviado pelo user (verificar Downloads/Erro.jpeg ou similar — não localizado ainda) — possivelmente reorganizar departamentos, mobília, cores
-- sidebar: além de online, mostrar usuários offline (consulta tabela `users` no Postgres). Necessário endpoint novo (GET /users) que retorne todos com flag isOnline derivada de activeUsers do OfficeRoom
+- ✅ FEITO (commit `1f8d269`) — sidebar mostra todos cadastrados (online + offline): `presence.ts` (Set global de userIds), endpoint `GET /users` autenticado, sidebar mescla diretório com `state.players` (online em tempo real + sessionId pras ações), bolinha verde/cinza
 - sidebar (offline): botão "ir até a mesa de X" — se o user tem mesa reservada, teleporta o solicitante pra lá. Se não tem, opção desabilitada
 - sidebar: indicador visual de "está falando agora" (ícone tipo 🎙️ animado) — já temos eventos `ActiveSpeakersChanged` do LiveKit em SpatialAudio.ts mas não estamos propagando pro App. Adicionar callback `onActiveSpeakersChanged` e renderizar badge na sidebar
 - mesa = zona de áudio: quando 2+ pessoas claim a mesma mesa (ou estão "ao redor" de uma mesa com hitbox expandida), elas formam uma zona de áudio isolada — só ouvem entre si, quem está fora não escuta. Hoje as mesas são single-claim e o áudio é só por zona (sala/open space)
