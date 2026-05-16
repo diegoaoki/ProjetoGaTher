@@ -664,14 +664,28 @@ export class OfficeScene extends Phaser.Scene {
 
     this.input.on("drag", this.onEditDrag, this);
     this.input.on("pointerdown", this.onEditPointerDown, this);
+    window.addEventListener("keydown", this.onEditKey, true);
     this.notifyEditor();
   }
+
+  /** Delete/Backspace apaga o móvel selecionado (só no editor). */
+  private onEditKey = (e: KeyboardEvent) => {
+    if (!this.editMode) return;
+    if (isTypingInInput()) return; // não interfere com campos de texto
+    if (e.key === "Delete" || e.key === "Backspace") {
+      if (this.editSelected >= 0) {
+        e.preventDefault();
+        this.deleteEditorSelection();
+      }
+    }
+  };
 
   public exitMapEditor(restore: boolean) {
     if (!this.editMode) return;
     this.editMode = false;
     this.input.off("drag", this.onEditDrag, this);
     this.input.off("pointerdown", this.onEditPointerDown, this);
+    window.removeEventListener("keydown", this.onEditKey, true);
     this.editSprites.forEach((s) => s.destroy());
     this.editSprites = [];
     this.editSelected = -1;
