@@ -631,6 +631,10 @@ export default function App() {
       room.onMessage("visitor:waiting", (msg: { hostName: string; online: boolean }) => {
         setVisitorWaiting(msg);
       });
+      // Visitante materializou ao lado do host → burst pra todos verem
+      room.onMessage("visitor:arrived", (msg: { x: number; y: number }) => {
+        sceneRef.current?.playBirthBurst(msg.x, msg.y);
+      });
       // Host recebe pedido de um visitante
       room.onMessage("visitor:incoming", (msg: { visitorSessionId: string; visitorName: string }) => {
         setIncomingVisitor(msg);

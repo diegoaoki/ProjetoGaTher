@@ -1337,22 +1337,8 @@ export class OfficeScene extends Phaser.Scene {
     this.setGhost(!this.ghostMode);
   }
 
-  /** Efeito de "nascimento" do avatar (visitante): pop + anel + flash. */
-  private spawnBirthFx(
-    container: Phaser.GameObjects.Container,
-    x: number,
-    y: number
-  ) {
-    container.setScale(0);
-    container.setAlpha(0);
-    this.tweens.add({
-      targets: container,
-      scale: 1,
-      alpha: 1,
-      duration: 900,
-      ease: "Back.easeOut",
-    });
-    // 2 anéis em sequência, maiores e mais lentos
+  /** Só o "burst" (2 anéis + flash) numa posição — sem mexer em avatar. */
+  public playBirthBurst(x: number, y: number) {
     const makeRing = (delay: number) => {
       const ring = this.add.circle(x, y, 12, 0x38bdf8, 0);
       ring.setStrokeStyle(4, 0x38bdf8, 0.95);
@@ -1380,6 +1366,24 @@ export class OfficeScene extends Phaser.Scene {
       ease: "Cubic.easeOut",
       onComplete: () => flash.destroy(),
     });
+  }
+
+  /** Nascimento do avatar (visitante): pop do container + burst. */
+  private spawnBirthFx(
+    container: Phaser.GameObjects.Container,
+    x: number,
+    y: number
+  ) {
+    container.setScale(0);
+    container.setAlpha(0);
+    this.tweens.add({
+      targets: container,
+      scale: 1,
+      alpha: 1,
+      duration: 900,
+      ease: "Back.easeOut",
+    });
+    this.playBirthBurst(x, y);
   }
 
   private handleClaimKey() {

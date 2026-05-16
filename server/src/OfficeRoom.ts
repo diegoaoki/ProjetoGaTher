@@ -505,6 +505,9 @@ export class OfficeRoom extends Room<OfficeState> {
             x: pos.x,
             y: pos.y,
           });
+          // Burst de "materialização" pra TODOS verem (host inclusive),
+          // já que o avatar remoto do visitante já existia.
+          this.broadcast("visitor:arrived", { x: pos.x, y: pos.y });
         } else {
           visitorClient?.send("visitor:result", { accepted: false, hostName: host.name });
         }
