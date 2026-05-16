@@ -392,6 +392,16 @@ export default function App() {
       const width = container.clientWidth || window.innerWidth;
       const height = container.clientHeight || window.innerHeight;
 
+      // IMPORTANTE: buscar o override ANTES de criar o Phaser.Game. Se o
+      // await ficar entre `new Phaser.Game` e `scene.start(data)`, o Phaser
+      // auto-inicia a cena (scene:[OfficeScene]) SEM o room → init() sem
+      // dados → create()/setupStateListeners estoura ("reading 'state'").
+      try {
+        mapOverrideRef.current = await fetchMapLayout(HTTP_URL, session.token);
+      } catch {
+        mapOverrideRef.current = null;
+      }
+
       const game = new Phaser.Game({
         type: Phaser.AUTO,
         parent: container,
@@ -410,13 +420,6 @@ export default function App() {
         fps: { target: 60, forceSetTimeOut: false },
         dom: { createContainer: true },
       });
-
-      // Carrega o override de mapa (editor) antes de iniciar a cena.
-      try {
-        mapOverrideRef.current = await fetchMapLayout(HTTP_URL, session.token);
-      } catch {
-        mapOverrideRef.current = null;
-      }
 
       game.scene.start("OfficeScene", {
         room,
