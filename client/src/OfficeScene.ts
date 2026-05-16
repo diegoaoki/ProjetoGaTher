@@ -9,6 +9,7 @@ import {
   checkCollision,
   getCurrentRoom,
   applyLayoutOverride,
+  hitboxFor,
   WALL_T,
   FurnitureItem,
   Wall,
@@ -137,6 +138,15 @@ export class OfficeScene extends Phaser.Scene {
   private furnitureObjs: Phaser.GameObjects.GameObject[] = [];
   private wallObjs: Phaser.GameObjects.GameObject[] = [];
   private roomLabelObjs: Phaser.GameObjects.GameObject[] = [];
+
+  // === Editor de mapa (admin) — etapa 1: mobília ===
+  private editMode = false;
+  private editFurniture: FurnitureItem[] = [];
+  private editSprites: Phaser.GameObjects.Image[] = [];
+  private editBrush: string | null = null; // tipo a adicionar; null = mover/selecionar
+  private editSelected = -1;
+  private editGrid = 16;
+  public onEditorChange?: (info: { count: number; selected: boolean }) => void;
 
   private tvSprite?: Phaser.GameObjects.Image;
   private tvScreen?: Phaser.GameObjects.Rectangle;
@@ -632,6 +642,155 @@ export class OfficeScene extends Phaser.Scene {
 
     this.refreshDynamicWalls();
   }
+
+  // ============================================================
+  //  Editor de mapa — etapa 1: mobília (mover / adicionar / deletar)
+  //  Paredes vêm na etapa 2. Só admin (gate na UI/App).
+  // ============================================================
+  public isEditMode() {
+    return this.editMode;
+  }
+
+  public enterMapEditor() {
+    if (this.editMode) return;
+    this.editMode = true;
+    this.editSelected = -1;
+    this.editBrush = null;
+    // Clona a mobília atual pra edição
+    this.editFurniture = this.layout.furniture.map((f) => ({ ...f }));
+    // Esconde os sprites estáticos e desenha os editáveis
+    this.furnitureObjs.forEach((o) => (o as any).setVisible?.(false));
+    this.renderEditFurniture();
+
+    this.input.on("drag", this.onEditDrag, this);
+    this.input.on("pointerdown", this.onEditPointerDown, this);
+    this.notifyEditor();
+  }
+
+  public exitMapEditor(restore: boolean) {
+    if (!this.editMode) return;
+    this.editMode = false;
+    this.input.off("drag", this.onEditDrag, this);
+    this.input.off("pointerdown", this.onEditPointerDown, this);
+    this.editSprites.forEach((s) => s.destroy());
+    this.editSprites = [];
+    this.editSelected = -1;
+    this.editBrush = null;
+    if (restore) {
+      // Descartou → volta ao layout vigente
+      this.rebuildLayout(this.mapOverride);
+    }
+    // Se salvou, o broadcast map:updated chama rebuildLayout pra todos.
+  }
+
+  public setEditorBrush(type: string | null) {
+    this.editBrush = type;
+    if (type !== null) this.selectEdit(-1); // sair do modo seleção
+    this.notifyEditor();
+  }
+
+  public deleteEditorSelection() {
+    if (this.editSelected < 0) return;
+    this.editFurniture.splice(this.editSelected, 1);
+    this.editSelected = -1;
+    this.renderEditFurniture();
+    this.notifyEditor();
+  }
+
+  /** Layout editado pra salvar (mobília editada + paredes atuais). */
+  public getEditedLayout(): { furniture: FurnitureItem[]; walls: Wall[] } {
+    return { furniture: this.editFurniture, walls: this.layout.walls };
+  }
+
+  private notifyEditor() {
+    this.onEditorChange?.({
+      count: this.editFurniture.length,
+      selected: this.editSelected >= 0,
+    });
+  }
+
+  private snap(v: number) {
+    return Math.round(v / this.editGrid) * this.editGrid;
+  }
+
+  private selectEdit(i: number) {
+    this.editSelected = i;
+    this.editSprites.forEach((s, idx) => {
+      if (idx === i) s.setTint(0x4ade80);
+      else s.clearTint();
+    });
+    this.notifyEditor();
+  }
+
+  private renderEditFurniture() {
+    this.editSprites.forEach((s) => s.destroy());
+    this.editSprites = [];
+    this.editFurniture.forEach((item, i) => {
+      const spr = this.add.image(item.x, item.y, item.type);
+      spr.setOrigin(0.5, 0.5);
+      spr.setDepth(item.y);
+      // Mesas reserváveis (deskId) ficam travadas — acopladas ao server
+      const locked = item.type === "desk" && !!item.deskId;
+      spr.setInteractive({ draggable: !locked });
+      if (!locked) this.input.setDraggable(spr);
+      spr.setData("idx", i);
+      spr.setData("locked", locked);
+      if (i === this.editSelected) spr.setTint(0x4ade80);
+      this.editSprites.push(spr);
+    });
+  }
+
+  private onEditDrag = (
+    _p: Phaser.Input.Pointer,
+    obj: Phaser.GameObjects.GameObject,
+    dragX: number,
+    dragY: number
+  ) => {
+    if (!this.editMode) return;
+    const spr = obj as Phaser.GameObjects.Image;
+    if (spr.getData("locked")) return;
+    const i = spr.getData("idx") as number;
+    if (typeof i !== "number" || !this.editFurniture[i]) return;
+    const nx = Phaser.Math.Clamp(this.snap(dragX), 0, WORLD_W);
+    const ny = Phaser.Math.Clamp(this.snap(dragY), 0, WORLD_H);
+    spr.x = nx;
+    spr.y = ny;
+    spr.setDepth(ny);
+    this.editFurniture[i].x = nx;
+    this.editFurniture[i].y = ny;
+    if (this.editSelected !== i) this.selectEdit(i);
+  };
+
+  private onEditPointerDown = (
+    pointer: Phaser.Input.Pointer,
+    objsClicked: Phaser.GameObjects.GameObject[]
+  ) => {
+    if (!this.editMode) return;
+    // Clicou num móvel → seleciona (não-travado)
+    const hit = objsClicked.find((o) => this.editSprites.includes(o as any));
+    if (hit) {
+      const spr = hit as Phaser.GameObjects.Image;
+      if (!spr.getData("locked")) this.selectEdit(spr.getData("idx") as number);
+      return;
+    }
+    // Clicou no vazio: se tem pincel, adiciona; senão, deseleciona
+    if (this.editBrush) {
+      const x = Phaser.Math.Clamp(this.snap(pointer.worldX), 0, WORLD_W);
+      const y = Phaser.Math.Clamp(this.snap(pointer.worldY), 0, WORLD_H);
+      this.editFurniture.push({
+        type: this.editBrush,
+        x,
+        y,
+        depth: 1,
+        hitbox: hitboxFor(this.editBrush),
+      });
+      this.renderEditFurniture();
+      this.selectEdit(this.editFurniture.length - 1);
+      this.notifyEditor();
+    } else {
+      this.selectEdit(-1);
+    }
+  };
 
   private setupStateListeners() {
     const state: any = this.room.state;

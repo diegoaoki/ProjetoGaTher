@@ -330,6 +330,15 @@ export class OfficeRoom extends Room<OfficeState> {
     );
 
     // Cadeado de sala de reunião
+    // Editor de mapa: um admin salvou via PUT /map → avisa todos pra
+    // recarregarem o layout do server. Gate por ADMIN_EMAILS.
+    this.onMessage("map:reload", (client) => {
+      const auth = client.userData as AuthData | undefined;
+      if (auth?.email && isAdminEmail(auth.email)) {
+        this.broadcast("map:updated", {});
+      }
+    });
+
     this.onMessage<RoomLockMessage>("room:lock", (client, msg) =>
       this.handleRoomLock(client, msg)
     );

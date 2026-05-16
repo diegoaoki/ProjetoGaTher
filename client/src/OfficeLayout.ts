@@ -65,6 +65,17 @@ const HITBOXES: Record<string, Hitbox> = {
   tv:           { offsetX: -36, offsetY: -28, w: 72, h: 14 },
 };
 
+/** Hitbox padrão de um tipo de móvel (usado pelo editor ao adicionar). */
+export function hitboxFor(type: string): Hitbox {
+  return HITBOXES[type] || { offsetX: -16, offsetY: -16, w: 32, h: 32 };
+}
+
+/** Tipos de móvel disponíveis na paleta do editor de mapa. */
+export const EDITOR_FURNITURE_TYPES = [
+  "plant", "sofa", "coffeeTable", "bookshelf",
+  "whiteboard", "tv", "chair", "meetingTable",
+];
+
 const TILE = 32;
 export const WALL_T = 12;
 

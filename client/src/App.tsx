@@ -22,7 +22,9 @@ import {
   listAllUsers,
   DirectoryUser,
   fetchMapLayout,
+  saveMapLayout,
 } from "./auth";
+import { EDITOR_FURNITURE_TYPES } from "./OfficeLayout";
 
 function resolveServerUrl(): string {
   const fromEnv = import.meta.env.VITE_SERVER_URL as string | undefined;
@@ -96,6 +98,10 @@ export default function App() {
   const roomRef = useRef<Room | null>(null);
   const spatialRef = useRef<SpatialAudio | null>(null);
   const mapOverrideRef = useRef<{ furniture?: any[]; walls?: any[] } | null>(null);
+  const [mapEditorOpen, setMapEditorOpen] = useState(false);
+  const [editorBrush, setEditorBrush] = useState<string | null>(null);
+  const [editorInfo, setEditorInfo] = useState<{ count: number; selected: boolean }>({ count: 0, selected: false });
+  const [editorSaving, setEditorSaving] = useState(false);
   const sceneRef = useRef<OfficeScene | null>(null);
 
   // === Auth state ===
@@ -1293,6 +1299,22 @@ export default function App() {
               {session.user.isAdmin && (
                 <button onClick={() => setAdminOpen(true)} style={menuItemStyle}>🛡️ Admin</button>
               )}
+              {session.user.isAdmin && (
+                <button
+                  onClick={() => {
+                    setSettingsOpen(false);
+                    const scene = sceneRef.current;
+                    if (!scene) return;
+                    scene.onEditorChange = (info) => setEditorInfo(info);
+                    scene.enterMapEditor();
+                    setEditorBrush(null);
+                    setMapEditorOpen(true);
+                  }}
+                  style={menuItemStyle}
+                >
+                  🗺️ Editor de mapa
+                </button>
+              )}
               {myDeskId && (
                 <button
                   onClick={() => {
@@ -1677,6 +1699,81 @@ export default function App() {
           >
             ✕ Fechar
           </button>
+        </div>
+      )}
+
+      {mapEditorOpen && session.user.isAdmin && (
+        <div style={editorPanelStyle}>
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>🗺️ Editor de mapa</div>
+          <div style={{ fontSize: 11, opacity: 0.75, marginBottom: 8 }}>
+            Etapa 1: mobília. Escolha um móvel e clique no mapa pra adicionar.
+            Arraste pra mover. Clique pra selecionar. Mesas (reserváveis) ficam travadas.
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
+            <button
+              onClick={() => { setEditorBrush(null); sceneRef.current?.setEditorBrush(null); }}
+              style={editorChip(editorBrush === null)}
+            >
+              ✋ Mover/selecionar
+            </button>
+            {EDITOR_FURNITURE_TYPES.map((t) => (
+              <button
+                key={t}
+                onClick={() => { setEditorBrush(t); sceneRef.current?.setEditorBrush(t); }}
+                style={editorChip(editorBrush === t)}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+          <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
+            <button
+              onClick={() => sceneRef.current?.deleteEditorSelection()}
+              disabled={!editorInfo.selected}
+              style={{ ...editorBtn, background: editorInfo.selected ? "#b91c1c" : "#374151", flex: 1 }}
+            >
+              🗑️ Deletar selecionado
+            </button>
+          </div>
+          <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 8 }}>
+            {editorInfo.count} móveis no mapa
+          </div>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button
+              onClick={() => {
+                sceneRef.current?.exitMapEditor(true);
+                setMapEditorOpen(false);
+              }}
+              style={{ ...editorBtn, background: "#334155", flex: 1 }}
+            >
+              Descartar
+            </button>
+            <button
+              disabled={editorSaving}
+              onClick={async () => {
+                const scene = sceneRef.current;
+                if (!scene) return;
+                setEditorSaving(true);
+                try {
+                  const edited = scene.getEditedLayout();
+                  await saveMapLayout(HTTP_URL, session.token, edited);
+                  scene.exitMapEditor(false);
+                  scene.rebuildLayout(edited);
+                  mapOverrideRef.current = edited;
+                  roomRef.current?.send("map:reload");
+                  setMapEditorOpen(false);
+                  setSocialToast({ text: "Mapa salvo", tone: "info" });
+                } catch (e: any) {
+                  setSocialToast({ text: e?.message || "Falha ao salvar o mapa", tone: "error" });
+                } finally {
+                  setEditorSaving(false);
+                }
+              }}
+              style={{ ...editorBtn, background: "#16a34a", flex: 1 }}
+            >
+              {editorSaving ? "Salvando…" : "Salvar"}
+            </button>
+          </div>
         </div>
       )}
 
@@ -2100,6 +2197,39 @@ const menuItemStyle: React.CSSProperties = {
   cursor: "pointer",
   borderRadius: 4,
 };
+
+const editorPanelStyle: React.CSSProperties = {
+  position: "absolute",
+  top: 16,
+  right: 16,
+  width: 280,
+  zIndex: 30,
+  background: "#0f172af2",
+  border: "1px solid #334155",
+  borderRadius: 10,
+  padding: 12,
+  color: "#e2e8f0",
+};
+const editorBtn: React.CSSProperties = {
+  border: "none",
+  borderRadius: 6,
+  padding: "8px 10px",
+  fontSize: 12,
+  fontWeight: 600,
+  color: "#fff",
+  cursor: "pointer",
+};
+function editorChip(active: boolean): React.CSSProperties {
+  return {
+    border: "1px solid #334155",
+    borderRadius: 6,
+    padding: "4px 8px",
+    fontSize: 11,
+    cursor: "pointer",
+    background: active ? "#2563eb" : "#1e293b",
+    color: "#e2e8f0",
+  };
+}
 const hudToastStyle: React.CSSProperties = {
   position: "absolute",
   bottom: 92, left: "50%",
