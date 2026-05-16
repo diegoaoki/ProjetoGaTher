@@ -53,22 +53,14 @@ FEITO RECENTEMENTE (referencia)
 FEATURES PEDIDAS PELO USER (2026-05-16)
 ------------------------------------------------------------------------------
 
-[NORMAL] Modo visitante (convidado externo)
-  Visitante entra sem conta normal, via codigo (gerado na hora) ou senha.
-  Regras:
-  (a) visitante NAO pode assumir mesa (bloquear desk:claim pra role
-      visitante);
-  (b) mesmo com codigo/senha valido, precisa escolher com quem quer falar
-      - lista de todos os online pra ele selecionar;
-  (c) a pessoa escolhida precisa autorizar (fluxo de convite/aceitar,
-      parecido com acesso a sala trancada);
-  (d) audio do visitante isolado de todos ate a autorizacao (reaproveitar
-      __pending ou a bolha).
-  Esboco: role visitor no JWT/sessao; codigo de uso unico com TTL curto
-  gerado por user logado/admin; endpoint gerar/validar; Player.role no
-  schema; gating de desk:claim; UI de selecao de host + modal de
-  autorizacao. Interage com bolha e salas trancadas - definir precedencia
-  de audio.
+[FEITO 79575fe+ce656c0] Modo visitante
+  Aba "Visitante" no login (nome + codigo de uso unico OU senha fixa
+  env VISITOR_PASSWORD); /visitor/code (qualquer logado, TTL 30min) +
+  /visitor/login; JWT role=visitor sem Postgres; Player.role+visitorOk;
+  visitante nao reserva mesa; audio MUDO TOTAL ate um host autorizar
+  (painel escolher host -> visitor:request -> modal host ->
+  visitor:respond -> visitorOk -> audio espacial normal).
+  Setar VISITOR_PASSWORD no Railway pro caminho de senha.
 
 [FEITO] Sala de Seguranca bloqueada pra todos
   refreshDynamicWalls adiciona o retangulo da security_room como blocker

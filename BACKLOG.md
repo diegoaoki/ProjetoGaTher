@@ -32,12 +32,7 @@ _(nenhum bug aberto no momento)_
 
 ## ⚪ Features pedidas pelo user (2026-05-16)
 
-- **Modo visitante (convidado externo)** — visitante entra sem conta normal, via **código (gerado na hora) ou senha**. Regras:
-  - (a) visitante NÃO pode assumir mesa (bloquear `desk:claim` pra role visitante);
-  - (b) mesmo com código/senha válido, precisa **escolher com quem quer falar** — lista de todos os online pra ele selecionar;
-  - (c) a pessoa escolhida precisa **autorizar** (fluxo de convite/aceitar, parecido com acesso a sala trancada);
-  - (d) áudio do visitante isolado de todos até a autorização (reaproveitar `__pending` ou a bolha).
-  - Esboço: role `visitor` no JWT/sessão; código de uso único com TTL curto gerado por user logado/admin; endpoint gerar/validar; `Player.role` no schema; gating de `desk:claim`; UI de seleção de host + modal de autorização. Interage com bolha e salas trancadas — definir precedência de áudio.
+- 🟢 [FEITO `79575fe`+`ce656c0`] **Modo visitante** — aba "Visitante" (nome + código de uso único OU senha fixa env `VISITOR_PASSWORD`); `/visitor/code` (qualquer logado) + `/visitor/login`; JWT role=visitor (sem Postgres); `Player.role`+`visitorOk`; não reserva mesa; áudio mudo total até host autorizar (painel escolher host → `visitor:request` → modal host → `visitor:respond`). Setar `VISITOR_PASSWORD` no Railway pro caminho de senha.
 - 🟢 [FEITO] **Sala de Segurança bloqueada pra todos** — `refreshDynamicWalls` adiciona o retângulo da `security_room` como blocker permanente em `dynamicWalls`. Guarda NPC não usa `tryMove` nem A* usa `dynamicWalls` → não afetado. Admin também barrado (sem exceção por ora).
 
 ---

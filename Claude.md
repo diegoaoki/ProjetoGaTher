@@ -78,6 +78,7 @@ Escritório virtual com mundo 2D multiplayer, áudio/vídeo espacial, salas, e f
 - `DATABASE_URL` — injetado pelo plugin Postgres do Railway
 - `JWT_SECRET` — segredo HS256 (mín. 16 chars). Gerar com `openssl rand -hex 32`
 - `ADMIN_EMAILS` — lista CSV de emails admin (ex: `foo@x.com,bar@y.com`). Define quem vê 🛡️ no HUD e pode usar `/admin/users/*`
+- `VISITOR_PASSWORD` (opcional) — senha fixa compartilhada pro modo visitante. Se não setada, só o login por código de uso único funciona.
 - `MONITOR_USER` + `MONITOR_PASS` — basic auth do dashboard `/colyseus`
 - `LIVEKIT_URL=wss://gatherprivate-wj37bvum.livekit.cloud`
 - `LIVEKIT_API_KEY` (secret)
@@ -224,7 +225,7 @@ npm run build      # build de produção
 ✅ **Fase 7 — Salas isoladas com paredes**: 3 salas de reunião (1 grande + 2 pequenas) + open space. Paredes com colisão, vãos pra entrar. Áudio isolado por zona — quem está em zona diferente é mutado. Mesas redistribuídas (4 no open, 4 nas salas).
 🚧 **Backlog**:
 - esqueci-a-senha (precisa SMTP)
-- **[pedido pelo user 2026-05-16] modo visitante (convidado externo)**: permitir que visitantes entrem sem conta normal, via **código (gerado na hora) ou senha**. Regras: (a) visitante NÃO pode assumir mesa (bloquear `desk:claim` pra role visitante); (b) mesmo com código/senha válido, o visitante precisa **escolher com quem quer falar** — mostrar lista de todos os online pra ele selecionar; (c) a pessoa escolhida precisa **autorizar** (fluxo de convite/aceitar, parecido com o de acesso a sala trancada); (d) áudio do visitante fica isolado de todos até a autorização (zona/bolha própria — reaproveitar conceito de `__pending` ou da bolha de conversa privada). Esboço técnico: role `visitor` no JWT/sessão (auth atual é email+senha — criar fluxo de "entrar como visitante" com código de uso único gerado por um user logado/admin, TTL curto); endpoint pra gerar/validar código; `Player.role` no schema; gating de `desk:claim`; UI de seleção de host + modal de autorização no lado do host. Interage com o sistema de bolha e com salas trancadas — definir precedência de áudio.
+- ✅ FEITO (commits `79575fe` + `ce656c0`) — **modo visitante**: aba "Visitante" no login (nome + código de uso único OU senha fixa via env `VISITOR_PASSWORD`); `/visitor/code` (qualquer logado gera, TTL 30min, em memória) e `/visitor/login`; JWT `role=visitor` (sub `visitor:<uuid>`, sem linha no Postgres; `/auth/me` e `onAuth` tratam visitante); `Player.role` + `Player.visitorOk` no schema; visitante não reserva mesa; áudio MUDO TOTAL até um host autorizar (painel "escolher com quem falar" → `visitor:request` → modal do host → `visitor:respond` → `visitorOk=true` → áudio espacial normal). **Requer env `VISITOR_PASSWORD` no Railway pra o caminho de senha** (o de código funciona sem env).
 - mobile responsivo
 - editor de mapas
 - menu de contexto (right-click) em outro player com opção "vir para cá" — chama o outro até a minha posição (semelhante ao convite, mas sem modal aceitar/recusar — ou com, a definir)
