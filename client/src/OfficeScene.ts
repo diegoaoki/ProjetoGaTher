@@ -1349,27 +1349,35 @@ export class OfficeScene extends Phaser.Scene {
       targets: container,
       scale: 1,
       alpha: 1,
-      duration: 480,
+      duration: 900,
       ease: "Back.easeOut",
     });
-    const ring = this.add.circle(x, y, 10, 0x38bdf8, 0);
-    ring.setStrokeStyle(3, 0x38bdf8, 0.9);
-    ring.setDepth(y + 1);
-    this.tweens.add({
-      targets: ring,
-      scale: 5,
-      alpha: 0,
-      duration: 600,
-      ease: "Cubic.easeOut",
-      onComplete: () => ring.destroy(),
-    });
-    const flash = this.add.circle(x, y, 24, 0xffffff, 0.65);
+    // 2 anéis em sequência, maiores e mais lentos
+    const makeRing = (delay: number) => {
+      const ring = this.add.circle(x, y, 12, 0x38bdf8, 0);
+      ring.setStrokeStyle(4, 0x38bdf8, 0.95);
+      ring.setDepth(y + 1);
+      ring.setScale(0.2);
+      this.tweens.add({
+        targets: ring,
+        scale: 8,
+        alpha: 0,
+        delay,
+        duration: 850,
+        ease: "Cubic.easeOut",
+        onComplete: () => ring.destroy(),
+      });
+    };
+    makeRing(0);
+    makeRing(260);
+    const flash = this.add.circle(x, y, 32, 0xffffff, 0.7);
     flash.setDepth(y + 1);
     this.tweens.add({
       targets: flash,
       alpha: 0,
-      scale: 1.7,
-      duration: 340,
+      scale: 2.2,
+      duration: 520,
+      ease: "Cubic.easeOut",
       onComplete: () => flash.destroy(),
     });
   }
