@@ -15,6 +15,10 @@ export class Player extends Schema {
   // Bolha de conversa privada: "" = sem bolha. Mesmo bubbleId = mesma bolha
   // (N pessoas). Áudio entre membros = cheio; pra fora da bolha = baixo.
   @type("string") bubbleId: string = "";
+  // Modo visitante: "user" | "visitor". Visitante não reserva mesa e fica
+  // mudo até um host autorizar (visitorOk vira true).
+  @type("string") role: string = "user";
+  @type("boolean") visitorOk: boolean = false;
 }
 
 export class Desk extends Schema {

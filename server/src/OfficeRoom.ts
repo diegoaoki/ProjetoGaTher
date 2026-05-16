@@ -123,6 +123,7 @@ interface AuthData {
   bodyColor: string;
   hairColor: string;
   characterId: string;
+  role: "user" | "visitor";
 }
 
 /**
@@ -376,6 +377,48 @@ export class OfficeRoom extends Room<OfficeState> {
       }
     });
 
+    // Visitante pede pra falar com um usuário → host autoriza/recusa.
+    this.onMessage<{ targetUserId: string }>("visitor:request", (client, msg) => {
+      const auth = client.userData as AuthData | undefined;
+      const me = this.state.players.get(client.sessionId);
+      if (!auth || !me || auth.role !== "visitor") return;
+      if (me.visitorOk) return; // já autorizado
+      const targetClient = this.activeUsers.get(String(msg?.targetUserId || ""));
+      if (!targetClient) {
+        client.send("visitor:result", { accepted: false, reason: "Pessoa não está online" });
+        return;
+      }
+      const targetAuth = targetClient.userData as AuthData | undefined;
+      if (targetAuth?.role === "visitor") {
+        client.send("visitor:result", { accepted: false, reason: "Escolha alguém do escritório" });
+        return;
+      }
+      targetClient.send("visitor:incoming", {
+        visitorSessionId: client.sessionId,
+        visitorName: me.name,
+      });
+    });
+
+    this.onMessage<{ visitorSessionId: string; accepted: boolean }>(
+      "visitor:respond",
+      (client, msg) => {
+        const hostAuth = client.userData as AuthData | undefined;
+        if (!hostAuth || hostAuth.role === "visitor") return;
+        const host = this.state.players.get(client.sessionId);
+        const visitor = this.state.players.get(String(msg?.visitorSessionId || ""));
+        if (!host || !visitor || visitor.role !== "visitor") return;
+        const visitorClient = this.clients.find(
+          (c) => c.sessionId === String(msg?.visitorSessionId || "")
+        );
+        if (msg?.accepted) {
+          visitor.visitorOk = true; // áudio espacial normal liberado
+          visitorClient?.send("visitor:result", { accepted: true, hostName: host.name });
+        } else {
+          visitorClient?.send("visitor:result", { accepted: false, hostName: host.name });
+        }
+      }
+    );
+
     this.onMessage<RoomLockMessage>("room:lock", (client, msg) =>
       this.handleRoomLock(client, msg)
     );
@@ -405,11 +448,24 @@ export class OfficeRoom extends Room<OfficeState> {
     const token = options?.token;
     if (!token) throw new Error("Token de autenticação ausente");
 
-    let payload: { sub: string; email: string };
+    let payload: { sub: string; email: string; role?: string; name?: string };
     try {
       payload = verifyAuthToken(token);
     } catch {
       throw new Error("Token inválido ou expirado");
+    }
+
+    // Visitante: sem linha no Postgres. Monta AuthData do próprio token.
+    if (payload.role === "visitor") {
+      return {
+        userId: payload.sub,
+        email: "",
+        displayName: (payload.name || "Visitante").slice(0, 24),
+        bodyColor: "#4ade80",
+        hairColor: "#3b2c20",
+        characterId: "",
+        role: "visitor",
+      };
     }
 
     const db = getDb();
@@ -447,6 +503,7 @@ export class OfficeRoom extends Room<OfficeState> {
       bodyColor: profile.bodyColor,
       hairColor: profile.hairColor,
       characterId: profile.characterId || "",
+      role: "user",
     };
   }
 
@@ -467,9 +524,12 @@ export class OfficeRoom extends Room<OfficeState> {
     player.color = auth.bodyColor;
     player.hairColor = auth.hairColor;
     player.characterId = auth.characterId;
+    player.role = auth.role;
+    // Visitante começa MUDO (mudo total) até um host autorizar.
+    player.visitorOk = auth.role !== "visitor";
 
-    // Se o user tem uma mesa reservada, spawna ao lado dela. Senão usa fallback.
-    const reservedDesk = this.findReservedDeskFor(auth.userId);
+    // Visitante nunca tem mesa reservada (não pode reservar).
+    const reservedDesk = auth.role === "visitor" ? undefined : this.findReservedDeskFor(auth.userId);
     if (reservedDesk) {
       const seat = this.deskSeatPos(reservedDesk);
       player.x = seat.x;
@@ -627,6 +687,11 @@ export class OfficeRoom extends Room<OfficeState> {
     const auth = client.userData as AuthData | undefined;
     const player = this.state.players.get(client.sessionId);
     if (!auth || !player) return;
+
+    if (auth.role === "visitor") {
+      client.send("desk:error", { error: "Visitantes não podem reservar mesa" });
+      return;
+    }
 
     const deskId = String(msg?.deskId || "");
     const deskInfo = getDeskById(deskId);

@@ -10,6 +10,19 @@ import { requireAuth } from "./middleware";
 import { isAdminEmail, requireAdmin } from "./admin";
 import { isUserOnline } from "../presence";
 import { getPool } from "../db/client";
+import { randomUUID } from "crypto";
+
+// Códigos de convidado em memória (1 uso, TTL curto). Reinício do server
+// limpa — aceitável (códigos são efêmeros por natureza).
+const visitorCodes = new Map<string, { exp: number; used: boolean; by: string }>();
+const VISITOR_CODE_TTL_MS = 30 * 60 * 1000; // 30 min
+
+function genVisitorCode(): string {
+  const A = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // sem chars ambíguos
+  let c = "";
+  for (let i = 0; i < 6; i++) c += A[Math.floor(Math.random() * A.length)];
+  return c;
+}
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
@@ -160,6 +173,75 @@ export function createAuthRouter() {
       console.error("[/auth/me] erro:", err);
       return res.status(500).json({ error: "Falha ao buscar usuário" });
     }
+  });
+
+  // ============================================================
+  //  Modo visitante: qualquer logado gera um código de uso único;
+  //  o visitante entra com nome + código OU senha fixa (env).
+  // ============================================================
+
+  router.post("/visitor/code", authReadLimiter, requireAuth, (req: Request, res: Response) => {
+    if (req.auth?.role === "visitor") {
+      return res.status(403).json({ error: "Visitantes não geram códigos" });
+    }
+    // Limpa expirados (housekeeping barato)
+    const now = Date.now();
+    for (const [k, v] of visitorCodes) if (v.exp < now) visitorCodes.delete(k);
+
+    let code = genVisitorCode();
+    while (visitorCodes.has(code)) code = genVisitorCode();
+    const exp = now + VISITOR_CODE_TTL_MS;
+    visitorCodes.set(code, { exp, used: false, by: req.auth!.sub });
+    return res.json({ code, expiresAt: exp });
+  });
+
+  const visitorLoginSchema = z.object({
+    name: z.string().min(1).max(24).trim(),
+    code: z.string().trim().toUpperCase().optional(),
+    password: z.string().optional(),
+  });
+
+  router.post("/visitor/login", authStrictLimiter, (req: Request, res: Response) => {
+    const parsed = visitorLoginSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "Nome obrigatório (até 24 chars)" });
+    }
+    const { name, code, password } = parsed.data;
+
+    let ok = false;
+    if (code) {
+      const entry = visitorCodes.get(code);
+      if (entry && !entry.used && entry.exp >= Date.now()) {
+        entry.used = true;
+        ok = true;
+      } else {
+        return res.status(401).json({ error: "Código inválido ou expirado" });
+      }
+    } else if (password) {
+      const vp = process.env.VISITOR_PASSWORD;
+      if (vp && password === vp) ok = true;
+      else return res.status(401).json({ error: "Senha de visitante incorreta" });
+    } else {
+      return res.status(400).json({ error: "Informe um código ou a senha de visitante" });
+    }
+    if (!ok) return res.status(401).json({ error: "Acesso negado" });
+
+    const id = `visitor:${randomUUID()}`;
+    const token = signAuthToken(
+      { sub: id, email: "", role: "visitor", name },
+      "12h"
+    );
+    return res.json({
+      token,
+      user: { id, email: "", isAdmin: false, role: "visitor" },
+      profile: {
+        userId: id,
+        displayName: name,
+        bodyColor: "#4ade80",
+        hairColor: "#3b2c20",
+        characterId: null,
+      },
+    });
   });
 
   // ============================================================

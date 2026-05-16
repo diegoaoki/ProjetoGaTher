@@ -1,8 +1,10 @@
 import jwt from "jsonwebtoken";
 
 export interface AuthTokenPayload {
-  sub: string;       // user.id
-  email: string;
+  sub: string;       // user.id (ou "visitor:<uuid>")
+  email: string;     // "" pra visitante
+  role?: "user" | "visitor";
+  name?: string;     // só pra visitante (não tem profile no DB)
 }
 
 const DEFAULT_EXPIRY = "7d";
@@ -21,8 +23,18 @@ export function signAuthToken(payload: AuthTokenPayload, expiresIn: string = DEF
 
 export function verifyAuthToken(token: string): AuthTokenPayload {
   const decoded = jwt.verify(token, getSecret());
-  if (typeof decoded === "string" || !decoded.sub || !(decoded as any).email) {
+  if (typeof decoded === "string" || !decoded.sub) {
     throw new Error("Token inválido");
   }
-  return { sub: String(decoded.sub), email: String((decoded as any).email) };
+  const role = (decoded as any).role === "visitor" ? "visitor" : "user";
+  // Usuário normal tem email; visitante pode não ter.
+  if (role === "user" && !(decoded as any).email) {
+    throw new Error("Token inválido");
+  }
+  return {
+    sub: String(decoded.sub),
+    email: String((decoded as any).email || ""),
+    role,
+    name: (decoded as any).name ? String((decoded as any).name) : undefined,
+  };
 }
