@@ -643,9 +643,13 @@ export default function App() {
       // Visitante recebe a resposta
       room.onMessage(
         "visitor:result",
-        (msg: { accepted: boolean; hostName?: string; reason?: string }) => {
+        (msg: { accepted: boolean; hostName?: string; reason?: string; x?: number; y?: number }) => {
           if (msg.accepted) {
             setVisitorAuthorized(true);
+            // Teleporta pro lado do host (client-autoritativo — sem corrida).
+            if (typeof msg.x === "number" && typeof msg.y === "number") {
+              sceneRef.current?.forceTeleport(msg.x, msg.y);
+            }
             setSocialToast({ text: `${msg.hostName || "Anfitrião"} autorizou — áudio liberado`, tone: "info" });
           } else {
             setSocialToast({

@@ -497,7 +497,14 @@ export class OfficeRoom extends Room<OfficeState> {
           const pos = this.pickSpotNear(host.x, host.y);
           visitor.x = pos.x;
           visitor.y = pos.y;
-          visitorClient?.send("visitor:result", { accepted: true, hostName: host.name });
+          // Manda as coords: o client teleporta a si mesmo (evita a
+          // corrida do move authoritative-light sobrescrever a posição).
+          visitorClient?.send("visitor:result", {
+            accepted: true,
+            hostName: host.name,
+            x: pos.x,
+            y: pos.y,
+          });
         } else {
           visitorClient?.send("visitor:result", { accepted: false, hostName: host.name });
         }

@@ -1605,6 +1605,12 @@ export class OfficeScene extends Phaser.Scene {
     this.navGraphics?.clear();
   }
 
+  /** Teleporte público (ex: visitante autorizado vai pro lado do host). */
+  public forceTeleport(x: number, y: number) {
+    this.cancelNavigation();
+    this.teleportTo(x, y);
+  }
+
   /** Teleporte server-autoritativo-light: move e sincroniza imediatamente. */
   private teleportTo(x: number, y: number) {
     if (!this.myContainer) return;
