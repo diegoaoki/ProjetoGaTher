@@ -1754,20 +1754,29 @@ export default function App() {
                 const scene = sceneRef.current;
                 if (!scene) return;
                 setEditorSaving(true);
+                const edited = scene.getEditedLayout();
                 try {
-                  const edited = scene.getEditedLayout();
+                  // O que define "salvou" é o PUT no banco dar certo.
                   await saveMapLayout(HTTP_URL, session.token, edited);
-                  scene.exitMapEditor(false);
-                  scene.rebuildLayout(edited);
-                  mapOverrideRef.current = edited;
-                  roomRef.current?.send("map:reload");
-                  setMapEditorOpen(false);
-                  setSocialToast({ text: "Mapa salvo", tone: "info" });
                 } catch (e: any) {
                   setSocialToast({ text: e?.message || "Falha ao salvar o mapa", tone: "error" });
-                } finally {
                   setEditorSaving(false);
+                  return;
                 }
+                // Salvou. As etapas seguintes (sair do editor, redesenhar,
+                // avisar os outros) são best-effort — um glitch aqui NÃO é
+                // "falha ao salvar".
+                try {
+                  mapOverrideRef.current = edited;
+                  scene.exitMapEditor(false);
+                  scene.rebuildLayout(edited);
+                  roomRef.current?.send("map:reload");
+                } catch (err) {
+                  console.warn("[editor] pós-save:", err);
+                }
+                setMapEditorOpen(false);
+                setSocialToast({ text: "Mapa salvo", tone: "info" });
+                setEditorSaving(false);
               }}
               style={{ ...editorBtn, background: "#16a34a", flex: 1 }}
             >

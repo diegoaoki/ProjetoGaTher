@@ -729,8 +729,9 @@ export class OfficeScene extends Phaser.Scene {
       const spr = this.add.image(item.x, item.y, item.type);
       spr.setOrigin(0.5, 0.5);
       spr.setDepth(item.y);
-      // Mesas reserváveis (deskId) ficam travadas — acopladas ao server
-      const locked = item.type === "desk" && !!item.deskId;
+      // Tudo movível, inclusive mesas (deskId). O server passa a usar a
+      // posição salva pro spawn na mesa reservada (ver backlog).
+      const locked = false;
       spr.setInteractive({ draggable: !locked, useHandCursor: true });
       if (!locked) this.input.setDraggable(spr);
       spr.setData("idx", i);
@@ -1078,7 +1079,7 @@ export class OfficeScene extends Phaser.Scene {
 
   /** Reconstrói o array de walls dinâmicos com as portas fechadas. */
   private refreshDynamicWalls() {
-    const state: any = this.room.state;
+    const state: any = this.room?.state;
     if (!state?.doors) {
       this.dynamicWalls = [];
       return;
