@@ -1219,6 +1219,13 @@ export default function App() {
           );
         })()}
         <button
+          onClick={() => setSidebarOpen(true)}
+          style={mediaBtnStyle(sidebarOpen, sidebarOpen ? "#2563eb" : "#1e293b")}
+          title="Usuários (online / offline)"
+        >
+          👥
+        </button>
+        <button
           onClick={() => setChatOpen((v) => !v)}
           style={{ ...mediaBtnStyle(chatOpen, chatOpen ? "#2563eb" : "#1e293b"), position: "relative" }}
           title="Chat (Enter)"
