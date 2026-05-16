@@ -61,7 +61,7 @@ _(nenhum bug aberto no momento)_
 - câmera: dentro de sala (não open space), trazer cards de vídeo dos peers pra "primeiro plano" — destaque maior, grid centralizado
 - câmera: opção "espelhar" o vídeo local (`transform: scaleX(-1)`) — toggle no painel
 - volume: aumentar limite máximo do ganho do peer (LiveKit limita a 1.0; subir até 2.0 via Web Audio) + slider individual por peer
-- mesa = zona de áudio: 2+ pessoas na mesma mesa (ou ao redor, hitbox expandida) formam zona isolada — só ouvem entre si. Hoje mesas são single-claim e áudio só por zona
+- 🟢 [FEITO `4657878`] mesa = zona de áudio (mesa-conversa): tecla G (fantasma) → ocupa 1 de 3 slots numa mesa; mesma mesa = áudio isolado total. Coexiste com reserva (E).
 
 ### Sidebar
 - 🟢 [FEITO `1f8d269`] mostrar usuários **offline** — `GET /users` (presence.ts + endpoint autenticado); sidebar mescla diretório com state.players, bolinha verde/cinza, ações só pros online

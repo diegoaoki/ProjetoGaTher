@@ -117,9 +117,9 @@ Audio / camera:
     toggle no painel
   - volume: aumentar limite maximo do ganho do peer (LiveKit limita a
     1.0; subir ate 2.0 via Web Audio) + slider individual por peer
-  - mesa = zona de audio: 2+ pessoas na mesma mesa (ou ao redor, hitbox
-    expandida) formam zona isolada - so ouvem entre si. Hoje mesas sao
-    single-claim e audio so por zona
+  - [FEITO 4657878] mesa = zona de audio (mesa-conversa): tecla G
+    (fantasma) ocupa 1 de 3 slots; mesma mesa = audio isolado total.
+    Coexiste com reserva (E).
 
 Sidebar:
   - [FEITO 1f8d269] mostrar usuarios offline - GET /users (presence.ts +
