@@ -98,6 +98,17 @@ export default function ChatPanel({
     return () => window.clearTimeout(id);
   }, [tab, activeDmUserId]);
 
+  // ESC fecha o chat. Listener em CAPTURE no window pega o ESC mesmo com
+  // o foco no input (o onKeyDown do input dá stopPropagation, então um
+  // listener normal de bubble não receberia).
+  useEffect(() => {
+    const onEsc = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onEsc, true);
+    return () => window.removeEventListener("keydown", onEsc, true);
+  }, [onClose]);
+
   // === Histórico inicial ===
   useEffect(() => {
     fetchGlobalMessages(httpUrl, token).then(setGlobalHistory).catch(() => {});
