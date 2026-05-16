@@ -106,7 +106,8 @@ export class SpatialAudio {
 
     this.setupEventHandlers();
     this.connect(opts).catch((err) => {
-      console.error("[spatial] connect falhou:", err);
+      // Log completo (com stack) pra diagnosticar a origem real do erro.
+      console.error("[spatial] connect falhou:", err, err?.stack);
       this.onError?.(err?.message || "Falha conectando no LiveKit");
     });
   }

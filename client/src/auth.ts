@@ -148,6 +148,7 @@ export interface MapOverride {
 export async function fetchMapLayout(httpUrl: string, token: string): Promise<MapOverride | null> {
   const resp = await fetch(httpUrl + "/map", {
     headers: { Authorization: "Bearer " + token },
+    cache: "no-store", // sempre pega o mapa salvo mais recente
   });
   if (!resp.ok) throw new Error(await parseError(resp));
   const data = await resp.json();
