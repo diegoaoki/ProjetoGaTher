@@ -1136,7 +1136,9 @@ export default function App() {
     <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
       <div ref={containerRef} style={{ position: "absolute", top: 0, left: 0, width: "100vw", height: "100vh", background: "#0f172a" }} />
 
-      {/* HUD esquerdo: info do user. Compactado em mobile pra não colidir com a barra de mídia. */}
+      {/* HUD esquerdo: info do user. Some quando a lista de usuários está
+          aberta (os dois juntos ficavam estranhos). Compactado em mobile. */}
+      {!sidebarOpen && (
       <div style={isMobile ? { ...hudStyle, padding: "6px 10px", fontSize: 12 } : hudStyle}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <strong>{session.profile.displayName}</strong>
@@ -1177,6 +1179,7 @@ export default function App() {
         )}
         {audioStatus && <div style={{ fontSize: 11, opacity: 0.8, marginTop: 6, color: "#fbbf24" }}>{audioStatus}</div>}
       </div>
+      )}
 
       {/* Barra de controles principais: rodapé central no desktop, topo central no mobile (pra não colidir com joystick/botão E) */}
       <div style={isMobile ? { ...bottomBarStyle, top: 16, bottom: "auto" } : bottomBarStyle}>
