@@ -738,22 +738,27 @@ export class OfficeScene extends Phaser.Scene {
     container.setDepth(origin.y);
     container.setAlpha(0);
 
-    // Corpo (uniforme azul-marinho)
-    const body = this.add.rectangle(0, 4, 22, 30, 0x1e3a8a);
-    body.setStrokeStyle(2, 0x0c1d4a);
-    // Cabeça
-    const head = this.add.circle(0, -16, 9, 0xf5d6b3);
-    head.setStrokeStyle(2, 0x8b6a47);
-    // Emoji 🛡️ flutuante (label)
-    const badge = this.add.text(0, -36, "🛡️", { fontSize: "16px" }).setOrigin(0.5);
-    const nameText = this.add.text(0, -52, "Segurança", {
+    // Avatar de verdade (mesmo sistema de sprite/animação dos players).
+    // Personagem fixo por sala (determinístico).
+    const charId: CharacterId = pickCharacterFor(`security:${roomId}`, "");
+    const sprite = this.add.sprite(0, 0, `${charId}_idle`, 0);
+    sprite.setScale(2);
+    sprite.play(`${charId}_down_idle`);
+
+    // Balão "🛡️ Segurança" acima da cabeça
+    const tag = this.add.text(0, -34, "🛡️ Segurança", {
+      fontFamily: "system-ui, -apple-system",
       fontSize: "11px",
       color: "#fbbf24",
-      backgroundColor: "#0f172a",
-      padding: { x: 4, y: 2 },
+      backgroundColor: "#0f172abb",
+      padding: { x: 6, y: 2 },
+      resolution: 2,
     }).setOrigin(0.5);
 
-    container.add([body, head, badge, nameText]);
+    container.add([sprite, tag]);
+    container.setData("sprite", sprite);
+    container.setData("tex", charId);
+    container.setData("dir", "down");
     this.securityNpcs.set(roomId, container);
 
     // Fade-in rápido (some o "pop") e calcula a rota até o posto.
@@ -812,9 +817,20 @@ export class OfficeScene extends Phaser.Scene {
         this.securityNpcNav.delete(key);
         return;
       }
+      const sprite = c.getData("sprite") as Phaser.GameObjects.Sprite | undefined;
+      const tex = c.getData("tex") as string | undefined;
+      const playAnim = (dir: string, moving: boolean) => {
+        if (!sprite || !tex) return;
+        const k = `${tex}_${dir}_${moving ? "walk" : "idle"}`;
+        if (this.anims.exists(k) && sprite.anims.currentAnim?.key !== k) {
+          sprite.play(k, true);
+        }
+      };
+
       const wp = nav.path[0];
       if (!wp) {
         this.securityNpcNav.delete(key);
+        playAnim((c.getData("dir") as string) || "down", false); // chegou → idle
         if (nav.onDone) {
           this.securityNpcs.delete(key);
           nav.onDone();
@@ -833,6 +849,12 @@ export class OfficeScene extends Phaser.Scene {
         c.y += (dy / d) * step;
       }
       c.setDepth(c.y);
+
+      const dir = Math.abs(dx) > Math.abs(dy)
+        ? (dx > 0 ? "right" : "left")
+        : (dy > 0 ? "down" : "up");
+      c.setData("dir", dir);
+      playAnim(dir, true);
     });
   }
 
