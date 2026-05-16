@@ -388,7 +388,7 @@ export default function App() {
     const room = roomRef.current;
     const container = containerRef.current;
 
-    const initPhaser = () => {
+    const initPhaser = async () => {
       const width = container.clientWidth || window.innerWidth;
       const height = container.clientHeight || window.innerHeight;
 
