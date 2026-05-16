@@ -96,6 +96,8 @@ export class OfficeScene extends Phaser.Scene {
     string,
     { path: Array<{ x: number; y: number }>; onDone?: () => void }
   >();
+  /** Ponto de origem/saída do guarda por sala (perto da porta). */
+  private securityApproach = new Map<string, { x: number; y: number }>();
 
   // === Joystick virtual (mobile) — sobrescreve teclado quando ativo ===
   private virtualVx = 0;
@@ -705,14 +707,24 @@ export class OfficeScene extends Phaser.Scene {
    * corpo azul-marinho + cabeça bege + emoji 🛡️ flutuando. Substituir por
    * asset moderninteriors-win quando integrar pack pago (ver backlog).
    */
-  /** Centro livre da sala de Segurança — origem de onde o guarda "sai". */
-  private securityOrigin(): { x: number; y: number } {
-    const sec = this.layout.rooms.find((r) => r.id === "security_room");
-    if (sec) return { x: sec.x + sec.w / 2, y: sec.y + sec.h / 2 };
-    return { x: 7 * 32, y: 40 * 32 }; // fallback (tiles aproximados)
+
+  /**
+   * Origem da caminhada: um ponto a ~140px do posto, do lado de FORA
+   * (mesma direção que o posto encara). Curto, sempre no corredor/open
+   * space → rota confiável e visível (não depende de cruzar o mapa).
+   * direction "right" = posto no lado oeste (salas de reunião) → vem de
+   * mais a oeste; "left" = lado leste (diretorias) → vem de mais a leste.
+   */
+  private securityApproachOrigin(npc: { x: number; y: number; direction: string }) {
+    const DIST = 140;
+    const ox = npc.direction === "left" ? npc.x + DIST : npc.x - DIST;
+    return { x: ox, y: npc.y };
   }
 
   private spawnSecurityNpc(roomId: string, npc: { x: number; y: number; direction: string }) {
+    const origin = this.securityApproachOrigin(npc);
+    this.securityApproach.set(roomId, origin);
+
     // Idempotente — se já existe (race condition), só atualiza o destino
     const existing = this.securityNpcs.get(roomId);
     if (existing) {
@@ -722,8 +734,6 @@ export class OfficeScene extends Phaser.Scene {
       return;
     }
 
-    // Guarda "sai" da sala de Segurança e CAMINHA até o posto (porta).
-    const origin = this.securityOrigin();
     const container = this.add.container(origin.x, origin.y);
     container.setDepth(origin.y);
     container.setAlpha(0);
@@ -761,19 +771,19 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   /**
-   * Remove o NPC: ele CAMINHA de volta pra sala de Segurança e só então
-   * é destruído. Sem rota → fade-out (fallback).
+   * Remove o NPC: ele CAMINHA de volta pro ponto de origem (perto da
+   * porta) e só então é destruído. Sem rota → fade-out (fallback).
    */
   private removeSecurityNpc(roomId: string) {
     const container = this.securityNpcs.get(roomId);
     if (!container) return;
     this.securityNpcs.delete(roomId);
 
-    const back = findPath(
-      { x: container.x, y: container.y },
-      this.securityOrigin(),
-      this.layout
-    );
+    const origin = this.securityApproach.get(roomId);
+    this.securityApproach.delete(roomId);
+    const back = origin
+      ? findPath({ x: container.x, y: container.y }, origin, this.layout)
+      : null;
     if (back && back.length) {
       this.securityNpcNav.set(`__leaving__${roomId}`, {
         path: back,
