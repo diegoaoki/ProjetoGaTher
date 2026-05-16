@@ -125,6 +125,7 @@ interface AuthData {
   hairColor: string;
   characterId: string;
   role: "user" | "visitor";
+  visitorHost: string; // userId de quem convidou (visitante via código)
 }
 
 /**
@@ -149,6 +150,40 @@ export class OfficeRoom extends Room<OfficeState> {
 
   /** Ocupantes da conversa de cada mesa (máx 3). deskId → sessionIds. */
   private deskOccupants = new Map<string, Set<string>>();
+
+  /** Visitantes aguardando o host (gerador do código) ficar online.
+   *  hostUserId → set de sessionIds de visitantes esperando. */
+  private pendingVisitorHost = new Map<string, Set<string>>();
+
+  /**
+   * Pede autorização ao host de um visitante (via código). Se o host
+   * está online, manda o modal; senão, deixa pendente até ele entrar.
+   */
+  private requestVisitorHost(visitorSessionId: string) {
+    const visitor = this.state.players.get(visitorSessionId);
+    const vclient = this.clients.find((c) => c.sessionId === visitorSessionId);
+    if (!visitor || !vclient) return;
+    const auth = vclient.userData as AuthData | undefined;
+    const hostUserId = auth?.visitorHost || "";
+    if (!hostUserId) return; // visitante por senha → fluxo manual (lista)
+    const hostClient = this.activeUsers.get(hostUserId);
+    if (hostClient) {
+      const hostPlayer = this.state.players.get(hostClient.sessionId);
+      vclient.send("visitor:waiting", { hostName: hostPlayer?.name || "anfitrião", online: true });
+      hostClient.send("visitor:incoming", {
+        visitorSessionId,
+        visitorName: visitor.name,
+      });
+    } else {
+      let set = this.pendingVisitorHost.get(hostUserId);
+      if (!set) {
+        set = new Set();
+        this.pendingVisitorHost.set(hostUserId, set);
+      }
+      set.add(visitorSessionId);
+      vclient.send("visitor:waiting", { hostName: "", online: false });
+    }
+  }
 
   /**
    * Mobília salva pelo editor de mapa (app_meta "map_layout"). Usada só pra
@@ -458,6 +493,10 @@ export class OfficeRoom extends Room<OfficeState> {
         if (msg?.accepted) {
           visitor.visitorOk = true; // áudio espacial normal liberado
           authorizeVisitor(visitor.userId); // persiste até meia-noite (BRT)
+          // Teleporta o visitante pra junto de quem aceitou.
+          const pos = this.pickSpotNear(host.x, host.y);
+          visitor.x = pos.x;
+          visitor.y = pos.y;
           visitorClient?.send("visitor:result", { accepted: true, hostName: host.name });
         } else {
           visitorClient?.send("visitor:result", { accepted: false, hostName: host.name });
@@ -494,7 +533,7 @@ export class OfficeRoom extends Room<OfficeState> {
     const token = options?.token;
     if (!token) throw new Error("Token de autenticação ausente");
 
-    let payload: { sub: string; email: string; role?: string; name?: string };
+    let payload: { sub: string; email: string; role?: string; name?: string; host?: string };
     try {
       payload = verifyAuthToken(token);
     } catch {
@@ -511,6 +550,7 @@ export class OfficeRoom extends Room<OfficeState> {
         hairColor: "#3b2c20",
         characterId: "",
         role: "visitor",
+        visitorHost: payload.host || "",
       };
     }
 
@@ -550,6 +590,7 @@ export class OfficeRoom extends Room<OfficeState> {
       hairColor: profile.hairColor,
       characterId: profile.characterId || "",
       role: "user",
+      visitorHost: "",
     };
   }
 
@@ -594,6 +635,26 @@ export class OfficeRoom extends Room<OfficeState> {
     // Registra como sessão ativa pro userId (sobrescreve qualquer anterior já kickada)
     this.activeUsers.set(auth.userId, client);
     markOnline(auth.userId);
+
+    if (auth.role === "visitor") {
+      // Visitante via código (não autorizado ainda): pede ao host.
+      if (!player.visitorOk && auth.visitorHost) {
+        this.requestVisitorHost(client.sessionId);
+      }
+    } else {
+      // Host entrou: notifica visitantes que estavam esperando por ele.
+      // Pequeno atraso pra os onMessage do client do host já estarem
+      // registrados (evita perder o "visitor:incoming").
+      const waiting = this.pendingVisitorHost.get(auth.userId);
+      if (waiting) {
+        this.pendingVisitorHost.delete(auth.userId);
+        setTimeout(() => {
+          for (const vsid of waiting) {
+            if (this.state.players.get(vsid)) this.requestVisitorHost(vsid);
+          }
+        }, 1500);
+      }
+    }
   }
 
   onLeave(client: Client, consented: boolean) {

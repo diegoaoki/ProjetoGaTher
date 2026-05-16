@@ -309,6 +309,7 @@ export default function App() {
   const [visitorAuthorized, setVisitorAuthorized] = useState(false);
   const [visitorCodeModal, setVisitorCodeModal] = useState<string | null>(null);
   const [incomingVisitor, setIncomingVisitor] = useState<{ visitorSessionId: string; visitorName: string } | null>(null);
+  const [visitorWaiting, setVisitorWaiting] = useState<{ hostName: string; online: boolean } | null>(null);
   // Estou numa bolha? Dirige a visibilidade do botão "sair da bolha" no HUD.
   // Verdade de áudio é o state.players[me].bubbleId; isso aqui é só pra UI.
   const [inBubble, setInBubble] = useState(false);
@@ -626,6 +627,10 @@ export default function App() {
       });
 
       // === Modo visitante ===
+      // Visitante via código: aguardando o host (gerador) autorizar
+      room.onMessage("visitor:waiting", (msg: { hostName: string; online: boolean }) => {
+        setVisitorWaiting(msg);
+      });
       // Host recebe pedido de um visitante
       room.onMessage("visitor:incoming", (msg: { visitorSessionId: string; visitorName: string }) => {
         setIncomingVisitor(msg);
@@ -1626,33 +1631,50 @@ export default function App() {
         </div>
       )}
 
-      {/* Painel do visitante: escolher com quem falar (até ser autorizado) */}
+      {/* Painel do visitante (até ser autorizado) */}
       {isVisitor && !visitorAuthorized && conn === "connected" && (
         <div style={{ ...editorPanelStyle, top: 16, right: 16, width: 300 }}>
           <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>👤 Você é visitante</div>
-          <div style={{ fontSize: 11, opacity: 0.8, marginBottom: 10 }}>
-            Seu áudio está mudo até alguém do escritório te autorizar.
-            Escolha com quem quer falar:
-          </div>
-          <div style={{ maxHeight: 260, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
-            {onlinePlayers.filter((p) => !p.isMe).length === 0 && (
-              <div style={{ fontSize: 12, opacity: 0.6 }}>Ninguém online ainda…</div>
-            )}
-            {onlinePlayers
-              .filter((p) => !p.isMe && p.userId)
-              .map((p) => (
-                <button
-                  key={p.sessionId}
-                  onClick={() => {
-                    roomRef.current?.send("visitor:request", { targetUserId: p.userId });
-                    setSocialToast({ text: `Pedido enviado pra ${p.name}`, tone: "info" });
-                  }}
-                  style={{ ...editorBtn, background: "#2563eb", textAlign: "left" }}
-                >
-                  💬 Falar com {p.name}
-                </button>
-              ))}
-          </div>
+          {visitorWaiting ? (
+            // Entrou por código → host é quem gerou; aguarda autorização
+            <div style={{ fontSize: 12, opacity: 0.85 }}>
+              Seu áudio está mudo até quem te convidou autorizar.
+              {visitorWaiting.online ? (
+                <>
+                  {" "}Aguardando <strong>{visitorWaiting.hostName || "anfitrião"}</strong> aceitar…
+                </>
+              ) : (
+                <> Quem te convidou ainda não está online — assim que entrar, você é avisado.</>
+              )}
+            </div>
+          ) : (
+            // Entrou por senha (sem host) → fluxo manual de escolher
+            <>
+              <div style={{ fontSize: 11, opacity: 0.8, marginBottom: 10 }}>
+                Seu áudio está mudo até alguém do escritório te autorizar.
+                Escolha com quem quer falar:
+              </div>
+              <div style={{ maxHeight: 260, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
+                {onlinePlayers.filter((p) => !p.isMe).length === 0 && (
+                  <div style={{ fontSize: 12, opacity: 0.6 }}>Ninguém online ainda…</div>
+                )}
+                {onlinePlayers
+                  .filter((p) => !p.isMe && p.userId)
+                  .map((p) => (
+                    <button
+                      key={p.sessionId}
+                      onClick={() => {
+                        roomRef.current?.send("visitor:request", { targetUserId: p.userId });
+                        setSocialToast({ text: `Pedido enviado pra ${p.name}`, tone: "info" });
+                      }}
+                      style={{ ...editorBtn, background: "#2563eb", textAlign: "left" }}
+                    >
+                      💬 Falar com {p.name}
+                    </button>
+                  ))}
+              </div>
+            </>
+          )}
         </div>
       )}
 

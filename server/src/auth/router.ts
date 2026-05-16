@@ -226,10 +226,12 @@ export function createAuthRouter() {
     const { name, code, password } = parsed.data;
 
     let ok = false;
+    let host: string | undefined;
     if (code) {
       const entry = visitorCodes.get(code);
       if (entry && !entry.used && entry.exp >= Date.now()) {
         entry.used = true;
+        host = entry.by; // quem gerou o código é o host do visitante
         ok = true;
       } else {
         return res.status(401).json({ error: "Código inválido ou expirado" });
@@ -245,7 +247,7 @@ export function createAuthRouter() {
 
     const id = `visitor:${randomUUID()}`;
     const token = signAuthToken(
-      { sub: id, email: "", role: "visitor", name },
+      { sub: id, email: "", role: "visitor", name, host },
       "12h"
     );
     return res.json({

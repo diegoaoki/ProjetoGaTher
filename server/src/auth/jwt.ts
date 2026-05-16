@@ -5,6 +5,7 @@ export interface AuthTokenPayload {
   email: string;     // "" pra visitante
   role?: "user" | "visitor";
   name?: string;     // só pra visitante (não tem profile no DB)
+  host?: string;     // visitante via código: userId de quem gerou o código
 }
 
 const DEFAULT_EXPIRY = "7d";
@@ -36,5 +37,6 @@ export function verifyAuthToken(token: string): AuthTokenPayload {
     email: String((decoded as any).email || ""),
     role,
     name: (decoded as any).name ? String((decoded as any).name) : undefined,
+    host: (decoded as any).host ? String((decoded as any).host) : undefined,
   };
 }
