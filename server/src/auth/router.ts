@@ -154,6 +154,23 @@ export function createAuthRouter() {
 
   router.get("/auth/me", authReadLimiter, requireAuth, async (req: Request, res: Response) => {
     try {
+      // Visitante não tem linha no Postgres — devolve do próprio token
+      // (senão um refresh deslogaria e o código de uso único já foi gasto).
+      if (req.auth?.role === "visitor") {
+        const id = req.auth.sub;
+        const name = req.auth.name || "Visitante";
+        return res.json({
+          user: { id, email: "", isAdmin: false, role: "visitor" },
+          profile: {
+            userId: id,
+            displayName: name,
+            bodyColor: "#4ade80",
+            hairColor: "#3b2c20",
+            characterId: null,
+          },
+        });
+      }
+
       const db = getDb();
       const userId = req.auth!.sub;
 

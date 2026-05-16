@@ -179,8 +179,8 @@ export class OfficeScene extends Phaser.Scene {
   private readonly BALLOON_HEARING_RADIUS = 60;
 
   public onPositionsUpdate?: (
-    myInfo: { x: number; y: number; zoneId: string; bubbleId: string },
-    peerInfo: Map<string, { x: number; y: number; zoneId: string; bubbleId: string }>
+    myInfo: { x: number; y: number; zoneId: string; bubbleId: string; role: string; visitorOk: boolean },
+    peerInfo: Map<string, { x: number; y: number; zoneId: string; bubbleId: string; role: string; visitorOk: boolean }>
   ) => void;
   public onZoneChange?: (zone: string | null) => void;
 
@@ -1736,7 +1736,7 @@ export class OfficeScene extends Phaser.Scene {
     this.advanceSecurityNpcs(dt);
 
     if (this.onPositionsUpdate) {
-      const peerInfo = new Map<string, { x: number; y: number; zoneId: string; bubbleId: string }>();
+      const peerInfo = new Map<string, { x: number; y: number; zoneId: string; bubbleId: string; role: string; visitorOk: boolean }>();
       const state: any = this.room.state;
       this.remotePlayers.forEach((rp, sessionId) => {
         const peerPlayer = state?.players?.get?.(sessionId);
@@ -1745,16 +1745,20 @@ export class OfficeScene extends Phaser.Scene {
           y: rp.container.y,
           zoneId: peerPlayer?.zoneId || "open",
           bubbleId: peerPlayer?.bubbleId || "",
+          role: peerPlayer?.role || "user",
+          visitorOk: peerPlayer?.visitorOk ?? true,
         });
       });
       const mySessionId = (this.room as any).sessionId;
-      const myBubbleId = state?.players?.get?.(mySessionId)?.bubbleId || "";
+      const myPlayer = state?.players?.get?.(mySessionId);
       this.onPositionsUpdate(
         {
           x: this.myContainer.x,
           y: this.myContainer.y,
           zoneId: this.currentZone || "open",
-          bubbleId: myBubbleId,
+          bubbleId: myPlayer?.bubbleId || "",
+          role: myPlayer?.role || "user",
+          visitorOk: myPlayer?.visitorOk ?? true,
         },
         peerInfo
       );

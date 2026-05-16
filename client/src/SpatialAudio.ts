@@ -300,15 +300,22 @@ export class SpatialAudio {
   }
 
   public updateVolumes(
-    myInfo: { x: number; y: number; zoneId?: string; bubbleId?: string },
-    peerInfo: Map<string, { x: number; y: number; zoneId?: string; bubbleId?: string }>
+    myInfo: { x: number; y: number; zoneId?: string; bubbleId?: string; role?: string; visitorOk?: boolean },
+    peerInfo: Map<string, { x: number; y: number; zoneId?: string; bubbleId?: string; role?: string; visitorOk?: boolean }>
   ) {
     // Garante o AudioContext ativo (autoplay pode tê-lo deixado suspenso).
     if (this.audioCtx?.state === "suspended") this.audioCtx.resume().catch(() => {});
 
+    // Visitante não autorizado = mudo total (não ouve ninguém e ninguém o ouve).
+    const meBlocked = myInfo.role === "visitor" && !myInfo.visitorOk;
+
     this.peers.forEach((peer, identity) => {
       const info = peerInfo.get(identity);
       if (!info || !peer.audioElement) {
+        this.applyPeerVolume(peer, 0);
+        return;
+      }
+      if (meBlocked || (info.role === "visitor" && !info.visitorOk)) {
         this.applyPeerVolume(peer, 0);
         return;
       }

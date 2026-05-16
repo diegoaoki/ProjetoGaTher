@@ -23,6 +23,7 @@ import {
   DirectoryUser,
   fetchMapLayout,
   saveMapLayout,
+  createVisitorCode,
 } from "./auth";
 import { EDITOR_FURNITURE_TYPES } from "./OfficeLayout";
 
@@ -302,6 +303,12 @@ export default function App() {
 
   // === Bolha de conversa privada ===
   const [incomingBubble, setIncomingBubble] = useState<{ fromSessionId: string; fromName: string } | null>(null);
+
+  // === Modo visitante ===
+  const isVisitor = session?.user?.role === "visitor";
+  const [visitorAuthorized, setVisitorAuthorized] = useState(false);
+  const [visitorCodeModal, setVisitorCodeModal] = useState<string | null>(null);
+  const [incomingVisitor, setIncomingVisitor] = useState<{ visitorSessionId: string; visitorName: string } | null>(null);
   // Estou numa bolha? Dirige a visibilidade do botão "sair da bolha" no HUD.
   // Verdade de áudio é o state.players[me].bubbleId; isso aqui é só pra UI.
   const [inBubble, setInBubble] = useState(false);
@@ -437,7 +444,7 @@ export default function App() {
         scene.onPositionsUpdate = (myInfo, peerInfo) => {
           if (!spatialRef.current) return;
           const peers = spatialRef.current.getPeerIdentities();
-          const mapped = new Map<string, { x: number; y: number; zoneId: string; bubbleId: string }>();
+          const mapped = new Map<string, { x: number; y: number; zoneId: string; bubbleId: string; role: string; visitorOk: boolean }>();
           const state: any = room.state;
           peerInfo.forEach((info, sessionId) => {
             const player = state.players.get(sessionId);
@@ -614,6 +621,32 @@ export default function App() {
       room.onMessage("bubble:error", (msg: { error: string }) => {
         setSocialToast({ text: msg?.error || "Falha na bolha", tone: "error" });
       });
+
+      // === Modo visitante ===
+      // Host recebe pedido de um visitante
+      room.onMessage("visitor:incoming", (msg: { visitorSessionId: string; visitorName: string }) => {
+        setIncomingVisitor(msg);
+        showNotificationIfHidden({
+          title: "👤 Visitante",
+          body: `${msg.visitorName} quer falar com você`,
+          tag: "visitor",
+        });
+      });
+      // Visitante recebe a resposta
+      room.onMessage(
+        "visitor:result",
+        (msg: { accepted: boolean; hostName?: string; reason?: string }) => {
+          if (msg.accepted) {
+            setVisitorAuthorized(true);
+            setSocialToast({ text: `${msg.hostName || "Anfitrião"} autorizou — áudio liberado`, tone: "info" });
+          } else {
+            setSocialToast({
+              text: msg.reason || `${msg.hostName || "A pessoa"} recusou — tente outra pessoa`,
+              tone: "error",
+            });
+          }
+        }
+      );
 
       // Editor de mapa: um admin salvou → recarrega o layout pra todos.
       room.onMessage("map:updated", async () => {
@@ -1299,6 +1332,22 @@ export default function App() {
               <button onClick={() => setEditingAvatar(true)} style={menuItemStyle}>🎨 Editar avatar</button>
               <button onClick={() => setAudioTestOpen(true)} style={menuItemStyle}>🎧 Testar áudio/vídeo</button>
               <button onClick={() => setSidebarOpen(true)} style={menuItemStyle}>👥 Quem está online</button>
+              {!isVisitor && (
+                <button
+                  onClick={async () => {
+                    setSettingsOpen(false);
+                    try {
+                      const r = await createVisitorCode(HTTP_URL, session.token);
+                      setVisitorCodeModal(r.code);
+                    } catch (e: any) {
+                      setSocialToast({ text: e?.message || "Falha ao gerar código", tone: "error" });
+                    }
+                  }}
+                  style={menuItemStyle}
+                >
+                  🎟️ Código de convidado
+                </button>
+              )}
               {session.user.isAdmin && (
                 <button onClick={() => setAdminOpen(true)} style={menuItemStyle}>🛡️ Admin</button>
               )}
@@ -1570,6 +1619,111 @@ export default function App() {
                 Aceitar
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Painel do visitante: escolher com quem falar (até ser autorizado) */}
+      {isVisitor && !visitorAuthorized && conn === "connected" && (
+        <div style={{ ...editorPanelStyle, top: 16, right: 16, width: 300 }}>
+          <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>👤 Você é visitante</div>
+          <div style={{ fontSize: 11, opacity: 0.8, marginBottom: 10 }}>
+            Seu áudio está mudo até alguém do escritório te autorizar.
+            Escolha com quem quer falar:
+          </div>
+          <div style={{ maxHeight: 260, overflowY: "auto", display: "flex", flexDirection: "column", gap: 4 }}>
+            {onlinePlayers.filter((p) => !p.isMe).length === 0 && (
+              <div style={{ fontSize: 12, opacity: 0.6 }}>Ninguém online ainda…</div>
+            )}
+            {onlinePlayers
+              .filter((p) => !p.isMe && p.userId)
+              .map((p) => (
+                <button
+                  key={p.sessionId}
+                  onClick={() => {
+                    roomRef.current?.send("visitor:request", { targetUserId: p.userId });
+                    setSocialToast({ text: `Pedido enviado pra ${p.name}`, tone: "info" });
+                  }}
+                  style={{ ...editorBtn, background: "#2563eb", textAlign: "left" }}
+                >
+                  💬 Falar com {p.name}
+                </button>
+              ))}
+          </div>
+        </div>
+      )}
+
+      {/* Host: visitante pediu pra falar */}
+      {incomingVisitor && (
+        <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+          <div style={{ ...cardStyle, width: 360 }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ margin: "0 0 8px", fontSize: 20 }}>👤 Visitante</h2>
+            <p style={{ margin: "0 0 18px", fontSize: 14 }}>
+              <strong>{incomingVisitor.visitorName}</strong> (visitante) quer falar
+              com você. Se aceitar, o áudio dele(a) é liberado no escritório.
+            </p>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => {
+                  roomRef.current?.send("visitor:respond", {
+                    visitorSessionId: incomingVisitor.visitorSessionId,
+                    accepted: false,
+                  });
+                  setIncomingVisitor(null);
+                }}
+                style={{ ...buttonStyle, background: "#334155", color: "#e2e8f0" }}
+              >
+                Recusar
+              </button>
+              <button
+                onClick={() => {
+                  roomRef.current?.send("visitor:respond", {
+                    visitorSessionId: incomingVisitor.visitorSessionId,
+                    accepted: true,
+                  });
+                  setIncomingVisitor(null);
+                }}
+                style={buttonStyle}
+              >
+                Autorizar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Código de convidado gerado */}
+      {visitorCodeModal && (
+        <div style={modalStyle} onClick={() => setVisitorCodeModal(null)}>
+          <div style={{ ...cardStyle, width: 360 }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ margin: "0 0 8px", fontSize: 20 }}>🎟️ Código de convidado</h2>
+            <p style={{ margin: "0 0 12px", fontSize: 13, opacity: 0.8 }}>
+              Compartilhe com o convidado. Uso único, expira em ~30 min.
+            </p>
+            <div
+              style={{
+                fontSize: 32, fontWeight: 800, letterSpacing: 4, textAlign: "center",
+                background: "#0f172a", border: "1px solid #334155", borderRadius: 8,
+                padding: "14px 0", marginBottom: 14, userSelect: "all",
+              }}
+            >
+              {visitorCodeModal}
+            </div>
+            <button
+              onClick={() => {
+                try { navigator.clipboard?.writeText(visitorCodeModal); } catch {}
+                setSocialToast({ text: "Código copiado", tone: "info" });
+              }}
+              style={{ ...buttonStyle, marginBottom: 8 }}
+            >
+              Copiar
+            </button>
+            <button
+              onClick={() => setVisitorCodeModal(null)}
+              style={{ ...buttonStyle, background: "#334155", color: "#e2e8f0" }}
+            >
+              Fechar
+            </button>
           </div>
         </div>
       )}

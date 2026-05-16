@@ -9,6 +9,7 @@ export interface AuthUser {
   id: string;
   email: string;
   isAdmin?: boolean;
+  role?: "user" | "visitor";
 }
 
 export interface AdminUser {
@@ -101,6 +102,35 @@ export async function login(
   const data = await resp.json();
   storeToken(data.token);
   return data;
+}
+
+/** Entra como visitante (sem conta) via código de uso único OU senha fixa. */
+export async function loginVisitor(
+  httpUrl: string,
+  body: { name: string; code?: string; password?: string }
+): Promise<AuthSession> {
+  const resp = await fetch(httpUrl + "/visitor/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) throw new Error(await parseError(resp));
+  const data = await resp.json();
+  storeToken(data.token);
+  return data;
+}
+
+/** Usuário logado gera um código de convidado (uso único, TTL no server). */
+export async function createVisitorCode(
+  httpUrl: string,
+  token: string
+): Promise<{ code: string; expiresAt: number }> {
+  const resp = await fetch(httpUrl + "/visitor/code", {
+    method: "POST",
+    headers: { Authorization: "Bearer " + token },
+  });
+  if (!resp.ok) throw new Error(await parseError(resp));
+  return resp.json();
 }
 
 export async function fetchMe(httpUrl: string, token: string): Promise<{ user: AuthUser; profile: AuthProfile }> {

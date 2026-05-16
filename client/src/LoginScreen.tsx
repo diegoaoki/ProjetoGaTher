@@ -1,23 +1,50 @@
 import { useState } from "react";
-import { login, register, AuthSession } from "./auth";
+import { login, register, loginVisitor, AuthSession } from "./auth";
 
 interface Props {
   httpUrl: string;
   onAuthed: (session: AuthSession) => void;
 }
 
-type Mode = "login" | "register";
+type Mode = "login" | "register" | "visitor";
 
 export default function LoginScreen({ httpUrl, onAuthed }: Props) {
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
+  const [vcode, setVcode] = useState("");
+  const [vpass, setVpass] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
   async function submit() {
     setError("");
+
+    if (mode === "visitor") {
+      if (!displayName.trim()) {
+        setError("Digite seu nome");
+        return;
+      }
+      if (!vcode.trim() && !vpass) {
+        setError("Informe o código de convite ou a senha de visitante");
+        return;
+      }
+      setLoading(true);
+      try {
+        const session = await loginVisitor(httpUrl, {
+          name: displayName.trim(),
+          code: vcode.trim() || undefined,
+          password: vpass || undefined,
+        });
+        onAuthed(session);
+      } catch (e: any) {
+        setError(e?.message || "Falha ao entrar como visitante");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
 
     if (!email.trim() || !password) {
       setError("Preencha email e senha");
@@ -58,7 +85,11 @@ export default function LoginScreen({ httpUrl, onAuthed }: Props) {
       <div style={cardStyle}>
         <h1 style={{ margin: "0 0 4px", fontSize: 28 }}>Virtual Office</h1>
         <p style={{ margin: "0 0 20px", opacity: 0.7, fontSize: 14 }}>
-          {mode === "login" ? "Entrar na sua conta" : "Criar uma conta nova"}
+          {mode === "login"
+            ? "Entrar na sua conta"
+            : mode === "register"
+            ? "Criar uma conta nova"
+            : "Entrar como visitante (convidado)"}
         </p>
 
         <div style={tabsStyle}>
@@ -76,36 +107,47 @@ export default function LoginScreen({ httpUrl, onAuthed }: Props) {
           >
             Cadastrar
           </button>
+          <button
+            onClick={() => setMode("visitor")}
+            style={{ ...tabStyle, ...(mode === "visitor" ? tabActiveStyle : {}) }}
+            disabled={loading}
+          >
+            Visitante
+          </button>
         </div>
 
-        <label style={labelStyle}>Email</label>
-        <input
-          type="email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-          placeholder="seu@email.com"
-          style={inputStyle}
-          disabled={loading}
-          autoComplete="email"
-          autoFocus
-        />
-
-        <label style={labelStyle}>Senha</label>
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && submit()}
-          placeholder={mode === "register" ? "Mínimo 8 caracteres" : "Sua senha"}
-          style={inputStyle}
-          disabled={loading}
-          autoComplete={mode === "login" ? "current-password" : "new-password"}
-        />
-
-        {mode === "register" && (
+        {mode !== "visitor" && (
           <>
-            <label style={labelStyle}>Nome de exibição</label>
+            <label style={labelStyle}>Email</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && submit()}
+              placeholder="seu@email.com"
+              style={inputStyle}
+              disabled={loading}
+              autoComplete="email"
+              autoFocus
+            />
+
+            <label style={labelStyle}>Senha</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && submit()}
+              placeholder={mode === "register" ? "Mínimo 8 caracteres" : "Sua senha"}
+              style={inputStyle}
+              disabled={loading}
+              autoComplete={mode === "login" ? "current-password" : "new-password"}
+            />
+          </>
+        )}
+
+        {(mode === "register" || mode === "visitor") && (
+          <>
+            <label style={labelStyle}>{mode === "visitor" ? "Seu nome" : "Nome de exibição"}</label>
             <input
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
@@ -114,18 +156,60 @@ export default function LoginScreen({ httpUrl, onAuthed }: Props) {
               style={inputStyle}
               disabled={loading}
               maxLength={24}
+              autoFocus={mode === "visitor"}
+            />
+          </>
+        )}
+
+        {mode === "visitor" && (
+          <>
+            <label style={labelStyle}>Código de convite</label>
+            <input
+              value={vcode}
+              onChange={(e) => setVcode(e.target.value.toUpperCase())}
+              onKeyDown={(e) => e.key === "Enter" && submit()}
+              placeholder="Ex: A1B2C3 (peça pra quem te convidou)"
+              style={inputStyle}
+              disabled={loading}
+              maxLength={6}
+            />
+            <p style={{ margin: "6px 0 0", fontSize: 12, opacity: 0.6, textAlign: "center" }}>
+              — ou —
+            </p>
+            <label style={labelStyle}>Senha de visitante</label>
+            <input
+              type="password"
+              value={vpass}
+              onChange={(e) => setVpass(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && submit()}
+              placeholder="Senha compartilhada (se você tiver)"
+              style={inputStyle}
+              disabled={loading}
             />
           </>
         )}
 
         <button onClick={submit} disabled={loading} style={{ ...buttonStyle, marginTop: 16 }}>
-          {loading ? "Aguarde..." : mode === "login" ? "Entrar" : "Criar conta"}
+          {loading
+            ? "Aguarde..."
+            : mode === "login"
+            ? "Entrar"
+            : mode === "register"
+            ? "Criar conta"
+            : "Entrar como visitante"}
         </button>
 
         {error && <p style={{ color: "#f87171", marginTop: 16, fontSize: 13 }}>{error}</p>}
 
         <p style={{ marginTop: 16, fontSize: 12, opacity: 0.6, textAlign: "center" }}>
-          {mode === "login" ? (
+          {mode === "visitor" ? (
+            <>
+              É do escritório?{" "}
+              <a onClick={() => setMode("login")} style={linkStyle}>
+                Entrar com conta
+              </a>
+            </>
+          ) : mode === "login" ? (
             <>
               Não tem conta?{" "}
               <a onClick={() => setMode("register")} style={linkStyle}>
