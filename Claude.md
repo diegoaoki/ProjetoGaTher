@@ -208,6 +208,8 @@ npm run build      # build de produção
 6. **Persistência parcial**: `users` e `profiles` persistem em Postgres. Estado da room (posições, players online) ainda é em memória — restart do Railway derruba quem está online (eles re-logam).
 7. **Identity LiveKit usa userId, NÃO displayName**: o mapeamento client↔LiveKit é por `Player.userId`, não pelo nome. Mudar isso quebra áudio espacial e detecção de fala.
 8. **Schema do Postgres é criado no boot**: `initDb()` roda `CREATE TABLE IF NOT EXISTS`. Mudanças destrutivas (drop coluna, alter tipo) NÃO são detectadas — pra isso precisa migrar pra `drizzle-kit migrations`.
+9. **NUNCA colocar `await` entre `new Phaser.Game()` e `game.scene.start("OfficeScene", {room,...})`**: como o game usa `scene:[OfficeScene]`, o Phaser auto-inicia a cena. Se houver um `await` no meio, a cena boota SEM os dados (`init()` sem `room`) e `create()`/`setupStateListeners` estoura com `Cannot read properties of undefined (reading 'state')`, deixando o jogo meio-quebrado. Qualquer fetch necessário pro boot (ex: `fetchMapLayout`) tem que ser feito ANTES do `new Phaser.Game()`.
+10. **esbuild do Vite (build do Vercel) só checa SINTAXE, não tipos**: erros tipo `await` fora de função `async` quebram o deploy do client e o Vercel mantém o bundle anterior (parece que "a mudança não subiu"). Erros só de tipo TS NÃO quebram o build. Sem `node` no ambiente do Claude, validar build é manual.
 
 ## Roadmap
 
