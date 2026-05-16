@@ -228,6 +228,9 @@ export default function App() {
 
   // === Chat ===
   const [chatOpen, setChatOpen] = useState(false);
+  // Pedido de abrir DM com alguém (botão "iniciar conversa" da lista). Nonce
+  // pra re-disparar mesmo clicando na mesma pessoa de novo.
+  const [dmRequest, setDmRequest] = useState<{ userId: string; n: number } | null>(null);
   const [liveMessages, setLiveMessages] = useState<ChatMessage[]>([]);
   // Override de reações por message id (atualiza msgs do histórico que
   // não estão em liveMessages)
@@ -1369,6 +1372,18 @@ export default function App() {
                   {!p.isMe && p.online && p.sessionId && (
                     <div style={{ display: "flex", gap: 4 }}>
                       <button
+                        onClick={() => {
+                          // p.key == userId (vide construção das rows)
+                          setDmRequest({ userId: p.key, n: Date.now() });
+                          setChatOpen(true);
+                          setSidebarOpen(false);
+                        }}
+                        style={sidebarActionBtn}
+                        title={`Iniciar conversa com ${p.name}`}
+                      >
+                        💬
+                      </button>
+                      <button
                         onClick={() => roomRef.current?.send("teleport:to-player", { targetSessionId: p.sessionId })}
                         style={sidebarActionBtn}
                         title={`Ir até ${p.name}`}
@@ -1697,6 +1712,7 @@ export default function App() {
             });
           }}
           mobile={isMobile}
+          dmRequest={dmRequest}
         />
       )}
 

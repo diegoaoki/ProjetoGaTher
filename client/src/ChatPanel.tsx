@@ -34,12 +34,15 @@ interface Props {
   onChannelViewed: (channelKey: string) => void;
   /** Em mobile, ocupa a tela inteira. */
   mobile?: boolean;
+  /** Pedido de abrir DM com alguém (vindo da lista de usuários). O `n` é um
+   *  nonce pra re-disparar mesmo se for a mesma pessoa de novo. */
+  dmRequest?: { userId: string; n: number } | null;
 }
 
 type Tab = "global" | "room" | "dm";
 
 export default function ChatPanel({
-  httpUrl, token, myUserId, onlinePlayers, liveMessages, reactionsOverride, onSend, onToggleReaction, onClose, onChannelViewed, mobile,
+  httpUrl, token, myUserId, onlinePlayers, liveMessages, reactionsOverride, onSend, onToggleReaction, onClose, onChannelViewed, mobile, dmRequest,
 }: Props) {
   const [pickerOpenFor, setPickerOpenFor] = useState<string | null>(null);
   /**
@@ -75,6 +78,13 @@ export default function ChatPanel({
   const [dmConversations, setDmConversations] = useState<DmConversation[]>([]);
   const [activeDmUserId, setActiveDmUserId] = useState<string | null>(null);
   const [loadingHistory, setLoadingHistory] = useState(false);
+
+  // "Iniciar conversa" na lista de usuários → abre direto a DM com a pessoa.
+  useEffect(() => {
+    if (!dmRequest?.userId) return;
+    setTab("dm");
+    setActiveDmUserId(dmRequest.userId);
+  }, [dmRequest]);
   const [input, setInput] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
