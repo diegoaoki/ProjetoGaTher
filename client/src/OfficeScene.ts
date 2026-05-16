@@ -999,6 +999,21 @@ export class OfficeScene extends Phaser.Scene {
           rp.targetX = player.x;
           rp.targetY = player.y;
           rp.direction = player.direction || "down";
+          // Visitante: invisível até o host autorizar; ao autorizar,
+          // aparece com a animação de nascimento.
+          if (player.role === "visitor") {
+            const c = rp.container;
+            if (player.visitorOk && !c.visible) {
+              // Aparece JÁ na posição final (lado do host), não desliza
+              c.x = player.x;
+              c.y = player.y;
+              c.setDepth(player.y);
+              c.setVisible(true);
+              this.spawnBirthFx(c, player.x, player.y);
+            } else if (!player.visitorOk && c.visible) {
+              c.setVisible(false);
+            }
+          }
           if (rp.bodyColor !== player.color || rp.hairColor !== player.hairColor) {
             this.refreshRemoteAvatarTexture(rp, player.color, player.hairColor);
           }
@@ -1555,7 +1570,15 @@ export class OfficeScene extends Phaser.Scene {
     const container = this.add.container(player.x, player.y, [ring, sprite, nameText]);
     container.setDepth(player.y);
     sprite.play(`${charId}_down_idle`);
-    if (player.role === "visitor") this.spawnBirthFx(container, player.x, player.y);
+    if (player.role === "visitor") {
+      if (player.visitorOk) {
+        // Visitante já autorizado (ex: entrei e ele já estava aqui)
+        this.spawnBirthFx(container, player.x, player.y);
+      } else {
+        // Não autorizado → invisível pros outros até o host aceitar
+        container.setVisible(false);
+      }
+    }
 
     this.remotePlayers.set(sessionId, {
       container, sprite, ring, nameText,
