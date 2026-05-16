@@ -1,0 +1,165 @@
+==============================================================================
+BACKLOG - VIRTUAL OFFICE (ProjetoGaTher)
+Gerado em 2026-05-16. Fonte: secao Backlog do Claude.md + pedidos recentes.
+Legenda: [PRIORIDADE] [BUG] [FEITO] [NORMAL] [A CONFIRMAR]
+==============================================================================
+
+
+------------------------------------------------------------------------------
+PRIORIDADES (audio ruim - reportado pelo user 2026-05-16)
+------------------------------------------------------------------------------
+
+[PRIORIDADE] Controles de volume
+  O audio esta ruim. Precisa de:
+  (a) slider pra aumentar o volume do microfone (ganho de entrada - Web
+      Audio GainNode na track local, pode passar de 1.0);
+  (b) slider pra aumentar o volume do alto-falante / peers (ganho de
+      saida por peer ou master, Web Audio permite > 1.0).
+  Persistir a preferencia (localStorage).
+
+[PRIORIDADE] Selecao de microfone
+  Quando o computador tem mais de um microfone, deixar escolher qual usar:
+  navigator.mediaDevices.enumerateDevices() filtrando audioinput +
+  <select> no painel de audio/video, e republicar a track com o deviceId
+  escolhido. Persistir a escolha (localStorage). Idealmente o mesmo pra
+  saida de audio (setSinkId no elemento de audio, onde suportado).
+
+
+------------------------------------------------------------------------------
+BUGS
+------------------------------------------------------------------------------
+
+[BUG] NPC seguranca as vezes fica DENTRO da sala (reportado 2026-05-16)
+  Deve ficar SEMPRE do lado de fora da porta. Causa: em handleRoomLock
+  (OfficeRoom.ts) o spawn faz npc.x = doorPos.x - 24, hardcodado pra porta
+  na parede ESQUERDA (salas de reuniao, fora = oeste). As diretorias
+  (office_1/office_2, trancaveis desde baca721) tem porta na parede
+  DIREITA -> doorPos.x - 24 cai dentro da sala. Fix: reusar a heuristica
+  do ejectFromRoom (doorOnLeftWall = doorPos.x <= bounds.x + 20) e
+  posicionar o NPC em bounds.x - 24 (porta esquerda) ou
+  bounds.x + bounds.w + 24 (porta direita), com direction coerente.
+  Nota: auto-unlock ao sair da sala ja esta feito (acdd55e).
+
+
+------------------------------------------------------------------------------
+FEITO RECENTEMENTE (referencia)
+------------------------------------------------------------------------------
+
+[FEITO] Auto-unlock ao sair da sala (acdd55e)
+  Se o dono anda pra fora ou desconecta, a sala destranca sozinha (nao
+  fica presa).
+
+[FEITO] Bolha de conversa privada (31e2e6b)
+  N pessoas; dentro da bolha audio cheio, fora (mesma zona) 0.15; criar
+  via botao na sidebar + modal; sair manual OU por proximidade (>250px de
+  todos os membros); dissolve com <=1. Player.bubbleId no schema.
+  Pendente de validacao via deploy + teste manual.
+
+
+------------------------------------------------------------------------------
+FEATURES PEDIDAS PELO USER (2026-05-16)
+------------------------------------------------------------------------------
+
+[NORMAL] Modo visitante (convidado externo)
+  Visitante entra sem conta normal, via codigo (gerado na hora) ou senha.
+  Regras:
+  (a) visitante NAO pode assumir mesa (bloquear desk:claim pra role
+      visitante);
+  (b) mesmo com codigo/senha valido, precisa escolher com quem quer falar
+      - lista de todos os online pra ele selecionar;
+  (c) a pessoa escolhida precisa autorizar (fluxo de convite/aceitar,
+      parecido com acesso a sala trancada);
+  (d) audio do visitante isolado de todos ate a autorizacao (reaproveitar
+      __pending ou a bolha).
+  Esboco: role visitor no JWT/sessao; codigo de uso unico com TTL curto
+  gerado por user logado/admin; endpoint gerar/validar; Player.role no
+  schema; gating de desk:claim; UI de selecao de host + modal de
+  autorizacao. Interage com bolha e salas trancadas - definir precedencia
+  de audio.
+
+[NORMAL] Sala de Seguranca bloqueada pra todos
+  Ninguem entra na security_room. Tratar como zona no-entry permanente
+  (bloquear movimento no tryMove/checkCollision pra area da security_room,
+  OU sala sempre-trancada sem dono e sem fluxo de pedir entrada). Atencao:
+  doors.ts reabriu a porta da security_room pro NPC guarda "sair" quando
+  trancam reuniao - o bloqueio e so pra players (NPC e state, nao passa
+  por colisao), nao quebra a feature. A CONFIRMAR: admin e barrado ou tem
+  excecao?
+
+
+------------------------------------------------------------------------------
+BACKLOG GERAL
+------------------------------------------------------------------------------
+
+Auth / infra:
+  - esqueci-a-senha (precisa SMTP)
+  - mobile responsivo
+  - editor de mapas
+
+Interacao:
+  - menu de contexto (right-click) em outro player com opcao "vir para
+    ca" - chama o outro ate a minha posicao (semelhante ao convite, sem
+    modal aceitar/recusar - ou com, a definir)
+
+Visual / mapa:
+  - revisar visual da Recepcao - so sofas + mesa de centro; falta balcao
+    de atendimento, plantas, totem/quadro de boas-vindas, cadeiras de
+    espera
+  - revisar visual da Copa - hoje parece sala de reuniao (mesa redonda +
+    cadeiras). Deveria parecer cozinha completa usando LimeZu Modern
+    Interiors PAGO (Downloads/Assets Pagos/moderninteriors-win/, NAO o
+    Free): bancada com pia, fogao, geladeira, armarios, microondas, mesa
+    lateral. Placeholders (fridge, stove, coffee_machine, microwave) viram
+    sprites corretos
+  - visual da sala de Seguranca - so desk + 2 monitores + cadeira
+    (placeholder). Falta painel de cameras (wall mount), rack,
+    walkie-talkie/telefone, armario. Usar moderninteriors-win se houver
+    CCTV
+  - redesign do mapa baseado em print de referencia do user (verificar
+    Downloads/Erro.jpeg ou similar - nao localizado ainda) - possivelmente
+    reorganizar departamentos, mobilia, cores
+
+NPC:
+  - NPC seguranca com pathfinding real (A* entre moveis/paredes) -
+    substituir o "teletransporte + fade" atual. Precisa grid de navegacao
+    evitando furniture hitboxes e walls dinamicas (portas fechadas)
+
+Audio / camera:
+  - audio/microfone: relatos de microfone abafado - UI pra (a) escolher
+    dispositivo de entrada, (b) ajustar ganho do mic, (c) ajustar volume
+    de saida/peers (coberto pelas prioridades acima)
+  - camera: dentro de sala (nao open space), trazer cards de video dos
+    peers pra "primeiro plano" - destaque maior, grid centralizado
+  - camera: opcao "espelhar" o video local (transform scaleX(-1)) -
+    toggle no painel
+  - volume: aumentar limite maximo do ganho do peer (LiveKit limita a
+    1.0; subir ate 2.0 via Web Audio) + slider individual por peer
+  - mesa = zona de audio: 2+ pessoas na mesma mesa (ou ao redor, hitbox
+    expandida) formam zona isolada - so ouvem entre si. Hoje mesas sao
+    single-claim e audio so por zona
+
+Sidebar:
+  - mostrar usuarios offline (consulta users no Postgres). Precisa
+    endpoint novo GET /users com flag isOnline derivada de activeUsers
+  - (offline) botao "ir ate a mesa de X" - se o user tem mesa reservada,
+    teleporta o solicitante; senao, opcao desabilitada
+  - indicador "esta falando agora" (microfone animado) - parcialmente
+    feito: badge via activeSpeakerIds ja existe; revisar se esta completo
+
+
+------------------------------------------------------------------------------
+A CONFIRMAR COM O USER (talvez ja exista)
+------------------------------------------------------------------------------
+
+  - "mesas requisitadas" - JA EXISTE (tecla E reserva/libera; persiste em
+    desk_reservations). Talvez queira fluxo diferente (modal/click em vez
+    de E)?
+  - "salas com audio so pra quem esta dentro" - JA EXISTE (Fase 7, zoneId
+    no Player, SpatialAudio bloqueia entre zonas diferentes).
+  - "alerta pra enviar pra pessoa" - talvez ja coberto por chat DM +
+    convite via botao na sidebar. Confirmar se quer notificacao
+    push/sonora extra.
+
+==============================================================================
+FIM
+==============================================================================
