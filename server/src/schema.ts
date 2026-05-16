@@ -19,6 +19,11 @@ export class Player extends Schema {
   // mudo até um host autorizar (visitorOk vira true).
   @type("string") role: string = "user";
   @type("boolean") visitorOk: boolean = false;
+  // Mesa-conversa: deskSeat = deskId ocupado ("" = nenhum); deskSlot
+  // = 0 (sentado) | 1 (esquerda) | 2 (direita). Quem está na mesma
+  // mesa forma zona de áudio isolada (só eles se ouvem).
+  @type("string") deskSeat: string = "";
+  @type("number") deskSlot: number = -1;
 }
 
 export class Desk extends Schema {

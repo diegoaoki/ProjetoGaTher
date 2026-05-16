@@ -300,8 +300,8 @@ export class SpatialAudio {
   }
 
   public updateVolumes(
-    myInfo: { x: number; y: number; zoneId?: string; bubbleId?: string; role?: string; visitorOk?: boolean },
-    peerInfo: Map<string, { x: number; y: number; zoneId?: string; bubbleId?: string; role?: string; visitorOk?: boolean }>
+    myInfo: { x: number; y: number; zoneId?: string; bubbleId?: string; role?: string; visitorOk?: boolean; deskSeat?: string },
+    peerInfo: Map<string, { x: number; y: number; zoneId?: string; bubbleId?: string; role?: string; visitorOk?: boolean; deskSeat?: string }>
   ) {
     // Garante o AudioContext ativo (autoplay pode tê-lo deixado suspenso).
     if (this.audioCtx?.state === "suspended") this.audioCtx.resume().catch(() => {});
@@ -319,6 +319,16 @@ export class SpatialAudio {
         this.applyPeerVolume(peer, 0);
         return;
       }
+
+      // Mesa-conversa: quem está numa mesa só ouve quem está na MESMA
+      // mesa (zona isolada total). Precede zona/bolha/distância.
+      const myDesk = myInfo.deskSeat || "";
+      const peerDesk = info.deskSeat || "";
+      if (myDesk || peerDesk) {
+        this.applyPeerVolume(peer, myDesk && myDesk === peerDesk ? 1.0 : 0);
+        return;
+      }
+
       const myZone = myInfo.zoneId || "open";
       const peerZone = info.zoneId || "open";
 

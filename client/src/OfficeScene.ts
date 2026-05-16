@@ -131,6 +131,11 @@ export class OfficeScene extends Phaser.Scene {
   private movingSince = 0;     // timestamp (ms) quando começou a se mover continuamente
   private isMoving = false;
 
+  // === Mesa-conversa (tecla G + modo fantasma) ===
+  private ghostMode = false;
+  private myDeskSeat: string | null = null;
+  private lastSitTry = 0;
+
   private layout = getDefaultLayout();
   /** Override do editor (mobília + paredes) vindo do server. */
   private mapOverride: { furniture?: FurnitureItem[]; walls?: Wall[] } | null = null;
@@ -179,8 +184,8 @@ export class OfficeScene extends Phaser.Scene {
   private readonly BALLOON_HEARING_RADIUS = 60;
 
   public onPositionsUpdate?: (
-    myInfo: { x: number; y: number; zoneId: string; bubbleId: string; role: string; visitorOk: boolean },
-    peerInfo: Map<string, { x: number; y: number; zoneId: string; bubbleId: string; role: string; visitorOk: boolean }>
+    myInfo: { x: number; y: number; zoneId: string; bubbleId: string; role: string; visitorOk: boolean; deskSeat: string },
+    peerInfo: Map<string, { x: number; y: number; zoneId: string; bubbleId: string; role: string; visitorOk: boolean; deskSeat: string }>
   ) => void;
   public onZoneChange?: (zone: string | null) => void;
 
@@ -255,6 +260,32 @@ export class OfficeScene extends Phaser.Scene {
     this.input.keyboard!.addKey("C").on("down", () => {
       if (isTypingInInput()) return;
       this.recenterCamera();
+    });
+
+    // Tecla G: modo fantasma (transparente + atravessa móveis/pessoas)
+    // pra entrar/sair da conversa de mesa. Sentado → G sai da mesa.
+    this.input.keyboard!.addKey("G").on("down", () => {
+      if (isTypingInInput()) return;
+      this.toggleGhost();
+    });
+
+    // Resposta do server pra mesa-conversa
+    this.room.onMessage("desk:sat", (m: { deskId: string; slot: number }) => {
+      const pos = this.deskSlotPos(m.deskId, m.slot);
+      this.myDeskSeat = m.deskId;
+      this.setGhost(false); // sentou → fica sólido
+      if (this.myContainer && pos) {
+        this.myContainer.x = pos.x;
+        this.myContainer.y = pos.y;
+        this.myContainer.setDepth(pos.y);
+        this.room.send("move", {
+          x: pos.x, y: pos.y, direction: this.myDirection, isMoving: false,
+        });
+      }
+    });
+    this.room.onMessage("desk:full", () => {
+      this.onDeskError?.("Mesa cheia (máx. 3 na conversa)");
+      this.setGhost(false);
     });
 
     // Desabilita TODO o keyboard manager do Phaser quando o usuário foca em
@@ -1280,6 +1311,32 @@ export class OfficeScene extends Phaser.Scene {
     }
   }
 
+  /** Posição do slot da mesa: 0=sentado(frente), 1=esquerda, 2=direita. */
+  private deskSlotPos(deskId: string, slot: number): { x: number; y: number } | null {
+    const d = this.allDesks.find((dd) => dd.id === deskId);
+    if (!d) return null;
+    const y = d.y + 34; // na frente da mesa (assento)
+    if (slot === 1) return { x: d.x - 46, y };
+    if (slot === 2) return { x: d.x + 46, y };
+    return { x: d.x, y };
+  }
+
+  private setGhost(on: boolean) {
+    this.ghostMode = on;
+    if (this.mySprite) this.mySprite.setAlpha(on ? 0.4 : 1);
+  }
+
+  private toggleGhost() {
+    // Se está sentado numa mesa, G sai da conversa.
+    if (this.myDeskSeat) {
+      this.room.send("desk:leave");
+      this.myDeskSeat = null;
+      this.setGhost(false);
+      return;
+    }
+    this.setGhost(!this.ghostMode);
+  }
+
   private handleClaimKey() {
     if (!this.myContainer) return;
     const state: any = this.room.state;
@@ -1468,6 +1525,9 @@ export class OfficeScene extends Phaser.Scene {
    *   - Caso contrário, comportamento normal: testa destino, slide nos eixos.
    */
   private tryMove(curX: number, curY: number, dx: number, dy: number): { x: number; y: number } {
+    // Modo fantasma: atravessa móveis/paredes/pessoas livremente.
+    if (this.ghostMode) return { x: curX + dx, y: curY + dy };
+
     const stuck = checkCollision(curX, curY, PLAYER_HALF, this.layout, this.dynamicWalls);
 
     if (stuck) {
@@ -1735,8 +1795,35 @@ export class OfficeScene extends Phaser.Scene {
 
     this.advanceSecurityNpcs(dt);
 
+    // Mesa-conversa: fantasma perto de uma mesa → tenta sentar (server
+    // valida máx 3). Sentado e se afastou do slot → sai da conversa.
+    if (this.myContainer) {
+      const px = this.myContainer.x;
+      const py = this.myContainer.y;
+      if (this.ghostMode && !this.myDeskSeat && time - this.lastSitTry > 800) {
+        let near: { id: string; d2: number } | null = null;
+        for (const d of this.allDesks) {
+          const dd = (d.x - px) ** 2 + (d.y + 34 - py) ** 2;
+          if (dd < 70 * 70 && (!near || dd < near.d2)) near = { id: d.id, d2: dd };
+        }
+        if (near) {
+          this.lastSitTry = time;
+          this.room.send("desk:sit", { deskId: near.id });
+        }
+      } else if (this.myDeskSeat && this.isMoving) {
+        const d = this.allDesks.find((dd) => dd.id === this.myDeskSeat);
+        if (d) {
+          const dist2 = (d.x - px) ** 2 + (d.y + 34 - py) ** 2;
+          if (dist2 > 110 * 110) {
+            this.room.send("desk:leave");
+            this.myDeskSeat = null;
+          }
+        }
+      }
+    }
+
     if (this.onPositionsUpdate) {
-      const peerInfo = new Map<string, { x: number; y: number; zoneId: string; bubbleId: string; role: string; visitorOk: boolean }>();
+      const peerInfo = new Map<string, { x: number; y: number; zoneId: string; bubbleId: string; role: string; visitorOk: boolean; deskSeat: string }>();
       const state: any = this.room.state;
       this.remotePlayers.forEach((rp, sessionId) => {
         const peerPlayer = state?.players?.get?.(sessionId);
@@ -1747,6 +1834,7 @@ export class OfficeScene extends Phaser.Scene {
           bubbleId: peerPlayer?.bubbleId || "",
           role: peerPlayer?.role || "user",
           visitorOk: peerPlayer?.visitorOk ?? true,
+          deskSeat: peerPlayer?.deskSeat || "",
         });
       });
       const mySessionId = (this.room as any).sessionId;
@@ -1759,6 +1847,7 @@ export class OfficeScene extends Phaser.Scene {
           bubbleId: myPlayer?.bubbleId || "",
           role: myPlayer?.role || "user",
           visitorOk: myPlayer?.visitorOk ?? true,
+          deskSeat: myPlayer?.deskSeat || "",
         },
         peerInfo
       );

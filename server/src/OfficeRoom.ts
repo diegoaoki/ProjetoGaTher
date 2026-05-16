@@ -147,6 +147,9 @@ export class OfficeRoom extends Room<OfficeState> {
    */
   private activeUsers = new Map<string, Client>();
 
+  /** Ocupantes da conversa de cada mesa (máx 3). deskId → sessionIds. */
+  private deskOccupants = new Map<string, Set<string>>();
+
   /**
    * Mobília salva pelo editor de mapa (app_meta "map_layout"). Usada só pra
    * achar a posição atual de uma mesa (deskId) — o spawn na mesa reservada
@@ -333,6 +336,45 @@ export class OfficeRoom extends Room<OfficeState> {
     this.onMessage<DeskClaimMessage>("desk:claim", (client, msg) =>
       this.handleDeskClaim(client, msg)
     );
+
+    // Mesa-conversa (tecla G + fantasma): ocupa um slot (máx 3) e entra
+    // na zona de áudio isolada daquela mesa. Coexiste com a reserva (E).
+    this.onMessage<{ deskId: string }>("desk:sit", (client, msg) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player) return;
+      const deskId = String(msg?.deskId || "");
+      if (!getDeskById(deskId)) return;
+      if (player.deskSeat === deskId) return; // já está nessa
+      // Sai de qualquer mesa anterior
+      this.leaveDeskConversation(client.sessionId, player);
+
+      let set = this.deskOccupants.get(deskId);
+      if (!set) {
+        set = new Set();
+        this.deskOccupants.set(deskId, set);
+      }
+      if (set.size >= 3) {
+        client.send("desk:full", { deskId });
+        return;
+      }
+      // Slot livre (0=sentado, 1=esq, 2=dir)
+      const used = new Set<number>();
+      set.forEach((sid) => {
+        const p = this.state.players.get(sid);
+        if (p && p.deskSlot >= 0) used.add(p.deskSlot);
+      });
+      let slot = 0;
+      while (slot < 3 && used.has(slot)) slot++;
+      set.add(client.sessionId);
+      player.deskSeat = deskId;
+      player.deskSlot = slot;
+      client.send("desk:sat", { deskId, slot });
+    });
+
+    this.onMessage("desk:leave", (client) => {
+      const player = this.state.players.get(client.sessionId);
+      if (player) this.leaveDeskConversation(client.sessionId, player);
+    });
     this.onMessage<DeskClaimMessage>("desk:release", (client, msg) =>
       this.handleDeskRelease(client, msg)
     );
@@ -558,7 +600,9 @@ export class OfficeRoom extends Room<OfficeState> {
     console.log(`[OfficeRoom] ${client.sessionId} saiu (consented=${consented})`);
     // Captura a bolha ANTES de remover o player do state, pra poder
     // dissolver se sobrar ≤1 pessoa.
-    const leavingBubbleId = this.state.players.get(client.sessionId)?.bubbleId || "";
+    const leaving = this.state.players.get(client.sessionId);
+    const leavingBubbleId = leaving?.bubbleId || "";
+    if (leaving) this.leaveDeskConversation(client.sessionId, leaving);
     this.state.players.delete(client.sessionId);
     if (leavingBubbleId) this.pruneBubble(leavingBubbleId);
     this.lastBlockedNotify.delete(client.sessionId);
@@ -688,6 +732,19 @@ export class OfficeRoom extends Room<OfficeState> {
       }
     }
     return undefined;
+  }
+
+  /** Tira o player da conversa de mesa atual (se houver). */
+  private leaveDeskConversation(sessionId: string, player: Player) {
+    const deskId = player.deskSeat;
+    if (!deskId) return;
+    const set = this.deskOccupants.get(deskId);
+    if (set) {
+      set.delete(sessionId);
+      if (set.size === 0) this.deskOccupants.delete(deskId);
+    }
+    player.deskSeat = "";
+    player.deskSlot = -1;
   }
 
   private async handleDeskClaim(client: Client, msg: DeskClaimMessage) {

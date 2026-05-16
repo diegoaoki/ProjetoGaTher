@@ -188,8 +188,8 @@ export default function App() {
   useEffect(() => {
     if (conn !== "connected") return;
     setHudToast(isMobile
-      ? "Joystick pra andar • E pra reservar mesa"
-      : "WASD pra mover • Enter abre o chat • E reserva mesa");
+      ? "Joystick pra andar • E reserva mesa • G entra na conversa"
+      : "WASD pra mover • Enter abre o chat • E reserva mesa • G entra/sai da conversa de mesa (fantasma)");
   }, [conn, isMobile]);
 
   // Mostra toast pequeno em vez do bloco azul quando câmera está deslocada
@@ -447,7 +447,7 @@ export default function App() {
           if (myInfo.role === "visitor" && myInfo.visitorOk) setVisitorAuthorized(true);
           if (!spatialRef.current) return;
           const peers = spatialRef.current.getPeerIdentities();
-          const mapped = new Map<string, { x: number; y: number; zoneId: string; bubbleId: string; role: string; visitorOk: boolean }>();
+          const mapped = new Map<string, { x: number; y: number; zoneId: string; bubbleId: string; role: string; visitorOk: boolean; deskSeat: string }>();
           const state: any = room.state;
           peerInfo.forEach((info, sessionId) => {
             const player = state.players.get(sessionId);
