@@ -356,20 +356,26 @@ export default function ChatPanel({
             <div ref={messagesEndRef} />
           </div>
 
-          <div style={inputAreaStyle}>
+          {/* <form> de verdade: Enter dentro do input dispara o submit NATIVO
+              do browser, independente de qualquer listener de keydown ou de
+              stopPropagation na página. À prova de interceptores. */}
+          <form
+            style={inputAreaStyle}
+            onSubmit={(e) => {
+              e.preventDefault();
+              submit();
+            }}
+          >
             <input
               ref={inputRef}
               autoFocus
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                // Impede que o Phaser receba a tecla (W/A/S/D/E/C move o avatar)
-                e.stopPropagation();
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  submit();
-                }
-              }}
+              // Só impede o Phaser de receber a tecla (W/A/S/D/E/C move o
+              // avatar). NÃO trata Enter aqui — quem envia é o onSubmit do
+              // form. NÃO chamar preventDefault no Enter (mataria o submit
+              // implícito do form).
+              onKeyDown={(e) => e.stopPropagation()}
               onKeyUp={(e) => e.stopPropagation()}
               onKeyPress={(e) => e.stopPropagation()}
               placeholder={tab === "dm" && !activeDmUserId ? "Selecione uma conversa" : "Digite uma mensagem…"}
@@ -377,10 +383,10 @@ export default function ChatPanel({
               style={inputStyle}
               maxLength={2000}
             />
-            <button onClick={submit} disabled={tab === "dm" && !activeDmUserId} style={sendBtnStyle}>
+            <button type="submit" disabled={tab === "dm" && !activeDmUserId} style={sendBtnStyle}>
               Enviar
             </button>
-          </div>
+          </form>
         </>
       )}
     </div>
