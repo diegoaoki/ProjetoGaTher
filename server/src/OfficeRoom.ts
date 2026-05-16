@@ -9,6 +9,7 @@ import { and, eq as eqOp } from "drizzle-orm";
 import { DESKS, getDeskById, getSeatPosition } from "./desks";
 import { isAdminEmail } from "./auth/admin";
 import { markOnline, markOffline } from "./presence";
+import { authorizeVisitor, isVisitorAuthorized } from "./visitorAuth";
 
 interface MoveMessage {
   x: number;
@@ -412,6 +413,7 @@ export class OfficeRoom extends Room<OfficeState> {
         );
         if (msg?.accepted) {
           visitor.visitorOk = true; // áudio espacial normal liberado
+          authorizeVisitor(visitor.userId); // persiste até meia-noite (BRT)
           visitorClient?.send("visitor:result", { accepted: true, hostName: host.name });
         } else {
           visitorClient?.send("visitor:result", { accepted: false, hostName: host.name });
@@ -525,8 +527,11 @@ export class OfficeRoom extends Room<OfficeState> {
     player.hairColor = auth.hairColor;
     player.characterId = auth.characterId;
     player.role = auth.role;
-    // Visitante começa MUDO (mudo total) até um host autorizar.
-    player.visitorOk = auth.role !== "visitor";
+    // Usuário normal sempre ok. Visitante: mudo até um host autorizar,
+    // mas a autorização persiste até a meia-noite (BRT) — reconectar
+    // dentro do dia não exige re-autorizar.
+    player.visitorOk =
+      auth.role !== "visitor" || isVisitorAuthorized(auth.userId);
 
     // Visitante nunca tem mesa reservada (não pode reservar).
     const reservedDesk = auth.role === "visitor" ? undefined : this.findReservedDeskFor(auth.userId);

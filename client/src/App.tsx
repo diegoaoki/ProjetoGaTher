@@ -442,6 +442,9 @@ export default function App() {
         sceneRef.current = scene;
 
         scene.onPositionsUpdate = (myInfo, peerInfo) => {
+          // Reconectou já autorizado (autorização persiste até meia-noite):
+          // o server seta visitorOk no schema → some o painel de escolher host.
+          if (myInfo.role === "visitor" && myInfo.visitorOk) setVisitorAuthorized(true);
           if (!spatialRef.current) return;
           const peers = spatialRef.current.getPeerIdentities();
           const mapped = new Map<string, { x: number; y: number; zoneId: string; bubbleId: string; role: string; visitorOk: boolean }>();

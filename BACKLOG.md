@@ -32,7 +32,7 @@ _(nenhum bug aberto no momento)_
 
 ## ⚪ Features pedidas pelo user (2026-05-16)
 
-- 🟢 [FEITO `79575fe`+`ce656c0`] **Modo visitante** — aba "Visitante" (nome + código de uso único OU senha fixa env `VISITOR_PASSWORD`); `/visitor/code` (qualquer logado) + `/visitor/login`; JWT role=visitor (sem Postgres); `Player.role`+`visitorOk`; não reserva mesa; áudio mudo total até host autorizar (painel escolher host → `visitor:request` → modal host → `visitor:respond`). Setar `VISITOR_PASSWORD` no Railway pro caminho de senha.
+- 🟢 [FEITO `79575fe`+`ce656c0`] **Modo visitante** — aba "Visitante" (nome + código de uso único OU senha fixa env `VISITOR_PASSWORD`); `/visitor/code` (qualquer logado) + `/visitor/login`; JWT role=visitor (sem Postgres); `Player.role`+`visitorOk`; não reserva mesa; áudio mudo total até host autorizar (painel escolher host → `visitor:request` → modal host → `visitor:respond`). Autorização persiste até meia-noite BRT (`visitorAuth.ts`, em memória). Setar `VISITOR_PASSWORD` no Railway pro caminho de senha.
 - 🟢 [FEITO] **Sala de Segurança bloqueada pra todos** — `refreshDynamicWalls` adiciona o retângulo da `security_room` como blocker permanente em `dynamicWalls`. Guarda NPC não usa `tryMove` nem A* usa `dynamicWalls` → não afetado. Admin também barrado (sem exceção por ora).
 
 ---
