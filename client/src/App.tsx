@@ -275,11 +275,6 @@ export default function App() {
   const [accessRequestModal, setAccessRequestModal] = useState<{ roomId: string; lockedByName: string } | null>(null);
   // Toast pro dono quando alguém pede pra entrar
   const [incomingAccessRequest, setIncomingAccessRequest] = useState<{ roomId: string; requesterId: string; requesterName: string } | null>(null);
-  // Salas que EU fui aprovado (recebido via access:response accepted) — usado
-  // pro client-side prediction não me bloquear ao reentrar. Limpa quando a
-  // sala é destrancada (não precisa mais).
-  const myAllowedRoomsRef = useRef<Set<string>>(new Set());
-
   // sessionIds dos players falando agora (vem do ActiveSpeakersChanged do LiveKit)
   const [activeSpeakerIds, setActiveSpeakerIds] = useState<Set<string>>(new Set());
   useEffect(() => {
@@ -560,7 +555,6 @@ export default function App() {
         });
         // Fecha o modal obrigatório se ainda estiver aberto pra essa sala
         setAccessRequestModal((cur) => (cur && cur.roomId === msg.roomId ? null : cur));
-        if (msg.accepted) myAllowedRoomsRef.current.add(msg.roomId);
       });
       // Erros do fluxo de cadeado
       room.onMessage("room:error", (msg: { error: string }) => {
@@ -581,7 +575,6 @@ export default function App() {
           next.delete(roomId);
           return next;
         });
-        myAllowedRoomsRef.current.delete(roomId);
       });
 
       // Chat: novas mensagens entram em real-time
