@@ -17,7 +17,10 @@ Legenda: 🔴 prioridade · 🐞 bug · 🟢 feito (mantido como referência) ·
 
 ## 🐞 Bugs
 
-- **NPC segurança às vezes fica DENTRO da sala** (reportado 2026-05-16) — deve ficar SEMPRE do lado de fora da porta. Causa: em `handleRoomLock` (`OfficeRoom.ts`) o spawn faz `npc.x = doorPos.x - 24`, hardcodado pra porta na parede ESQUERDA (salas de reunião, fora = oeste). As diretorias (`office_1`/`office_2`, trancáveis desde `baca721`) têm porta na parede DIREITA → `doorPos.x - 24` cai dentro da sala. Fix: reusar a heurística do `ejectFromRoom` (`doorOnLeftWall = doorPos.x <= bounds.x + 20`) e posicionar o NPC em `bounds.x - 24` (porta esquerda) ou `bounds.x + bounds.w + 24` (porta direita), com `direction` coerente. Nota: auto-unlock ao sair da sala já está feito (`acdd55e`).
+_(nenhum bug aberto no momento)_
+
+### Resolvidos
+- 🟢 [FEITO `549beb1`] **NPC segurança fica do lado de fora da porta** — `handleRoomLock` usa a heurística `doorOnLeftWall` (porta esquerda → oeste; direita/diretorias → leste) + `direction` coerente. O guarda também caminha (rota A*) até o posto.
 
 ---
 

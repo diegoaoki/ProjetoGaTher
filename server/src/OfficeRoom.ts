@@ -1024,12 +1024,14 @@ export class OfficeRoom extends Room<OfficeState> {
       if (doorPos) {
         const npc = new SecurityNPC();
         npc.roomId = roomId;
-        // Salas de reunião têm porta na lateral esquerda (vão vertical) → NPC
-        // do lado de FORA é x-24 (oeste da porta). direction "right" pra encarar
-        // quem se aproxima do open space.
-        npc.x = doorPos.x - 24;
+        // Mesma heurística do ejectFromRoom: porta na parede esquerda
+        // (salas de reunião) → guarda a OESTE; porta na direita (diretorias)
+        // → guarda a LESTE. Sempre do lado de FORA, encarando quem chega.
+        const bounds = LOCKABLE_ROOMS[roomId];
+        const doorOnLeftWall = !bounds || doorPos.x <= bounds.x + 20;
+        npc.x = doorOnLeftWall ? doorPos.x - 24 : doorPos.x + 24;
         npc.y = doorPos.y;
-        npc.direction = "right";
+        npc.direction = doorOnLeftWall ? "right" : "left";
         this.state.securityNPCs.set(roomId, npc);
       }
 
