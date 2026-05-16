@@ -1942,7 +1942,8 @@ const saveStatusStyle = (status: "saving" | "saved" | "error"): React.CSSPropert
   opacity: 0.9,
 });
 const deskHintStyle: React.CSSProperties = {
-  position: "absolute", bottom: 56, left: "50%",
+  // Acima da barra central (bottom:24 + ~56px de altura) pra não sobrepor
+  position: "absolute", bottom: 96, left: "50%",
   transform: "translateX(-50%)",
   background: "#1e293bee", border: "1px solid #fbbf24",
   borderRadius: 8, padding: "6px 12px",
