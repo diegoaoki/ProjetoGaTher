@@ -152,6 +152,10 @@ export async function fetchMapLayout(httpUrl: string, token: string): Promise<Ma
   });
   if (!resp.ok) throw new Error(await parseError(resp));
   const data = await resp.json();
+  console.log(
+    "[map] GET /map →",
+    data.map ? `furniture=${data.map.furniture?.length} walls=${data.map.walls?.length}` : "null (sem override salvo)"
+  );
   return data.map ?? null;
 }
 
@@ -160,11 +164,17 @@ export async function saveMapLayout(
   token: string,
   map: MapOverride
 ): Promise<void> {
+  const body = JSON.stringify(map);
   const resp = await fetch(httpUrl + "/map", {
     method: "PUT",
     headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
-    body: JSON.stringify(map),
+    body,
   });
+  console.log(
+    "[map] PUT /map status=", resp.status,
+    "furniture=", map.furniture?.length, "walls=", map.walls?.length,
+    "bytes=", body.length
+  );
   if (!resp.ok) throw new Error(await parseError(resp));
 }
 
