@@ -1135,7 +1135,25 @@ export default function App() {
 
       {/* HUD esquerdo: info do user. Compactado em mobile pra não colidir com a barra de mídia. */}
       <div style={isMobile ? { ...hudStyle, padding: "6px 10px", fontSize: 12 } : hudStyle}>
-        <div><strong>{session.profile.displayName}</strong></div>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <strong>{session.profile.displayName}</strong>
+          <button
+            onClick={() => setSidebarOpen(true)}
+            title="Ver quem está online / offline"
+            style={{
+              border: "1px solid #334155",
+              background: "#1e293b",
+              color: "#e2e8f0",
+              borderRadius: 6,
+              padding: "2px 6px",
+              fontSize: 13,
+              cursor: "pointer",
+              lineHeight: 1,
+            }}
+          >
+            👥
+          </button>
+        </div>
         {!isMobile && (
           <>
             <div style={{ fontSize: 12, opacity: 0.7 }}>{playerCount} no escritório</div>
