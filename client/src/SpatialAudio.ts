@@ -9,6 +9,9 @@ import {
   createLocalTracks,
 } from "livekit-client";
 
+/** Volume de quem está numa bolha pra quem está fora dela (mesma sala). */
+const BUBBLE_OUTSIDE_VOL = 0.15;
+
 export interface SpatialAudioOptions {
   serverUrl: string;
   token: string;
@@ -217,8 +220,8 @@ export class SpatialAudio {
   }
 
   public updateVolumes(
-    myInfo: { x: number; y: number; zoneId?: string },
-    peerInfo: Map<string, { x: number; y: number; zoneId?: string }>
+    myInfo: { x: number; y: number; zoneId?: string; bubbleId?: string },
+    peerInfo: Map<string, { x: number; y: number; zoneId?: string; bubbleId?: string }>
   ) {
     this.peers.forEach((peer, identity) => {
       const info = peerInfo.get(identity);
@@ -229,9 +232,24 @@ export class SpatialAudio {
       const myZone = myInfo.zoneId || "open";
       const peerZone = info.zoneId || "open";
 
-      // Zonas diferentes → muta (paredes isolam o áudio)
+      // Zonas diferentes → muta (paredes isolam o áudio). Vale ANTES da
+      // bolha: bolha não fura parede de sala trancada.
       if (myZone !== peerZone) {
         peer.audioElement.volume = 0;
+        return;
+      }
+
+      // Bolha de conversa privada (mesma zona). Avaliada ANTES da regra de
+      // sala/distância pra poder "abaixar" o áudio mesmo dentro de uma sala.
+      const myBub = myInfo.bubbleId || "";
+      const peerBub = info.bubbleId || "";
+      if (myBub && myBub === peerBub) {
+        peer.audioElement.volume = 1.0; // mesma bolha → cheio
+        return;
+      }
+      if (myBub || peerBub) {
+        // Alguém está numa bolha mas não juntos → áudio baixo (não mudo)
+        peer.audioElement.volume = BUBBLE_OUTSIDE_VOL;
         return;
       }
 

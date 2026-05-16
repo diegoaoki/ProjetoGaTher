@@ -268,6 +268,12 @@ export default function App() {
   const [incomingInvite, setIncomingInvite] = useState<{ fromSessionId: string; fromName: string } | null>(null);
   const [socialToast, setSocialToast] = useState<{ text: string; tone: "info" | "error" } | null>(null);
 
+  // === Bolha de conversa privada ===
+  const [incomingBubble, setIncomingBubble] = useState<{ fromSessionId: string; fromName: string } | null>(null);
+  // Estou numa bolha? Dirige a visibilidade do botão "sair da bolha" no HUD.
+  // Verdade de áudio é o state.players[me].bubbleId; isso aqui é só pra UI.
+  const [inBubble, setInBubble] = useState(false);
+
   // === Cadeado de salas de reunião ===
   // lockedRooms: snapshot do state.lockedRooms do Colyseus pra renderizar HUD/UI
   const [lockedRooms, setLockedRooms] = useState<Map<string, { lockedBy: string; lockedByName: string }>>(new Map());
@@ -388,7 +394,7 @@ export default function App() {
         scene.onPositionsUpdate = (myInfo, peerInfo) => {
           if (!spatialRef.current) return;
           const peers = spatialRef.current.getPeerIdentities();
-          const mapped = new Map<string, { x: number; y: number; zoneId: string }>();
+          const mapped = new Map<string, { x: number; y: number; zoneId: string; bubbleId: string }>();
           const state: any = room.state;
           peerInfo.forEach((info, sessionId) => {
             const player = state.players.get(sessionId);
@@ -530,6 +536,36 @@ export default function App() {
       });
       room.onMessage("teleport:error", (msg: { error: string }) => {
         setSocialToast({ text: msg?.error || "Falha no teleporte", tone: "error" });
+      });
+
+      // === Bolha de conversa privada ===
+      room.onMessage("bubble:invite-received", (msg: { fromSessionId: string; fromName: string }) => {
+        setIncomingBubble((prev) => {
+          if (prev) setSocialToast({ text: `Novo convite de bolha de ${msg.fromName}`, tone: "info" });
+          return msg;
+        });
+        showNotificationIfHidden({
+          title: "🫧 Convite pra bolha",
+          body: `${msg.fromName} quer abrir uma conversa privada`,
+          tag: "bubble",
+        });
+      });
+      room.onMessage("bubble:response", (msg: { fromName: string; accepted: boolean }) => {
+        setSocialToast({
+          text: msg.accepted ? `${msg.fromName} entrou na bolha` : `${msg.fromName} recusou a bolha`,
+          tone: msg.accepted ? "info" : "error",
+        });
+      });
+      room.onMessage("bubble:started", (msg: { joinedName: string }) => {
+        setInBubble(true);
+        setSocialToast({ text: `Bolha de conversa ativa (${msg.joinedName} entrou)`, tone: "info" });
+      });
+      room.onMessage("bubble:ended", (msg: { reason: string }) => {
+        setInBubble(false);
+        setSocialToast({ text: msg?.reason || "Bolha encerrada", tone: "info" });
+      });
+      room.onMessage("bubble:error", (msg: { error: string }) => {
+        setSocialToast({ text: msg?.error || "Falha na bolha", tone: "error" });
       });
 
       // === Cadeado de salas ===
@@ -1112,6 +1148,16 @@ export default function App() {
         <button onClick={toggleScreen} style={mediaBtnStyle(screenOn, screenOn ? "#2563eb" : "#1e293b")} title="Compartilhar tela">
           🖥️
         </button>
+        {/* Sair da bolha: só aparece quando estou numa bolha de conversa */}
+        {inBubble && (
+          <button
+            onClick={() => roomRef.current?.send("bubble:leave")}
+            style={mediaBtnStyle(true, "#0e7490")}
+            title="Sair da bolha de conversa"
+          >
+            🫧
+          </button>
+        )}
         {/* Cadeado: aparece automaticamente quando entra em sala de reunião lockable */}
         {["meeting_xg", "meeting_m1", "meeting_g1", "meeting_g2", "office_1", "office_2"].includes(currentZoneId) && (() => {
           const lock = lockedRooms.get(currentZoneId);
@@ -1238,6 +1284,16 @@ export default function App() {
                       >
                         👋
                       </button>
+                      <button
+                        onClick={() => {
+                          roomRef.current?.send("bubble:invite", { targetSessionId: p.sessionId });
+                          setSocialToast({ text: `Convite de bolha enviado pra ${p.name}`, tone: "info" });
+                        }}
+                        style={sidebarActionBtn}
+                        title={`Abrir bolha de conversa com ${p.name}`}
+                      >
+                        🫧
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1327,6 +1383,45 @@ export default function App() {
                     accepted: true,
                   });
                   setIncomingInvite(null);
+                }}
+                style={buttonStyle}
+              >
+                Aceitar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {incomingBubble && (
+        <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
+          <div style={{ ...cardStyle, width: 360 }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ margin: "0 0 8px", fontSize: 20 }}>🫧 Bolha de conversa</h2>
+            <p style={{ margin: "0 0 18px", fontSize: 14 }}>
+              <strong>{incomingBubble.fromName}</strong> quer abrir uma bolha de
+              conversa privada com você. Dentro da bolha vocês se ouvem normal;
+              quem está fora ouve baixinho.
+            </p>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                onClick={() => {
+                  roomRef.current?.send("bubble:respond", {
+                    fromSessionId: incomingBubble.fromSessionId,
+                    accepted: false,
+                  });
+                  setIncomingBubble(null);
+                }}
+                style={{ ...buttonStyle, background: "#334155", color: "#e2e8f0" }}
+              >
+                Recusar
+              </button>
+              <button
+                onClick={() => {
+                  roomRef.current?.send("bubble:respond", {
+                    fromSessionId: incomingBubble.fromSessionId,
+                    accepted: true,
+                  });
+                  setIncomingBubble(null);
                 }}
                 style={buttonStyle}
               >

@@ -68,6 +68,23 @@ interface AccessRespondMessage {
   accepted: boolean;
 }
 
+interface BubbleInviteMessage {
+  targetSessionId: string;
+}
+
+interface BubbleRespondMessage {
+  fromSessionId: string;
+  accepted: boolean;
+}
+
+/**
+ * Bolha de conversa privada (N pessoas). Distância máxima entre um membro e
+ * o membro MAIS PRÓXIMO da bolha — quem fica longe de TODOS é dropado. A
+ * bolha dissolve quando sobra ≤1 pessoa. Atenuação de áudio pra fora da
+ * bolha fica no client (SpatialAudio.BUBBLE_OUTSIDE_VOL).
+ */
+const BUBBLE_MAX_DIST = 250;
+
 const ALLOWED_REACTION_EMOJIS = new Set(["👍", "❤️", "😂", "😮", "😢", "🎉"]);
 
 /**
@@ -292,6 +309,17 @@ export class OfficeRoom extends Room<OfficeState> {
       this.handleInviteRespond(client, msg)
     );
 
+    // Bolha de conversa privada
+    this.onMessage<BubbleInviteMessage>("bubble:invite", (client, msg) =>
+      this.handleBubbleInvite(client, msg)
+    );
+    this.onMessage<BubbleRespondMessage>("bubble:respond", (client, msg) =>
+      this.handleBubbleRespond(client, msg)
+    );
+    this.onMessage("bubble:leave", (client) =>
+      this.handleBubbleLeave(client)
+    );
+
     this.onMessage<ChatSendMessage>("chat:send", (client, msg) =>
       this.handleChatSend(client, msg)
     );
@@ -413,7 +441,11 @@ export class OfficeRoom extends Room<OfficeState> {
 
   onLeave(client: Client, consented: boolean) {
     console.log(`[OfficeRoom] ${client.sessionId} saiu (consented=${consented})`);
+    // Captura a bolha ANTES de remover o player do state, pra poder
+    // dissolver se sobrar ≤1 pessoa.
+    const leavingBubbleId = this.state.players.get(client.sessionId)?.bubbleId || "";
     this.state.players.delete(client.sessionId);
+    if (leavingBubbleId) this.pruneBubble(leavingBubbleId);
     this.lastBlockedNotify.delete(client.sessionId);
     this.pendingModalSent.delete(client.sessionId);
     // Limpa activeUsers SÓ se este client é o atualmente registrado.
@@ -497,6 +529,9 @@ export class OfficeRoom extends Room<OfficeState> {
     player.y = newY;
     player.direction = msg.direction;
     player.isMoving = msg.isMoving;
+
+    // Se está numa bolha e se afastou de todos os membros, é dropado.
+    if (player.bubbleId) this.enforceBubbleCohesion(client.sessionId, player);
   }
 
   /** Retorna o roomId da sala lockable que contém o ponto, ou null. */
@@ -792,6 +827,146 @@ export class OfficeRoom extends Room<OfficeState> {
       console.log(`[invite:respond] ${responder.name} accepted=${accepted}`);
     } catch (err) {
       console.error("[invite:respond] EXCEPTION:", err);
+    }
+  }
+
+  // ============================================================
+  //  Bolha de conversa privada (N pessoas)
+  //  - Qualquer membro convida; ao aceitar, o alvo recebe o MESMO bubbleId
+  //    do convidador (cria um novo se o convidador não tiver bolha).
+  //  - Áudio entre membros = cheio; pra fora da bolha (mesma sala) = baixo
+  //    (a atenuação fica no client, SpatialAudio.BUBBLE_OUTSIDE_VOL).
+  //  - Sai manualmente (botão) OU é dropado por proximidade (ficou a
+  //    >BUBBLE_MAX_DIST de TODOS os outros membros). Dissolve com ≤1 membro.
+  // ============================================================
+
+  /** Membros atuais de uma bolha (sessionId + player). */
+  private bubbleMembers(bubbleId: string): { sessionId: string; player: Player }[] {
+    const out: { sessionId: string; player: Player }[] = [];
+    if (!bubbleId) return out;
+    this.state.players.forEach((p, sid) => {
+      if (p.bubbleId === bubbleId) out.push({ sessionId: sid, player: p });
+    });
+    return out;
+  }
+
+  /** Dissolve a bolha se sobrou ≤1 membro (uma bolha de 1 não faz sentido). */
+  private pruneBubble(bubbleId: string) {
+    if (!bubbleId) return;
+    const members = this.bubbleMembers(bubbleId);
+    if (members.length <= 1) {
+      members.forEach(({ sessionId, player }) => {
+        player.bubbleId = "";
+        const c = this.clients.find((cc) => cc.sessionId === sessionId);
+        if (c) c.send("bubble:ended", { reason: "Bolha encerrada" });
+      });
+    }
+  }
+
+  private handleBubbleInvite(client: Client, msg: BubbleInviteMessage) {
+    try {
+      const me = this.state.players.get(client.sessionId);
+      if (!me) return;
+      const targetSessionId = String(msg?.targetSessionId || "");
+      if (!targetSessionId || targetSessionId === client.sessionId) return;
+
+      const target = this.state.players.get(targetSessionId);
+      const targetClient = this.clients.find((c) => c.sessionId === targetSessionId);
+      if (!target || !targetClient) {
+        client.send("bubble:error", { error: "Usuário não está mais online" });
+        return;
+      }
+      if (target.bubbleId) {
+        client.send("bubble:error", { error: "Essa pessoa já está numa bolha" });
+        return;
+      }
+      targetClient.send("bubble:invite-received", {
+        fromSessionId: client.sessionId,
+        fromName: me.name,
+      });
+      console.log(`[bubble:invite] ${me.name} -> ${target.name}`);
+    } catch (err) {
+      console.error("[bubble:invite] EXCEPTION:", err);
+    }
+  }
+
+  private handleBubbleRespond(client: Client, msg: BubbleRespondMessage) {
+    try {
+      const responder = this.state.players.get(client.sessionId);
+      if (!responder) return;
+      const fromSessionId = String(msg?.fromSessionId || "");
+      const accepted = !!msg?.accepted;
+      if (!fromSessionId) return;
+
+      const inviter = this.state.players.get(fromSessionId);
+      const inviterClient = this.clients.find((c) => c.sessionId === fromSessionId);
+
+      if (!accepted) {
+        if (inviterClient)
+          inviterClient.send("bubble:response", { fromName: responder.name, accepted: false });
+        return;
+      }
+      if (!inviter) {
+        client.send("bubble:error", { error: "Quem convidou saiu" });
+        return;
+      }
+      // Se o responder entrou em outra bolha enquanto decidia, recusa
+      if (responder.bubbleId) {
+        client.send("bubble:error", { error: "Você já está numa bolha" });
+        return;
+      }
+
+      // Usa a bolha do convidador se já existir; senão cria uma nova pros dois
+      let bubbleId = inviter.bubbleId;
+      if (!bubbleId) {
+        bubbleId = `b_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        inviter.bubbleId = bubbleId;
+      }
+      responder.bubbleId = bubbleId;
+
+      this.bubbleMembers(bubbleId).forEach(({ sessionId }) => {
+        const c = this.clients.find((cc) => cc.sessionId === sessionId);
+        if (c) c.send("bubble:started", { joinedName: responder.name });
+      });
+      if (inviterClient)
+        inviterClient.send("bubble:response", { fromName: responder.name, accepted: true });
+      console.log(`[bubble:respond] ${responder.name} entrou na bolha ${bubbleId}`);
+    } catch (err) {
+      console.error("[bubble:respond] EXCEPTION:", err);
+    }
+  }
+
+  private handleBubbleLeave(client: Client) {
+    try {
+      const player = this.state.players.get(client.sessionId);
+      if (!player || !player.bubbleId) return;
+      const bubbleId = player.bubbleId;
+      player.bubbleId = "";
+      client.send("bubble:ended", { reason: "Você saiu da bolha" });
+      this.pruneBubble(bubbleId);
+    } catch (err) {
+      console.error("[bubble:leave] EXCEPTION:", err);
+    }
+  }
+
+  /**
+   * Chamado a cada move de quem está numa bolha: se o player ficou a mais de
+   * BUBBLE_MAX_DIST do membro MAIS PRÓXIMO, ele é dropado (e a bolha pode
+   * dissolver se sobrar ≤1).
+   */
+  private enforceBubbleCohesion(sessionId: string, player: Player) {
+    const bubbleId = player.bubbleId;
+    if (!bubbleId) return;
+    const others = this.bubbleMembers(bubbleId).filter((m) => m.sessionId !== sessionId);
+    if (others.length === 0) return; // pruneBubble cuida do caso ≤1
+    const nearest = Math.min(
+      ...others.map((o) => Math.hypot(o.player.x - player.x, o.player.y - player.y))
+    );
+    if (nearest > BUBBLE_MAX_DIST) {
+      player.bubbleId = "";
+      const c = this.clients.find((cc) => cc.sessionId === sessionId);
+      if (c) c.send("bubble:ended", { reason: "Você se afastou do grupo" });
+      this.pruneBubble(bubbleId);
     }
   }
 

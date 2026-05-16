@@ -123,8 +123,8 @@ export class OfficeScene extends Phaser.Scene {
   private readonly BALLOON_HEARING_RADIUS = 60;
 
   public onPositionsUpdate?: (
-    myInfo: { x: number; y: number; zoneId: string },
-    peerInfo: Map<string, { x: number; y: number; zoneId: string }>
+    myInfo: { x: number; y: number; zoneId: string; bubbleId: string },
+    peerInfo: Map<string, { x: number; y: number; zoneId: string; bubbleId: string }>
   ) => void;
   public onZoneChange?: (zone: string | null) => void;
 
@@ -1145,7 +1145,7 @@ export class OfficeScene extends Phaser.Scene {
     });
 
     if (this.onPositionsUpdate) {
-      const peerInfo = new Map<string, { x: number; y: number; zoneId: string }>();
+      const peerInfo = new Map<string, { x: number; y: number; zoneId: string; bubbleId: string }>();
       const state: any = this.room.state;
       this.remotePlayers.forEach((rp, sessionId) => {
         const peerPlayer = state?.players?.get?.(sessionId);
@@ -1153,13 +1153,17 @@ export class OfficeScene extends Phaser.Scene {
           x: rp.container.x,
           y: rp.container.y,
           zoneId: peerPlayer?.zoneId || "open",
+          bubbleId: peerPlayer?.bubbleId || "",
         });
       });
+      const mySessionId = (this.room as any).sessionId;
+      const myBubbleId = state?.players?.get?.(mySessionId)?.bubbleId || "";
       this.onPositionsUpdate(
         {
           x: this.myContainer.x,
           y: this.myContainer.y,
           zoneId: this.currentZone || "open",
+          bubbleId: myBubbleId,
         },
         peerInfo
       );

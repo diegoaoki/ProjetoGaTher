@@ -12,6 +12,9 @@ export class Player extends Schema {
   @type("string") hairColor: string = "#3b2c20"; // cor do cabelo (legado)
   @type("string") characterId: string = "";  // adam|alex|amelia|bob — "" = fallback pra hash do userId
   @type("string") zoneId: string = "open";
+  // Bolha de conversa privada: "" = sem bolha. Mesmo bubbleId = mesma bolha
+  // (N pessoas). Áudio entre membros = cheio; pra fora da bolha = baixo.
+  @type("string") bubbleId: string = "";
 }
 
 export class Desk extends Schema {
