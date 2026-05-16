@@ -17,12 +17,11 @@ PRIORIDADES (audio ruim - reportado pelo user 2026-05-16)
       saida por peer ou master, Web Audio permite > 1.0).
   Persistir a preferencia (localStorage).
 
-[PRIORIDADE] Selecao de microfone
-  Quando o computador tem mais de um microfone, deixar escolher qual usar:
-  navigator.mediaDevices.enumerateDevices() filtrando audioinput +
-  <select> no painel de audio/video, e republicar a track com o deviceId
-  escolhido. Persistir a escolha (localStorage). Idealmente o mesmo pra
-  saida de audio (setSinkId no elemento de audio, onde suportado).
+[FEITO] Selecao de microfone + saida de audio
+  <select> no painel 🎧 (AudioTestScreen) com enumerateDevices;
+  audioPrefs.ts persiste em localStorage; SpatialAudio usa o mic
+  escolhido no createLocalTracks e troca ao vivo via
+  room.switchActiveDevice. Saida via setSinkId (LiveKit) onde suportado.
 
 
 ------------------------------------------------------------------------------

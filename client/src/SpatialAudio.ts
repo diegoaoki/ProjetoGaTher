@@ -8,6 +8,12 @@ import {
   LocalParticipant,
   createLocalTracks,
 } from "livekit-client";
+import {
+  getMicDeviceId,
+  setMicDeviceId,
+  getSpeakerDeviceId,
+  setSpeakerDeviceId,
+} from "./audioPrefs";
 
 /** Volume de quem está numa bolha pra quem está fora dela (mesma sala). */
 const BUBBLE_OUTSIDE_VOL = 0.15;
@@ -77,8 +83,10 @@ export class SpatialAudio {
     this.localParticipant = this.room.localParticipant;
 
     try {
+      // Respeita o microfone escolhido pelo user (localStorage). "" = padrão.
+      const micId = getMicDeviceId();
       const tracks = await createLocalTracks({
-        audio: true,
+        audio: micId ? { deviceId: { exact: micId } } : true,
         video: opts.enableVideo
           ? { resolution: { width: 320, height: 240 }, facingMode: "user" }
           : false,
@@ -90,6 +98,16 @@ export class SpatialAudio {
       // Inicia com mic e câmera DESLIGADOS — user liga manualmente nos botões do HUD
       await this.localParticipant.setMicrophoneEnabled(false);
       await this.localParticipant.setCameraEnabled(false);
+
+      // Aplica saída de áudio escolhida (setSinkId via LiveKit, best-effort)
+      const spkId = getSpeakerDeviceId();
+      if (spkId) {
+        try {
+          await this.room.switchActiveDevice("audiooutput", spkId);
+        } catch (e) {
+          console.warn("[spatial] saída de áudio não aplicada:", e);
+        }
+      }
     } catch (err: any) {
       console.error("[spatial] erro ao acessar mídia:", err);
       this.onError?.(
@@ -278,6 +296,26 @@ export class SpatialAudio {
   public async setMicEnabled(enabled: boolean) {
     if (!this.localParticipant) return;
     await this.localParticipant.setMicrophoneEnabled(enabled);
+  }
+
+  /** Troca o microfone de entrada ao vivo + persiste a escolha. */
+  public async setMicDevice(deviceId: string) {
+    setMicDeviceId(deviceId);
+    try {
+      await this.room.switchActiveDevice("audioinput", deviceId);
+    } catch (e) {
+      console.warn("[spatial] falha ao trocar microfone:", e);
+    }
+  }
+
+  /** Troca a saída de áudio (alto-falante) ao vivo + persiste a escolha. */
+  public async setSpeakerDevice(deviceId: string) {
+    setSpeakerDeviceId(deviceId);
+    try {
+      await this.room.switchActiveDevice("audiooutput", deviceId);
+    } catch (e) {
+      console.warn("[spatial] falha ao trocar saída de áudio:", e);
+    }
   }
 
   public async setCameraEnabled(enabled: boolean) {

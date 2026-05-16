@@ -1668,7 +1668,7 @@ export default function App() {
       )}
 
       {audioTestOpen && (
-        <AudioTestScreen onClose={() => setAudioTestOpen(false)} />
+        <AudioTestScreen onClose={() => setAudioTestOpen(false)} spatial={spatialRef.current} />
       )}
 
       {confirmingLogout && (

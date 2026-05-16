@@ -1,16 +1,29 @@
 import { useEffect, useRef, useState } from "react";
 import { playNotificationBeep } from "./chat";
+import { SpatialAudio } from "./SpatialAudio";
+import {
+  getMicDeviceId,
+  setMicDeviceId,
+  getSpeakerDeviceId,
+  setSpeakerDeviceId,
+} from "./audioPrefs";
 
 interface Props {
   /** Fecha o modal de teste. */
   onClose: () => void;
+  /** Sessão de áudio ativa (quando aberto em jogo) — pra trocar device ao vivo. */
+  spatial?: SpatialAudio | null;
 }
+
+const sinkIdSupported =
+  typeof HTMLMediaElement !== "undefined" &&
+  "setSinkId" in HTMLMediaElement.prototype;
 
 /**
  * Tela pré-conexão pra usuário testar mic, speaker e câmera antes de entrar.
  * Não obrigatório — só botões. Pra dispensar, clica em "Entrar no escritório".
  */
-export default function AudioTestScreen({ onClose }: Props) {
+export default function AudioTestScreen({ onClose, spatial }: Props) {
   const [micLevel, setMicLevel] = useState(0);   // 0..1
   const [micActive, setMicActive] = useState(false);
   const [micError, setMicError] = useState("");
@@ -18,18 +31,62 @@ export default function AudioTestScreen({ onClose }: Props) {
   const [cameraError, setCameraError] = useState("");
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  // Seleção de dispositivos de áudio
+  const [micDevices, setMicDevices] = useState<MediaDeviceInfo[]>([]);
+  const [spkDevices, setSpkDevices] = useState<MediaDeviceInfo[]>([]);
+  const [micId, setMicId] = useState(getMicDeviceId());
+  const [spkId, setSpkId] = useState(getSpeakerDeviceId());
+
+  async function refreshDevices() {
+    try {
+      const all = await navigator.mediaDevices.enumerateDevices();
+      setMicDevices(all.filter((d) => d.kind === "audioinput"));
+      setSpkDevices(all.filter((d) => d.kind === "audiooutput"));
+    } catch {
+      /* enumerateDevices indisponível */
+    }
+  }
+
+  useEffect(() => {
+    refreshDevices();
+    navigator.mediaDevices?.addEventListener?.("devicechange", refreshDevices);
+    return () =>
+      navigator.mediaDevices?.removeEventListener?.("devicechange", refreshDevices);
+  }, []);
+
+  function changeMic(id: string) {
+    setMicId(id);
+    setMicDeviceId(id);
+    spatial?.setMicDevice(id);
+    if (micActive) {
+      stopMicTest();
+      // pequeno atraso pra a track anterior soltar antes de reabrir
+      setTimeout(() => startMicTest(id, true), 120);
+    }
+  }
+  function changeSpeaker(id: string) {
+    setSpkId(id);
+    setSpeakerDeviceId(id);
+    spatial?.setSpeakerDevice(id);
+  }
+
   // Refs pra cleanup
   const audioStreamRef = useRef<MediaStream | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const animRef = useRef<number | null>(null);
   const videoStreamRef = useRef<MediaStream | null>(null);
 
-  async function startMicTest() {
-    if (micActive) return;
+  async function startMicTest(overrideId?: string, force = false) {
+    if (micActive && !force) return;
     setMicError("");
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const useId = overrideId !== undefined ? overrideId : micId;
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: useId ? { deviceId: { exact: useId } } : true,
+      });
       audioStreamRef.current = stream;
+      // Agora que houve permissão, os labels dos devices aparecem
+      refreshDevices();
       const AudioCtx = (window as any).AudioContext || (window as any).webkitAudioContext;
       const ctx = new AudioCtx();
       audioCtxRef.current = ctx;
@@ -127,6 +184,18 @@ export default function AudioTestScreen({ onClose }: Props) {
               <button onClick={stopMicTest} style={{ ...smallBtnStyle, background: "#7f1d1d" }}>Parar</button>
             )}
           </div>
+          <select
+            value={micId}
+            onChange={(e) => changeMic(e.target.value)}
+            style={selectStyle}
+          >
+            <option value="">Microfone padrão do sistema</option>
+            {micDevices.map((d, i) => (
+              <option key={d.deviceId || i} value={d.deviceId}>
+                {d.label || `Microfone ${i + 1}`}
+              </option>
+            ))}
+          </select>
           <div style={levelTrackStyle}>
             <div style={{ ...levelFillStyle, width: `${Math.round(micLevel * 100)}%` }} />
           </div>
@@ -142,6 +211,24 @@ export default function AudioTestScreen({ onClose }: Props) {
             <strong style={{ fontSize: 14 }}>🔊 Som</strong>
             <button onClick={() => playNotificationBeep()} style={smallBtnStyle}>Tocar beep</button>
           </div>
+          {sinkIdSupported && spkDevices.length > 0 ? (
+            <select
+              value={spkId}
+              onChange={(e) => changeSpeaker(e.target.value)}
+              style={selectStyle}
+            >
+              <option value="">Saída padrão do sistema</option>
+              {spkDevices.map((d, i) => (
+                <option key={d.deviceId || i} value={d.deviceId}>
+                  {d.label || `Alto-falante ${i + 1}`}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <p style={hintTextStyle}>
+              Seleção de saída não suportada neste navegador — use as configs do sistema.
+            </p>
+          )}
           <p style={hintTextStyle}>
             Você deve ouvir um som curto. Se não, ajuste o volume do seu dispositivo.
           </p>
@@ -204,6 +291,12 @@ const smallBtnStyle: React.CSSProperties = {
   padding: "4px 10px", borderRadius: 6, border: "none",
   background: "#4ade80", color: "#052e16",
   fontWeight: 600, fontSize: 12, cursor: "pointer",
+};
+const selectStyle: React.CSSProperties = {
+  width: "100%", margin: "2px 0 8px",
+  padding: "6px 8px", borderRadius: 6,
+  background: "#1e293b", color: "#e2e8f0",
+  border: "1px solid #334155", fontSize: 12,
 };
 const levelTrackStyle: React.CSSProperties = {
   width: "100%", height: 8,

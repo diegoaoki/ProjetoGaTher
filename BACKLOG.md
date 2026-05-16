@@ -11,7 +11,7 @@ Legenda: 🔴 prioridade · 🐞 bug · 🟢 feito (mantido como referência) ·
   - (a) slider pra **aumentar o volume do microfone** (ganho de entrada — Web Audio `GainNode` na track local, pode passar de 1.0);
   - (b) slider pra **aumentar o volume do alto-falante / peers** (ganho de saída por peer ou master, Web Audio permite > 1.0).
   - Persistir a preferência (localStorage).
-- **Seleção de microfone** — quando o computador tem mais de um microfone, deixar escolher qual usar: `navigator.mediaDevices.enumerateDevices()` filtrando `audioinput` + `<select>` no painel de áudio/vídeo, e republicar a track com o `deviceId` escolhido. Persistir a escolha (localStorage). Idealmente o mesmo pra saída de áudio (`setSinkId` no elemento de áudio, onde suportado).
+- 🟢 [FEITO] **Seleção de microfone + saída** — `<select>` no painel 🎧 com `enumerateDevices`; `audioPrefs.ts` persiste em localStorage; SpatialAudio aplica no `createLocalTracks` e troca ao vivo via `room.switchActiveDevice`. Saída por setSinkId (LiveKit) onde suportado.
 
 ---
 
