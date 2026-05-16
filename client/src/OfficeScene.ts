@@ -731,11 +731,17 @@ export class OfficeScene extends Phaser.Scene {
       spr.setDepth(item.y);
       // Mesas reserváveis (deskId) ficam travadas — acopladas ao server
       const locked = item.type === "desk" && !!item.deskId;
-      spr.setInteractive({ draggable: !locked });
+      spr.setInteractive({ draggable: !locked, useHandCursor: true });
       if (!locked) this.input.setDraggable(spr);
       spr.setData("idx", i);
       spr.setData("locked", locked);
       if (i === this.editSelected) spr.setTint(0x4ade80);
+      // Seleção por sprite (confiável — não depende do currentlyOver global).
+      // Também serve como início do drag pros não-travados.
+      spr.on("pointerdown", () => {
+        if (!this.editMode) return;
+        if (!spr.getData("locked")) this.selectEdit(spr.getData("idx") as number);
+      });
       this.editSprites.push(spr);
     });
   }
@@ -761,18 +767,14 @@ export class OfficeScene extends Phaser.Scene {
     if (this.editSelected !== i) this.selectEdit(i);
   };
 
-  private onEditPointerDown = (
-    pointer: Phaser.Input.Pointer,
-    objsClicked: Phaser.GameObjects.GameObject[]
-  ) => {
+  private onEditPointerDown = (pointer: Phaser.Input.Pointer) => {
     if (!this.editMode) return;
-    // Clicou num móvel → seleciona (não-travado)
-    const hit = objsClicked.find((o) => this.editSprites.includes(o as any));
-    if (hit) {
-      const spr = hit as Phaser.GameObjects.Image;
-      if (!spr.getData("locked")) this.selectEdit(spr.getData("idx") as number);
-      return;
-    }
+    // Se clicou em cima de algum móvel, a seleção é tratada pelo
+    // handler do próprio sprite (spr.on("pointerdown")). Aqui só tratamos
+    // clique no VAZIO. hitTestPointer é confiável (usa a câmera ativa).
+    const over = this.input.hitTestPointer(pointer);
+    const onSprite = over.some((o) => this.editSprites.includes(o as any));
+    if (onSprite) return;
     // Clicou no vazio: se tem pincel, adiciona; senão, deseleciona
     if (this.editBrush) {
       const x = Phaser.Math.Clamp(this.snap(pointer.worldX), 0, WORLD_W);
