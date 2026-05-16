@@ -8,6 +8,7 @@ import { hashPassword, verifyPassword } from "./password";
 import { signAuthToken } from "./jwt";
 import { requireAuth } from "./middleware";
 import { isAdminEmail, requireAdmin } from "./admin";
+import { isUserOnline } from "../presence";
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
@@ -157,6 +158,37 @@ export function createAuthRouter() {
     } catch (err: any) {
       console.error("[/auth/me] erro:", err);
       return res.status(500).json({ error: "Falha ao buscar usuário" });
+    }
+  });
+
+  // Diretório de TODOS os usuários cadastrados (autenticado, não-admin).
+  // Usado pela sidebar pra mostrar online + offline. Não expõe email.
+  router.get("/users", authReadLimiter, requireAuth, async (_req: Request, res: Response) => {
+    try {
+      const db = getDb();
+      const rows = await db
+        .select({ id: users.id, createdAt: users.createdAt })
+        .from(users)
+        .orderBy(users.createdAt);
+
+      const profileRows = await db.select().from(profiles);
+      const profileById = new Map(profileRows.map((p) => [p.userId, p]));
+
+      const list = rows.map((u) => {
+        const prof = profileById.get(u.id);
+        return {
+          id: u.id,
+          displayName: prof?.displayName ?? "(sem nome)",
+          bodyColor: prof?.bodyColor ?? "#4ade80",
+          hairColor: prof?.hairColor ?? "#3b2c20",
+          characterId: prof?.characterId ?? null,
+          isOnline: isUserOnline(u.id),
+        };
+      });
+      return res.json({ users: list });
+    } catch (err: any) {
+      console.error("[/users GET] erro:", err);
+      return res.status(500).json({ error: "Falha ao listar usuários" });
     }
   });
 

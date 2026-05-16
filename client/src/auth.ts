@@ -34,6 +34,16 @@ export interface AuthSession {
   profile: AuthProfile;
 }
 
+/** Usuário no diretório (sidebar) — todos cadastrados, com flag de online. */
+export interface DirectoryUser {
+  id: string;
+  displayName: string;
+  bodyColor: string;
+  hairColor: string;
+  characterId?: string | null;
+  isOnline: boolean;
+}
+
 export function getStoredToken(): string | null {
   try {
     return localStorage.getItem(TOKEN_KEY);
@@ -117,6 +127,16 @@ export async function updateProfile(
   if (!resp.ok) throw new Error(await parseError(resp));
   const data = await resp.json();
   return data.profile;
+}
+
+/** Diretório completo (online + offline). Não precisa ser admin. */
+export async function listAllUsers(httpUrl: string, token: string): Promise<DirectoryUser[]> {
+  const resp = await fetch(httpUrl + "/users", {
+    headers: { Authorization: "Bearer " + token },
+  });
+  if (!resp.ok) throw new Error(await parseError(resp));
+  const data = await resp.json();
+  return data.users;
 }
 
 // ============ Admin ============

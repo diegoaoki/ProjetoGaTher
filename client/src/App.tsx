@@ -18,6 +18,8 @@ import {
   getStoredToken,
   storeToken,
   updateProfile,
+  listAllUsers,
+  DirectoryUser,
 } from "./auth";
 
 function resolveServerUrl(): string {
@@ -263,6 +265,24 @@ export default function App() {
     isMe: boolean;
   }
   const [onlinePlayers, setOnlinePlayers] = useState<OnlinePlayer[]>([]);
+  // Diretório completo (todos cadastrados) — buscado ao abrir a sidebar.
+  const [directory, setDirectory] = useState<DirectoryUser[]>([]);
+  const [directoryErr, setDirectoryErr] = useState<string | null>(null);
+  useEffect(() => {
+    if (!sidebarOpen || !session) return;
+    let cancelled = false;
+    setDirectoryErr(null);
+    listAllUsers(HTTP_URL, session.token)
+      .then((list) => {
+        if (!cancelled) setDirectory(list);
+      })
+      .catch((err) => {
+        if (!cancelled) setDirectoryErr(err?.message || "Falha ao carregar usuários");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [sidebarOpen, session]);
 
   // === Convites ===
   const [incomingInvite, setIncomingInvite] = useState<{ fromSessionId: string; fromName: string } | null>(null);
@@ -1235,37 +1255,93 @@ export default function App() {
         </div>
       </div>
 
-      {sidebarOpen && (
+      {sidebarOpen && (() => {
+        // Mescla o diretório (todos cadastrados) com o state.players (online
+        // em tempo real — fonte da verdade pro status e pros sessionIds das
+        // ações). Online players ausentes do diretório (recém-cadastrado /
+        // diretório stale) ainda aparecem.
+        interface DirRow {
+          key: string;
+          name: string;
+          bodyColor: string;
+          hairColor: string;
+          online: boolean;
+          isMe: boolean;
+          sessionId?: string;
+        }
+        const onlineByUser = new Map(
+          onlinePlayers.filter((o) => o.userId).map((o) => [o.userId, o] as const)
+        );
+        const rows: DirRow[] = [];
+        const seen = new Set<string>();
+        for (const d of directory) {
+          const op = onlineByUser.get(d.id);
+          rows.push({
+            key: d.id,
+            name: op?.name || d.displayName,
+            bodyColor: op?.color || d.bodyColor,
+            hairColor: op?.hairColor || d.hairColor,
+            online: !!op,
+            isMe: !!op?.isMe,
+            sessionId: op?.sessionId,
+          });
+          seen.add(d.id);
+        }
+        for (const o of onlinePlayers) {
+          if (!o.userId || seen.has(o.userId)) continue;
+          rows.push({
+            key: o.userId,
+            name: o.name,
+            bodyColor: o.color,
+            hairColor: o.hairColor,
+            online: true,
+            isMe: o.isMe,
+            sessionId: o.sessionId,
+          });
+        }
+        rows.sort((a, b) => {
+          if (a.isMe !== b.isMe) return a.isMe ? -1 : 1;
+          if (a.online !== b.online) return a.online ? -1 : 1;
+          return a.name.localeCompare(b.name);
+        });
+        const onlineCount = rows.filter((r) => r.online).length;
+        return (
         <div style={{
           ...sidebarStyle,
           ...(isMobile ? { top: 0, left: 0, right: 0, bottom: 0, width: "100vw", maxHeight: "100vh" } : {}),
         }}>
           <div style={sidebarHeaderStyle}>
-            <span><strong>{onlinePlayers.length}</strong> online</span>
+            <span><strong>{onlineCount}</strong> online · {rows.length} no total</span>
             <button onClick={() => setSidebarOpen(false)} style={sidebarCloseBtn} title="Fechar">✕</button>
           </div>
           <div style={sidebarListStyle}>
-            {onlinePlayers
-              .slice()
-              .sort((a, b) => {
-                if (a.isMe) return -1;
-                if (b.isMe) return 1;
-                return a.name.localeCompare(b.name);
-              })
-              .map((p) => (
-                <div key={p.sessionId} style={sidebarRowStyle}>
-                  <MiniAvatar bodyColor={p.color} hairColor={p.hairColor} />
+            {directoryErr && (
+              <div style={{ padding: 8, fontSize: 12, color: "#f87171" }}>
+                {directoryErr} — mostrando só quem está online.
+              </div>
+            )}
+            {rows.map((p) => (
+                <div key={p.key} style={{ ...sidebarRowStyle, opacity: p.online ? 1 : 0.5 }}>
+                  <MiniAvatar bodyColor={p.bodyColor} hairColor={p.hairColor} />
                   <div style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <span
+                      title={p.online ? "Online" : "Offline"}
+                      style={{
+                        display: "inline-block", width: 8, height: 8, borderRadius: "50%",
+                        marginRight: 6, verticalAlign: "middle",
+                        background: p.online ? "#22c55e" : "#64748b",
+                      }}
+                    />
                     {p.name}
                     {p.isMe && <span style={youBadgeStyle}>você</span>}
-                    {activeSpeakerIds.has(p.sessionId) && (
+                    {p.sessionId && activeSpeakerIds.has(p.sessionId) && (
                       <span title="Falando agora" style={{
                         marginLeft: 6, display: "inline-block",
                         animation: "speakerPulse 1s ease-in-out infinite",
                       }}>🎙️</span>
                     )}
                   </div>
-                  {!p.isMe && (
+                  {!p.isMe && p.online && p.sessionId && (
                     <div style={{ display: "flex", gap: 4 }}>
                       <button
                         onClick={() => roomRef.current?.send("teleport:to-player", { targetSessionId: p.sessionId })}
@@ -1300,7 +1376,8 @@ export default function App() {
               ))}
           </div>
         </div>
-      )}
+        );
+      })()}
 
       <div ref={localVideoRef} style={{
         position: "absolute",

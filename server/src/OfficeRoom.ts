@@ -8,6 +8,7 @@ import { profiles, users, deskReservations, messages, messageReactions } from ".
 import { and, eq as eqOp } from "drizzle-orm";
 import { DESKS, getDeskById, getSeatPosition } from "./desks";
 import { isAdminEmail } from "./auth/admin";
+import { markOnline, markOffline } from "./presence";
 
 interface MoveMessage {
   x: number;
@@ -437,6 +438,7 @@ export class OfficeRoom extends Room<OfficeState> {
     this.state.players.set(client.sessionId, player);
     // Registra como sessão ativa pro userId (sobrescreve qualquer anterior já kickada)
     this.activeUsers.set(auth.userId, client);
+    markOnline(auth.userId);
   }
 
   onLeave(client: Client, consented: boolean) {
@@ -453,6 +455,7 @@ export class OfficeRoom extends Room<OfficeState> {
     const auth = client.userData as AuthData | undefined;
     if (auth?.userId && this.activeUsers.get(auth.userId) === client) {
       this.activeUsers.delete(auth.userId);
+      markOffline(auth.userId);
     }
     // Remove pedidos de acesso pendentes desse user (o dono não consegue
     // mais responder porque o requester sumiu)
