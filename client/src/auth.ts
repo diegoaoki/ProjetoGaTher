@@ -139,6 +139,34 @@ export async function listAllUsers(httpUrl: string, token: string): Promise<Dire
   return data.users;
 }
 
+/** Override de mapa (mobília + paredes) — substitui as camadas editáveis. */
+export interface MapOverride {
+  furniture: any[];
+  walls: any[];
+}
+
+export async function fetchMapLayout(httpUrl: string, token: string): Promise<MapOverride | null> {
+  const resp = await fetch(httpUrl + "/map", {
+    headers: { Authorization: "Bearer " + token },
+  });
+  if (!resp.ok) throw new Error(await parseError(resp));
+  const data = await resp.json();
+  return data.map ?? null;
+}
+
+export async function saveMapLayout(
+  httpUrl: string,
+  token: string,
+  map: MapOverride
+): Promise<void> {
+  const resp = await fetch(httpUrl + "/map", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+    body: JSON.stringify(map),
+  });
+  if (!resp.ok) throw new Error(await parseError(resp));
+}
+
 // ============ Admin ============
 
 export async function listUsers(httpUrl: string, token: string): Promise<AdminUser[]> {

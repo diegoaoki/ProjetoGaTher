@@ -9,6 +9,7 @@ import { signAuthToken } from "./jwt";
 import { requireAuth } from "./middleware";
 import { isAdminEmail, requireAdmin } from "./admin";
 import { isUserOnline } from "../presence";
+import { getPool } from "../db/client";
 
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/;
 
@@ -158,6 +159,54 @@ export function createAuthRouter() {
     } catch (err: any) {
       console.error("[/auth/me] erro:", err);
       return res.status(500).json({ error: "Falha ao buscar usuário" });
+    }
+  });
+
+  // ============================================================
+  //  Editor de mapa: override de mobília + paredes (1 linha em app_meta).
+  //  GET é público-autenticado (todo cliente carrega no boot);
+  //  PUT é só admin.
+  // ============================================================
+  const MAP_META_KEY = "map_layout";
+
+  router.get("/map", authReadLimiter, requireAuth, async (_req: Request, res: Response) => {
+    try {
+      const pool = getPool();
+      const r = await pool.query(`SELECT value FROM app_meta WHERE key = $1`, [MAP_META_KEY]);
+      const raw = r.rows[0]?.value;
+      if (!raw) return res.json({ map: null });
+      let map: any = null;
+      try { map = JSON.parse(raw); } catch { map = null; }
+      return res.json({ map });
+    } catch (err: any) {
+      console.error("[/map GET] erro:", err);
+      return res.status(500).json({ error: "Falha ao carregar o mapa" });
+    }
+  });
+
+  router.put("/map", authReadLimiter, requireAuth, requireAdmin, async (req: Request, res: Response) => {
+    try {
+      const body = req.body;
+      // Validação básica de forma e tamanho (evita lixo/abuso).
+      const furniture = Array.isArray(body?.furniture) ? body.furniture : [];
+      const walls = Array.isArray(body?.walls) ? body.walls : [];
+      if (furniture.length > 2000 || walls.length > 2000) {
+        return res.status(400).json({ error: "Layout grande demais" });
+      }
+      const json = JSON.stringify({ furniture, walls });
+      if (json.length > 1_000_000) {
+        return res.status(400).json({ error: "Layout grande demais" });
+      }
+      const pool = getPool();
+      await pool.query(
+        `INSERT INTO app_meta (key, value, updated_at) VALUES ($1, $2, NOW())
+         ON CONFLICT (key) DO UPDATE SET value = $2, updated_at = NOW()`,
+        [MAP_META_KEY, json]
+      );
+      return res.json({ ok: true });
+    } catch (err: any) {
+      console.error("[/map PUT] erro:", err);
+      return res.status(500).json({ error: "Falha ao salvar o mapa" });
     }
   });
 

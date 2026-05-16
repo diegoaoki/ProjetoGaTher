@@ -4,7 +4,15 @@ import {
   createFurnitureTextures,
   createFloorTextures,
 } from "./SpriteFactory";
-import { getDefaultLayout, checkCollision, getCurrentRoom, WALL_T } from "./OfficeLayout";
+import {
+  getDefaultLayout,
+  checkCollision,
+  getCurrentRoom,
+  applyLayoutOverride,
+  WALL_T,
+  FurnitureItem,
+  Wall,
+} from "./OfficeLayout";
 import { findPath } from "./pathfinding";
 import {
   preloadLimezuAssets,
@@ -123,6 +131,12 @@ export class OfficeScene extends Phaser.Scene {
   private isMoving = false;
 
   private layout = getDefaultLayout();
+  /** Override do editor (mobília + paredes) vindo do server. */
+  private mapOverride: { furniture?: FurnitureItem[]; walls?: Wall[] } | null = null;
+  /** GameObjects de mobília/parede/labels — pra poder limpar no rebuild. */
+  private furnitureObjs: Phaser.GameObjects.GameObject[] = [];
+  private wallObjs: Phaser.GameObjects.GameObject[] = [];
+  private roomLabelObjs: Phaser.GameObjects.GameObject[] = [];
 
   private tvSprite?: Phaser.GameObjects.Image;
   private tvScreen?: Phaser.GameObjects.Rectangle;
@@ -170,11 +184,19 @@ export class OfficeScene extends Phaser.Scene {
     super({ key: "OfficeScene" });
   }
 
-  init(data: { room: Room; myId: string; bodyColor?: string; hairColor?: string }) {
+  init(data: {
+    room: Room;
+    myId: string;
+    bodyColor?: string;
+    hairColor?: string;
+    mapOverride?: { furniture?: FurnitureItem[]; walls?: Wall[] } | null;
+  }) {
     this.room = data.room;
     this.myId = data.myId;
     if (data.bodyColor) this.myBodyColor = data.bodyColor;
     if (data.hairColor) this.myHairColor = data.hairColor;
+    this.mapOverride = data.mapOverride ?? null;
+    this.layout = applyLayoutOverride(getDefaultLayout(), this.mapOverride);
   }
 
   preload() {
@@ -535,6 +557,7 @@ export class OfficeScene extends Phaser.Scene {
       const sprite = this.add.image(item.x, item.y, item.type);
       sprite.setOrigin(0.5, 0.5);
       sprite.setDepth(item.y);
+      this.furnitureObjs.push(sprite);
 
       if (item.tag === "tv") {
         this.tvSprite = sprite;
@@ -555,14 +578,17 @@ export class OfficeScene extends Phaser.Scene {
       const wall = this.add.rectangle(cx, cy, w.w, w.h, 0x3d4a5e);
       wall.setStrokeStyle(2, 0x1e2533);
       wall.setDepth(w.y + w.h - 1);
+      this.wallObjs.push(wall);
       // brilho no topo (efeito 3d simples)
       const isHorizontal = w.h === WALL_T;
       if (isHorizontal) {
         const hl = this.add.rectangle(cx, w.y + 2, w.w - 4, 2, 0x6b7d96, 0.6);
         hl.setDepth(w.y + w.h - 1);
+        this.wallObjs.push(hl);
       } else {
         const hl = this.add.rectangle(w.x + 2, cy, 2, w.h - 4, 0x6b7d96, 0.6);
         hl.setDepth(w.y + w.h - 1);
+        this.wallObjs.push(hl);
       }
     });
 
@@ -577,7 +603,34 @@ export class OfficeScene extends Phaser.Scene {
         resolution: 2,
       }).setOrigin(0.5);
       labelText.setDepth(-4);
+      this.roomLabelObjs.push(labelText);
     });
+  }
+
+  /**
+   * Reconstrói mobília + paredes a partir de um novo override (editor de
+   * mapa). Zonas/salas/portas continuam do código. Recalcula colisão.
+   */
+  public rebuildLayout(override: { furniture?: FurnitureItem[]; walls?: Wall[] } | null) {
+    this.mapOverride = override;
+    this.layout = applyLayoutOverride(getDefaultLayout(), override);
+
+    this.furnitureObjs.forEach((o) => o.destroy());
+    this.wallObjs.forEach((o) => o.destroy());
+    this.roomLabelObjs.forEach((o) => o.destroy());
+    this.furnitureObjs = [];
+    this.wallObjs = [];
+    this.roomLabelObjs = [];
+
+    this.drawWalls();
+    this.drawFurniture();
+
+    // Mesas reserváveis derivam da mobília (mesmo filtro do create())
+    this.allDesks = this.layout.furniture
+      .filter((f) => f.type === "desk" && f.deskId)
+      .map((f) => ({ id: f.deskId!, x: f.x, y: f.y }));
+
+    this.refreshDynamicWalls();
   }
 
   private setupStateListeners() {

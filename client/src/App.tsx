@@ -21,6 +21,7 @@ import {
   updateProfile,
   listAllUsers,
   DirectoryUser,
+  fetchMapLayout,
 } from "./auth";
 
 function resolveServerUrl(): string {
@@ -94,6 +95,7 @@ export default function App() {
   const gameRef = useRef<Phaser.Game | null>(null);
   const roomRef = useRef<Room | null>(null);
   const spatialRef = useRef<SpatialAudio | null>(null);
+  const mapOverrideRef = useRef<{ furniture?: any[]; walls?: any[] } | null>(null);
   const sceneRef = useRef<OfficeScene | null>(null);
 
   // === Auth state ===
@@ -403,11 +405,19 @@ export default function App() {
         dom: { createContainer: true },
       });
 
+      // Carrega o override de mapa (editor) antes de iniciar a cena.
+      try {
+        mapOverrideRef.current = await fetchMapLayout(HTTP_URL, session.token);
+      } catch {
+        mapOverrideRef.current = null;
+      }
+
       game.scene.start("OfficeScene", {
         room,
         myId: room.sessionId,
         bodyColor,
         hairColor,
+        mapOverride: mapOverrideRef.current,
       });
       gameRef.current = game;
 
@@ -594,6 +604,18 @@ export default function App() {
       });
       room.onMessage("bubble:error", (msg: { error: string }) => {
         setSocialToast({ text: msg?.error || "Falha na bolha", tone: "error" });
+      });
+
+      // Editor de mapa: um admin salvou → recarrega o layout pra todos.
+      room.onMessage("map:updated", async () => {
+        try {
+          const ov = await fetchMapLayout(HTTP_URL, session.token);
+          mapOverrideRef.current = ov;
+          sceneRef.current?.rebuildLayout(ov);
+          setSocialToast({ text: "Mapa atualizado", tone: "info" });
+        } catch {
+          /* ignora — próximo boot pega */
+        }
       });
 
       // === Cadeado de salas ===

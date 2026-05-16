@@ -441,6 +441,29 @@ export function getCurrentRoom(px: number, py: number, layout: OfficeLayoutData)
   return { id: "open", label: "Corredor", x: 0, y: 0, w: layout.width, h: layout.height };
 }
 
+/**
+ * Aplica um override do editor (mobília + paredes) sobre o layout base.
+ * Substitui as camadas editáveis inteiras quando o override existe;
+ * zonas/salas/floorRegions/portas continuam do código (não editáveis).
+ */
+export function applyLayoutOverride(
+  base: OfficeLayoutData,
+  override: { furniture?: FurnitureItem[]; walls?: Wall[] } | null | undefined
+): OfficeLayoutData {
+  if (!override) return base;
+  return {
+    ...base,
+    furniture:
+      Array.isArray(override.furniture) && override.furniture.length > 0
+        ? override.furniture
+        : base.furniture,
+    walls:
+      Array.isArray(override.walls) && override.walls.length > 0
+        ? override.walls
+        : base.walls,
+  };
+}
+
 // Compatibilidade com chamadas antigas
 export function getCurrentZone(px: number, py: number, layout: OfficeLayoutData): { id: string; tag: string } | null {
   const room = getCurrentRoom(px, py, layout);
