@@ -147,6 +147,16 @@ export default function App() {
     return () => clearTimeout(t);
   }, [hudToast]);
 
+  // Injeção de keyframes CSS globais (não tem CSS module no projeto)
+  useEffect(() => {
+    const style = document.createElement("style");
+    style.textContent = `
+      @keyframes speakerPulse { 0%, 100% { opacity: 0.5; transform: scale(1); } 50% { opacity: 1; transform: scale(1.15); } }
+    `;
+    document.head.appendChild(style);
+    return () => { style.remove(); };
+  }, []);
+
   // ENTER (fora de inputs) → toggla o chat
   useEffect(() => {
     if (conn !== "connected") return;
@@ -269,6 +279,9 @@ export default function App() {
   // pro client-side prediction não me bloquear ao reentrar. Limpa quando a
   // sala é destrancada (não precisa mais).
   const myAllowedRoomsRef = useRef<Set<string>>(new Set());
+
+  // sessionIds dos players falando agora (vem do ActiveSpeakersChanged do LiveKit)
+  const [activeSpeakerIds, setActiveSpeakerIds] = useState<Set<string>>(new Set());
   useEffect(() => {
     if (!socialToast) return;
     const t = setTimeout(() => setSocialToast(null), 3000);
@@ -525,8 +538,9 @@ export default function App() {
       });
 
       // === Cadeado de salas ===
-      // Server rejeitou entrada na sala porque tá trancada — abre modal pedir entrada
-      room.onMessage("room:blocked", (msg: { roomId: string; lockedByName: string }) => {
+      // Entrou fisicamente numa sala trancada → modal OBRIGATÓRIO (pedir ou sair).
+      // Áudio já está mudo (zona "__pending" no server).
+      room.onMessage("room:entered-locked", (msg: { roomId: string; lockedByName: string }) => {
         setAccessRequestModal({ roomId: msg.roomId, lockedByName: msg.lockedByName });
       });
       // Dono recebe pedido — guarda pra mostrar toast com Aceitar/Recusar
@@ -541,32 +555,25 @@ export default function App() {
       // Requester recebe resposta
       room.onMessage("access:response", (msg: { roomId: string; accepted: boolean }) => {
         setSocialToast({
-          text: msg.accepted ? "Entrada autorizada — você foi pra dentro" : "Pedido recusado",
+          text: msg.accepted ? "Entrada autorizada — áudio liberado" : "Pedido recusado — você saiu da sala",
           tone: msg.accepted ? "info" : "error",
         });
-        if (msg.accepted) {
-          myAllowedRoomsRef.current.add(msg.roomId);
-          sceneRef.current?.setMyAllowedRooms(new Set(myAllowedRoomsRef.current));
-        }
+        // Fecha o modal obrigatório se ainda estiver aberto pra essa sala
+        setAccessRequestModal((cur) => (cur && cur.roomId === msg.roomId ? null : cur));
+        if (msg.accepted) myAllowedRoomsRef.current.add(msg.roomId);
       });
       // Erros do fluxo de cadeado
       room.onMessage("room:error", (msg: { error: string }) => {
         setSocialToast({ text: msg?.error || "Falha no cadeado", tone: "error" });
       });
 
-      // Sincroniza lockedRooms do state pra HUD + scene (prediction local)
-      const syncLockedToScene = () => {
-        const m = new Map<string, string>();
-        state.lockedRooms.forEach((l: any, id: string) => m.set(id, l.lockedBy));
-        sceneRef.current?.setLockedRooms(m);
-      };
+      // Sincroniza lockedRooms do state pro HUD (botão 🔒/🔓 condicional)
       state.lockedRooms.onAdd((lock: any, roomId: string) => {
         setLockedRooms((prev) => {
           const next = new Map(prev);
           next.set(roomId, { lockedBy: lock.lockedBy, lockedByName: lock.lockedByName });
           return next;
         });
-        syncLockedToScene();
       });
       state.lockedRooms.onRemove((_lock: any, roomId: string) => {
         setLockedRooms((prev) => {
@@ -574,10 +581,7 @@ export default function App() {
           next.delete(roomId);
           return next;
         });
-        // Limpa a permissão local — sala destrancada, não precisa mais
         myAllowedRoomsRef.current.delete(roomId);
-        sceneRef.current?.setMyAllowedRooms(new Set(myAllowedRoomsRef.current));
-        syncLockedToScene();
       });
 
       // Chat: novas mensagens entram em real-time
@@ -742,6 +746,15 @@ export default function App() {
           if (identity.startsWith(player.userId + "__")) target = sessionId;
         });
         if (target && sceneRef.current) sceneRef.current.setRemoteSpeaking(target, speaking);
+        // Atualiza sidebar (badge "está falando")
+        if (target) {
+          const t = target;
+          setActiveSpeakerIds((prev) => {
+            const next = new Set(prev);
+            if (speaking) next.add(t); else next.delete(t);
+            return next;
+          });
+        }
       };
 
       spatialRef.current = spatial;
@@ -1095,42 +1108,6 @@ export default function App() {
         {audioStatus && <div style={{ fontSize: 11, opacity: 0.8, marginTop: 6, color: "#fbbf24" }}>{audioStatus}</div>}
       </div>
 
-      {/* Engrenagem ⚙️ canto superior direito com submenu */}
-      <div style={{ position: "absolute", top: 16, right: 16, zIndex: 12 }}>
-        <button
-          onClick={() => setSettingsOpen((v) => !v)}
-          style={pillBtnStyle(settingsOpen)}
-          title="Configurações"
-        >
-          ⚙️
-        </button>
-        {settingsOpen && (
-          <div style={settingsMenuStyle} onClick={() => setSettingsOpen(false)}>
-            <button onClick={() => setEditingAvatar(true)} style={menuItemStyle}>🎨 Editar avatar</button>
-            <button onClick={() => setAudioTestOpen(true)} style={menuItemStyle}>🎧 Testar áudio/vídeo</button>
-            <button onClick={() => setSidebarOpen(true)} style={menuItemStyle}>👥 Quem está online</button>
-            {session.user.isAdmin && (
-              <button onClick={() => setAdminOpen(true)} style={menuItemStyle}>🛡️ Admin</button>
-            )}
-            {myDeskId && (
-              <button
-                onClick={() => roomRef.current?.send("teleport:to-desk", { deskId: myDeskId })}
-                style={menuItemStyle}
-              >
-                📍 Ir pra minha mesa
-              </button>
-            )}
-            <div style={{ height: 1, background: "#334155", margin: "4px 0" }} />
-            <button
-              onClick={() => setConfirmingLogout(true)}
-              style={{ ...menuItemStyle, color: "#f87171" }}
-            >
-              🚪 Sair do escritório
-            </button>
-          </div>
-        )}
-      </div>
-
       {/* Barra de controles principais: rodapé central no desktop, topo central no mobile (pra não colidir com joystick/botão E) */}
       <div style={isMobile ? { ...bottomBarStyle, top: 16, bottom: "auto" } : bottomBarStyle}>
         <button onClick={toggleMic} style={mediaBtnStyle(micOn, micOn ? "#22c55e" : "#7f1d1d")} title="Microfone">
@@ -1143,7 +1120,7 @@ export default function App() {
           🖥️
         </button>
         {/* Cadeado: aparece automaticamente quando entra em sala de reunião lockable */}
-        {["meeting_xg", "meeting_m1", "meeting_g1", "meeting_g2"].includes(currentZoneId) && (() => {
+        {["meeting_xg", "meeting_m1", "meeting_g1", "meeting_g2", "office_1", "office_2"].includes(currentZoneId) && (() => {
           const lock = lockedRooms.get(currentZoneId);
           const isOwner = lock && lock.lockedBy === session.user.id;
           // Não-dono dentro de sala trancada não vê botão (não pode destrancar)
@@ -1174,6 +1151,49 @@ export default function App() {
             <span style={badgeOnMediaBtn}>{totalUnread > 99 ? "99+" : totalUnread}</span>
           )}
         </button>
+        {/* Engrenagem ⚙️ — submenu abre pra cima já que estamos na barra inferior */}
+        <div style={{ position: "relative" }}>
+          <button
+            onClick={() => setSettingsOpen((v) => !v)}
+            style={mediaBtnStyle(settingsOpen, settingsOpen ? "#2563eb" : "#1e293b")}
+            title="Configurações"
+          >
+            ⚙️
+          </button>
+          {settingsOpen && (
+            <div
+              style={{
+                ...settingsMenuStyle,
+                ...(isMobile
+                  ? { top: 60, right: 0 } // mobile: bottombar tá no topo → submenu desce
+                  : { bottom: 60, top: "auto", right: 0 }),
+              }}
+              onClick={() => setSettingsOpen(false)}
+            >
+              <button onClick={() => setEditingAvatar(true)} style={menuItemStyle}>🎨 Editar avatar</button>
+              <button onClick={() => setAudioTestOpen(true)} style={menuItemStyle}>🎧 Testar áudio/vídeo</button>
+              <button onClick={() => setSidebarOpen(true)} style={menuItemStyle}>👥 Quem está online</button>
+              {session.user.isAdmin && (
+                <button onClick={() => setAdminOpen(true)} style={menuItemStyle}>🛡️ Admin</button>
+              )}
+              {myDeskId && (
+                <button
+                  onClick={() => roomRef.current?.send("teleport:to-desk", { deskId: myDeskId })}
+                  style={menuItemStyle}
+                >
+                  📍 Ir pra minha mesa
+                </button>
+              )}
+              <div style={{ height: 1, background: "#334155", margin: "4px 0" }} />
+              <button
+                onClick={() => setConfirmingLogout(true)}
+                style={{ ...menuItemStyle, color: "#f87171" }}
+              >
+                🚪 Sair do escritório
+              </button>
+            </div>
+          )}
+        </div>
       </div>
 
       {sidebarOpen && (
@@ -1199,6 +1219,12 @@ export default function App() {
                   <div style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     {p.name}
                     {p.isMe && <span style={youBadgeStyle}>você</span>}
+                    {activeSpeakerIds.has(p.sessionId) && (
+                      <span title="Falando agora" style={{
+                        marginLeft: 6, display: "inline-block",
+                        animation: "speakerPulse 1s ease-in-out infinite",
+                      }}>🎙️</span>
+                    )}
                   </div>
                   {!p.isMe && (
                     <div style={{ display: "flex", gap: 4 }}>
@@ -1320,24 +1346,30 @@ export default function App() {
 
       {/* Modal "Sala trancada — pedir entrada?" (eu esbarrei na porta) */}
       {accessRequestModal && (
-        <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
-          <div style={{ ...cardStyle, width: 380 }} onClick={(e) => e.stopPropagation()}>
+        <div style={modalStyle}>
+          <div style={{ ...cardStyle, width: 400 }} onClick={(e) => e.stopPropagation()}>
             <h2 style={{ margin: "0 0 8px", fontSize: 20 }}>🔒 Sala trancada</h2>
-            <p style={{ margin: "0 0 18px", fontSize: 14 }}>
+            <p style={{ margin: "0 0 12px", fontSize: 14 }}>
               Essa sala foi trancada por <strong>{accessRequestModal.lockedByName}</strong>.
-              Quer pedir pra entrar? O segurança vai avisar.
+              Você entrou mas <strong>não consegue ouvir nem ser ouvido</strong> até ser autorizado.
+            </p>
+            <p style={{ margin: "0 0 18px", fontSize: 13, opacity: 0.75 }}>
+              Você precisa decidir: pedir entrada (aguarda autorização) ou sair da sala.
             </p>
             <div style={{ display: "flex", gap: 8 }}>
               <button
-                onClick={() => setAccessRequestModal(null)}
+                onClick={() => {
+                  roomRef.current?.send("room:leave-locked", { roomId: accessRequestModal.roomId });
+                  setAccessRequestModal(null);
+                }}
                 style={{ ...buttonStyle, background: "#334155", color: "#e2e8f0" }}
               >
-                Cancelar
+                Sair da sala
               </button>
               <button
                 onClick={() => {
                   roomRef.current?.send("room:request-access", { roomId: accessRequestModal.roomId });
-                  setSocialToast({ text: "Pedido enviado — aguardando resposta", tone: "info" });
+                  setSocialToast({ text: "Pedido enviado — aguardando autorização", tone: "info" });
                   setAccessRequestModal(null);
                 }}
                 style={buttonStyle}

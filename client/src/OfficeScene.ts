@@ -79,20 +79,6 @@ export class OfficeScene extends Phaser.Scene {
   // === NPCs de segurança (cadeado) ===
   private securityNpcs = new Map<string, Phaser.GameObjects.Container>();
 
-  // === Cadeado de sala — prediction local pra evitar rubber-banding ===
-  /** roomId → userId de quem trancou. Em sync com state.lockedRooms via App.tsx. */
-  private lockedRoomData = new Map<string, string>();
-  /** Salas que EU fui aprovado a entrar (recebido via access:response). */
-  private myAllowedRoomIds = new Set<string>();
-
-  /** Bounds das salas trancáveis em pixels (precisa em sync com server LOCKABLE_ROOMS). */
-  private static LOCKABLE_ROOM_BOUNDS: Record<string, { x: number; y: number; w: number; h: number }> = {
-    meeting_xg: { x: 60 * 32, y: 0,         w: 20 * 32, h: 17 * 32 },
-    meeting_m1: { x: 60 * 32, y: 17 * 32,   w: 20 * 32, h: 12 * 32 },
-    meeting_g1: { x: 60 * 32, y: 29 * 32,   w: 20 * 32, h: 13 * 32 },
-    meeting_g2: { x: 60 * 32, y: 42 * 32,   w: 20 * 32, h: 13 * 32 },
-  };
-
   // === Joystick virtual (mobile) — sobrescreve teclado quando ativo ===
   private virtualVx = 0;
   private virtualVy = 0;
@@ -1013,43 +999,8 @@ export class OfficeScene extends Phaser.Scene {
    *     a "profundidade" da colisão é permitido. Isso resolve o caso "preso dentro de móvel".
    *   - Caso contrário, comportamento normal: testa destino, slide nos eixos.
    */
-  /** App.tsx chama quando state.lockedRooms muda no Colyseus. */
-  public setLockedRooms(data: Map<string, string>) {
-    this.lockedRoomData = data;
-  }
-
-  /** App.tsx chama quando recebe access:response accepted=true (ou cleanup). */
-  public setMyAllowedRooms(ids: Set<string>) {
-    this.myAllowedRoomIds = ids;
-  }
-
-  /** Acha em qual sala trancável o ponto (x,y) está. Null se nenhuma. */
-  private getLockableRoomAt(x: number, y: number): string | null {
-    for (const [id, b] of Object.entries(OfficeScene.LOCKABLE_ROOM_BOUNDS)) {
-      if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return id;
-    }
-    return null;
-  }
-
-  /**
-   * Retorna true se entrar em (x,y) violaria uma sala trancada.
-   * Não bloqueia movimento DENTRO da própria sala trancada (já entrei) — só
-   * quando estou cruzando do "fora" pra "dentro". O parâmetro currentRoom
-   * representa onde estou agora.
-   */
-  private isBlockedByLockedRoom(x: number, y: number, currentRoom: string | null): boolean {
-    const destRoom = this.getLockableRoomAt(x, y);
-    if (!destRoom || destRoom === currentRoom) return false;
-    const lockedBy = this.lockedRoomData.get(destRoom);
-    if (!lockedBy) return false; // sala não está trancada
-    if (lockedBy === this.myUserId) return false; // sou o dono
-    if (this.myAllowedRoomIds.has(destRoom)) return false; // fui aprovado
-    return true;
-  }
-
   private tryMove(curX: number, curY: number, dx: number, dy: number): { x: number; y: number } {
     const stuck = checkCollision(curX, curY, PLAYER_HALF, this.layout, this.dynamicWalls);
-    const currentRoom = this.getLockableRoomAt(curX, curY);
 
     if (stuck) {
       // Estou preso. Aceito qualquer movimento que reduza o overlap com móveis,
@@ -1069,22 +1020,19 @@ export class OfficeScene extends Phaser.Scene {
       return { x: nextX, y: nextY };
     }
 
-    // Não preso: comportamento normal de colisão + bloqueio de sala trancada.
-    // O bloqueio é tratado como uma "parede invisível" — se o destino entra
-    // em sala trancada, rejeita esse eixo (sliding nos outros permitido).
+    // Não preso: comportamento normal de colisão.
+    // Cadeado NÃO bloqueia movimento — entra livre, áudio que fica mudo
+    // (zona "__pending" no server). Ver fluxo de cadeado no OfficeRoom.
     const nextX = curX + dx;
     const nextY = curY + dy;
 
-    const blockedFull = this.isBlockedByLockedRoom(nextX, nextY, currentRoom);
-    if (!blockedFull && !checkCollision(nextX, nextY, PLAYER_HALF, this.layout, this.dynamicWalls)) {
+    if (!checkCollision(nextX, nextY, PLAYER_HALF, this.layout, this.dynamicWalls)) {
       return { x: nextX, y: nextY };
     }
-    const blockedX = this.isBlockedByLockedRoom(nextX, curY, currentRoom);
-    if (dx !== 0 && !blockedX && !checkCollision(nextX, curY, PLAYER_HALF, this.layout, this.dynamicWalls)) {
+    if (dx !== 0 && !checkCollision(nextX, curY, PLAYER_HALF, this.layout, this.dynamicWalls)) {
       return { x: nextX, y: curY };
     }
-    const blockedY = this.isBlockedByLockedRoom(curX, nextY, currentRoom);
-    if (dy !== 0 && !blockedY && !checkCollision(curX, nextY, PLAYER_HALF, this.layout, this.dynamicWalls)) {
+    if (dy !== 0 && !checkCollision(curX, nextY, PLAYER_HALF, this.layout, this.dynamicWalls)) {
       return { x: curX, y: nextY };
     }
     return { x: curX, y: curY };

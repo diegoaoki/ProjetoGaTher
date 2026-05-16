@@ -81,6 +81,9 @@ const LOCKABLE_ROOMS: Record<string, { x: number; y: number; w: number; h: numbe
   meeting_m1: { x: 60 * 32, y: 17 * 32,   w: 20 * 32, h: 12 * 32 },
   meeting_g1: { x: 60 * 32, y: 29 * 32,   w: 20 * 32, h: 13 * 32 },
   meeting_g2: { x: 60 * 32, y: 42 * 32,   w: 20 * 32, h: 13 * 32 },
+  // Diretorias também podem trancar. Recepção/Copa/Lounge NÃO (área comum).
+  office_1:   { x: 0,       y: 0,         w: 20 * 32, h: 9 * 32 },
+  office_2:   { x: 0,       y: 9 * 32,    w: 20 * 32, h: 9 * 32 },
 };
 
 /**
@@ -135,6 +138,9 @@ export class OfficeRoom extends Room<OfficeState> {
 
   /** Throttle do "room:blocked": último envio por sessionId (ms epoch). */
   private lastBlockedNotify = new Map<string, number>();
+
+  /** Última sala trancada pela qual já mandamos o modal obrigatório (sessionId → roomId). */
+  private pendingModalSent = new Map<string, string>();
 
   async onCreate(_options: any) {
     console.log(`[OfficeRoom] criada: ${this.roomId}`);
@@ -216,7 +222,32 @@ export class OfficeRoom extends Room<OfficeState> {
 
     this.onMessage<string>("zone", (client, zoneId) => {
       const player = this.state.players.get(client.sessionId);
-      if (player) player.zoneId = zoneId;
+      if (!player) return;
+      const auth = client.userData as AuthData | undefined;
+      const userId = auth?.userId || "";
+
+      // Se o player entrou numa sala trancada SEM permissão, a zona vira
+      // "<roomId>__pending": áudio fica isolado (updateVolumes muta zonas
+      // diferentes) mas o movimento é livre. Modal obrigatório é enviado 1x.
+      const lock = this.state.lockedRooms.get(zoneId);
+      const authorized =
+        !lock ||
+        lock.lockedBy === userId ||
+        this.allowedInRoom.get(zoneId)?.has(userId);
+
+      if (lock && !authorized) {
+        player.zoneId = zoneId + "__pending";
+        if (this.pendingModalSent.get(client.sessionId) !== zoneId) {
+          this.pendingModalSent.set(client.sessionId, zoneId);
+          client.send("room:entered-locked", {
+            roomId: zoneId,
+            lockedByName: lock.lockedByName,
+          });
+        }
+      } else {
+        player.zoneId = zoneId;
+        this.pendingModalSent.delete(client.sessionId);
+      }
     });
 
     // Inicializa portas (sempre fechadas no boot)
@@ -277,6 +308,17 @@ export class OfficeRoom extends Room<OfficeState> {
     this.onMessage<AccessRespondMessage>("room:respond-access", (client, msg) =>
       this.handleAccessRespond(client, msg)
     );
+    // Usuário escolheu "sair" no modal obrigatório de sala trancada
+    this.onMessage<RoomLockMessage>("room:leave-locked", (client, msg) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player) return;
+      const roomId = String(msg?.roomId || "");
+      this.ejectFromRoom(player, roomId);
+      this.pendingModalSent.delete(client.sessionId);
+      // Remove pedido pendente se houver
+      const auth = client.userData as AuthData | undefined;
+      if (auth?.userId) this.state.accessRequests.delete(`${roomId}:${auth.userId}`);
+    });
   }
 
   async onAuth(_client: Client, options: JoinOptions): Promise<AuthData> {
@@ -368,6 +410,7 @@ export class OfficeRoom extends Room<OfficeState> {
     console.log(`[OfficeRoom] ${client.sessionId} saiu (consented=${consented})`);
     this.state.players.delete(client.sessionId);
     this.lastBlockedNotify.delete(client.sessionId);
+    this.pendingModalSent.delete(client.sessionId);
     // Limpa activeUsers SÓ se este client é o atualmente registrado.
     // Quando há force takeover, o novo client já tomou o slot e não devemos limpá-lo.
     const auth = client.userData as AuthData | undefined;
@@ -439,35 +482,9 @@ export class OfficeRoom extends Room<OfficeState> {
     const newX = Math.max(0, Math.min(this.state.worldWidth, msg.x));
     const newY = Math.max(0, Math.min(this.state.worldHeight, msg.y));
 
-    // Validação de cadeado: se o move-to entra numa sala trancada e o player
-    // não é o dono nem foi aprovado, mantém posição anterior e notifica.
-    const destRoom = this.getLockableRoomAt(newX, newY);
-    const currentRoom = this.getLockableRoomAt(player.x, player.y);
-    if (destRoom && destRoom !== currentRoom) {
-      const lock = this.state.lockedRooms.get(destRoom);
-      const auth = client.userData as AuthData | undefined;
-      const userId = auth?.userId || "";
-      const allowed =
-        !lock ||
-        lock.lockedBy === userId ||
-        this.allowedInRoom.get(destRoom)?.has(userId);
-      if (!allowed) {
-        const now = Date.now();
-        const last = this.lastBlockedNotify.get(client.sessionId) || 0;
-        if (now - last > BLOCKED_NOTIFY_THROTTLE_MS) {
-          this.lastBlockedNotify.set(client.sessionId, now);
-          client.send("room:blocked", {
-            roomId: destRoom,
-            lockedByName: lock.lockedByName,
-          });
-        }
-        // Atualiza só direction/isMoving — posição fica
-        player.direction = msg.direction;
-        player.isMoving = false;
-        return;
-      }
-    }
-
+    // Cadeado NÃO bloqueia movimento — a pessoa entra fisicamente pra poder
+    // pedir entrada. O isolamento é feito via zoneId "__pending" (áudio mudo)
+    // no handler "zone". Ver handleZone / handleAccessRespond.
     player.x = newX;
     player.y = newY;
     player.direction = msg.direction;
@@ -486,6 +503,22 @@ export class OfficeRoom extends Room<OfficeState> {
   private getRoomDoorPos(roomId: string): { x: number; y: number } | null {
     const door = DOORS.find((d) => d.roomTag === roomId);
     return door ? { x: door.x, y: door.y } : null;
+  }
+
+  /**
+   * Move o avatar pra FORA da sala, do outro lado da porta. Reunião tem porta
+   * na parede esquerda (sai pro oeste); diretoria na direita (sai pro leste).
+   * Também normaliza a zona (remove __pending) pra não ficar mudo do lado de fora.
+   */
+  private ejectFromRoom(player: Player, roomId: string) {
+    const bounds = LOCKABLE_ROOMS[roomId];
+    const doorPos = this.getRoomDoorPos(roomId);
+    if (!bounds || !doorPos) return;
+    const doorOnLeftWall = doorPos.x <= bounds.x + 20;
+    player.x = doorOnLeftWall ? bounds.x - 40 : bounds.x + bounds.w + 40;
+    player.y = doorPos.y;
+    player.isMoving = false;
+    if (player.zoneId === roomId + "__pending") player.zoneId = "open";
   }
 
   /** Procura no state quem é dono da mesa reservada pelo userId. */
@@ -759,9 +792,12 @@ export class OfficeRoom extends Room<OfficeState> {
   //  - Qualquer ocupante da sala pode trancar (vira "dono" da sessão).
   //  - Dono destranca a qualquer momento. Sai da sala = não destranca
   //    automaticamente (intencional — protege contra "saí pra pegar café").
-  //  - Outros usuários esbarram na porta → `room:blocked` → pedem entrada.
+  //  - Movimento é LIVRE: quem entra numa sala trancada sem permissão entra
+  //    fisicamente, mas a zona vira "<roomId>__pending" → áudio mudo (não
+  //    ouve nem é ouvido). Modal obrigatório força "pedir entrada" ou "sair".
   //  - Dono recebe `access:request-incoming` → aceita/recusa.
-  //  - Se aceito, requester é teleportado pra dentro + entra em allowedInRoom.
+  //  - Aceito: entra em allowedInRoom, zona normaliza, áudio liberado (NÃO
+  //    teleporta — já está dentro). Recusado: avatar movido pra fora da sala.
   // ============================================================
 
   private handleRoomLock(client: Client, msg: RoomLockMessage) {
@@ -836,6 +872,15 @@ export class OfficeRoom extends Room<OfficeState> {
       this.state.lockedRooms.delete(roomId);
       this.state.securityNPCs.delete(roomId);
       this.allowedInRoom.delete(roomId);
+
+      // Normaliza zona de quem estava pendente nessa sala (libera áudio)
+      this.state.players.forEach((p) => {
+        if (p.zoneId === roomId + "__pending") p.zoneId = roomId;
+      });
+      // Limpa flags de modal pendente dessa sala
+      this.pendingModalSent.forEach((rid, sid) => {
+        if (rid === roomId) this.pendingModalSent.delete(sid);
+      });
 
       // Remove pedidos pendentes pra essa sala
       const keysToDelete: string[] = [];
@@ -921,7 +966,8 @@ export class OfficeRoom extends Room<OfficeState> {
       });
 
       if (accepted) {
-        // Adiciona à whitelist + teleporta pra dentro da sala (no centro)
+        // Whitelist + libera áudio (normaliza a zona, removendo __pending).
+        // NÃO teleporta — a pessoa já está fisicamente dentro.
         let allowed = this.allowedInRoom.get(roomId);
         if (!allowed) {
           allowed = new Set();
@@ -931,15 +977,19 @@ export class OfficeRoom extends Room<OfficeState> {
 
         if (requesterClient) {
           const requesterPlayer = this.state.players.get(requesterClient.sessionId);
-          if (requesterPlayer) {
-            const bounds = LOCKABLE_ROOMS[roomId];
-            // Teleporta pro centro da sala — server-autoritativo, não passa por handleMove
-            requesterPlayer.x = bounds.x + bounds.w / 2;
-            requesterPlayer.y = bounds.y + bounds.h / 2;
+          if (requesterPlayer && requesterPlayer.zoneId === roomId + "__pending") {
+            requesterPlayer.zoneId = roomId; // áudio liberado
           }
+          this.pendingModalSent.delete(requesterClient.sessionId);
           requesterClient.send("access:response", { roomId, accepted: true });
         }
       } else if (requesterClient) {
+        // Recusado: move o avatar pra FORA da sala (lado de fora da porta).
+        const requesterPlayer = this.state.players.get(requesterClient.sessionId);
+        if (requesterPlayer) {
+          this.ejectFromRoom(requesterPlayer, roomId);
+        }
+        this.pendingModalSent.delete(requesterClient.sessionId);
         requesterClient.send("access:response", { roomId, accepted: false });
       }
 
