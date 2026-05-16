@@ -139,13 +139,21 @@ export class OfficeScene extends Phaser.Scene {
   private wallObjs: Phaser.GameObjects.GameObject[] = [];
   private roomLabelObjs: Phaser.GameObjects.GameObject[] = [];
 
-  // === Editor de mapa (admin) — etapa 1: mobília ===
+  // === Editor de mapa (admin) — etapa 1 (mobília) + etapa 2 (paredes) ===
   private editMode = false;
   private editFurniture: FurnitureItem[] = [];
   private editSprites: Phaser.GameObjects.Image[] = [];
-  private editBrush: string | null = null; // tipo a adicionar; null = mover/selecionar
-  private editSelected = -1;
+  private editWalls: Wall[] = [];
+  private editWallObjs: Phaser.GameObjects.Rectangle[] = [];
+  /** Pincel: tipo de móvel, "wall" (desenhar parede) ou null (mover/seleção). */
+  private editBrush: string | null = null;
+  /** Seleção unificada: o que está selecionado e o índice no array. */
+  private editSelKind: "furn" | "wall" | null = null;
+  private editSelIdx = -1;
   private editGrid = 16;
+  /** Estado do desenho de parede (arrastar retângulo). */
+  private wallDrawStart: { x: number; y: number } | null = null;
+  private wallPreview?: Phaser.GameObjects.Rectangle;
   public onEditorChange?: (info: { count: number; selected: boolean }) => void;
 
   private tvSprite?: Phaser.GameObjects.Image;
@@ -654,26 +662,31 @@ export class OfficeScene extends Phaser.Scene {
   public enterMapEditor() {
     if (this.editMode) return;
     this.editMode = true;
-    this.editSelected = -1;
+    this.clearSel();
     this.editBrush = null;
-    // Clona a mobília atual pra edição
+    // Clona mobília + paredes atuais pra edição
     this.editFurniture = this.layout.furniture.map((f) => ({ ...f }));
-    // Esconde os sprites estáticos e desenha os editáveis
+    this.editWalls = this.layout.walls.map((w) => ({ ...w }));
+    // Esconde os estáticos e desenha os editáveis
     this.furnitureObjs.forEach((o) => (o as any).setVisible?.(false));
+    this.wallObjs.forEach((o) => (o as any).setVisible?.(false));
     this.renderEditFurniture();
+    this.renderEditWalls();
 
     this.input.on("drag", this.onEditDrag, this);
     this.input.on("pointerdown", this.onEditPointerDown, this);
+    this.input.on("pointermove", this.onEditPointerMove, this);
+    this.input.on("pointerup", this.onEditPointerUp, this);
     window.addEventListener("keydown", this.onEditKey, true);
     this.notifyEditor();
   }
 
-  /** Delete/Backspace apaga o móvel selecionado (só no editor). */
+  /** Delete/Backspace apaga o item selecionado (móvel OU parede). */
   private onEditKey = (e: KeyboardEvent) => {
     if (!this.editMode) return;
-    if (isTypingInInput()) return; // não interfere com campos de texto
+    if (isTypingInInput()) return;
     if (e.key === "Delete" || e.key === "Backspace") {
-      if (this.editSelected >= 0) {
+      if (this.editSelKind) {
         e.preventDefault();
         this.deleteEditorSelection();
       }
@@ -685,41 +698,53 @@ export class OfficeScene extends Phaser.Scene {
     this.editMode = false;
     this.input.off("drag", this.onEditDrag, this);
     this.input.off("pointerdown", this.onEditPointerDown, this);
+    this.input.off("pointermove", this.onEditPointerMove, this);
+    this.input.off("pointerup", this.onEditPointerUp, this);
     window.removeEventListener("keydown", this.onEditKey, true);
     this.editSprites.forEach((s) => s.destroy());
+    this.editWallObjs.forEach((r) => r.destroy());
+    this.wallPreview?.destroy();
+    this.wallPreview = undefined;
+    this.wallDrawStart = null;
     this.editSprites = [];
-    this.editSelected = -1;
+    this.editWallObjs = [];
+    this.clearSel();
     this.editBrush = null;
     if (restore) {
-      // Descartou → volta ao layout vigente
       this.rebuildLayout(this.mapOverride);
     }
     // Se salvou, o broadcast map:updated chama rebuildLayout pra todos.
   }
 
+  /** Pincel: tipo de móvel, "wall" (desenhar parede) ou null (seleção). */
   public setEditorBrush(type: string | null) {
     this.editBrush = type;
-    if (type !== null) this.selectEdit(-1); // sair do modo seleção
+    if (type !== null) this.clearSel();
     this.notifyEditor();
   }
 
   public deleteEditorSelection() {
-    if (this.editSelected < 0) return;
-    this.editFurniture.splice(this.editSelected, 1);
-    this.editSelected = -1;
-    this.renderEditFurniture();
+    if (this.editSelKind === "furn" && this.editSelIdx >= 0) {
+      this.editFurniture.splice(this.editSelIdx, 1);
+      this.clearSel();
+      this.renderEditFurniture();
+    } else if (this.editSelKind === "wall" && this.editSelIdx >= 0) {
+      this.editWalls.splice(this.editSelIdx, 1);
+      this.clearSel();
+      this.renderEditWalls();
+    }
     this.notifyEditor();
   }
 
-  /** Layout editado pra salvar (mobília editada + paredes atuais). */
+  /** Layout editado pra salvar (mobília + paredes editadas). */
   public getEditedLayout(): { furniture: FurnitureItem[]; walls: Wall[] } {
-    return { furniture: this.editFurniture, walls: this.layout.walls };
+    return { furniture: this.editFurniture, walls: this.editWalls };
   }
 
   private notifyEditor() {
     this.onEditorChange?.({
-      count: this.editFurniture.length,
-      selected: this.editSelected >= 0,
+      count: this.editFurniture.length + this.editWalls.length,
+      selected: this.editSelKind !== null,
     });
   }
 
@@ -727,13 +752,37 @@ export class OfficeScene extends Phaser.Scene {
     return Math.round(v / this.editGrid) * this.editGrid;
   }
 
-  private selectEdit(i: number) {
-    this.editSelected = i;
+  private clearSel() {
+    this.editSelKind = null;
+    this.editSelIdx = -1;
+    this.applySelHighlight();
+    this.notifyEditor();
+  }
+
+  private selectFurn(i: number) {
+    this.editSelKind = "furn";
+    this.editSelIdx = i;
+    this.applySelHighlight();
+    this.notifyEditor();
+  }
+
+  private selectWall(i: number) {
+    this.editSelKind = "wall";
+    this.editSelIdx = i;
+    this.applySelHighlight();
+    this.notifyEditor();
+  }
+
+  private applySelHighlight() {
     this.editSprites.forEach((s, idx) => {
-      if (idx === i) s.setTint(0x4ade80);
+      if (this.editSelKind === "furn" && idx === this.editSelIdx) s.setTint(0x4ade80);
       else s.clearTint();
     });
-    this.notifyEditor();
+    this.editWallObjs.forEach((r, idx) => {
+      const sel = this.editSelKind === "wall" && idx === this.editSelIdx;
+      r.setStrokeStyle(2, sel ? 0x4ade80 : 0x93c5fd, 1);
+      r.setFillStyle(0x3b82f6, sel ? 0.55 : 0.35);
+    });
   }
 
   private renderEditFurniture() {
@@ -743,22 +792,37 @@ export class OfficeScene extends Phaser.Scene {
       const spr = this.add.image(item.x, item.y, item.type);
       spr.setOrigin(0.5, 0.5);
       spr.setDepth(item.y);
-      // Tudo movível, inclusive mesas (deskId). O server passa a usar a
-      // posição salva pro spawn na mesa reservada (ver backlog).
-      const locked = false;
-      spr.setInteractive({ draggable: !locked, useHandCursor: true });
-      if (!locked) this.input.setDraggable(spr);
+      spr.setInteractive({ draggable: true, useHandCursor: true });
+      this.input.setDraggable(spr);
+      spr.setData("kind", "furn");
       spr.setData("idx", i);
-      spr.setData("locked", locked);
-      if (i === this.editSelected) spr.setTint(0x4ade80);
-      // Seleção por sprite (confiável — não depende do currentlyOver global).
-      // Também serve como início do drag pros não-travados.
       spr.on("pointerdown", () => {
-        if (!this.editMode) return;
-        if (!spr.getData("locked")) this.selectEdit(spr.getData("idx") as number);
+        if (this.editMode) this.selectFurn(spr.getData("idx") as number);
       });
       this.editSprites.push(spr);
     });
+    this.applySelHighlight();
+  }
+
+  private renderEditWalls() {
+    this.editWallObjs.forEach((r) => r.destroy());
+    this.editWallObjs = [];
+    this.editWalls.forEach((w, i) => {
+      const cx = w.x + w.w / 2;
+      const cy = w.y + w.h / 2;
+      const rect = this.add.rectangle(cx, cy, w.w, w.h, 0x3b82f6, 0.35);
+      rect.setStrokeStyle(2, 0x93c5fd, 1);
+      rect.setDepth(90000); // editor: paredes por cima pra editar fácil
+      rect.setInteractive({ draggable: true, useHandCursor: true });
+      this.input.setDraggable(rect);
+      rect.setData("kind", "wall");
+      rect.setData("idx", i);
+      rect.on("pointerdown", () => {
+        if (this.editMode) this.selectWall(rect.getData("idx") as number);
+      });
+      this.editWallObjs.push(rect);
+    });
+    this.applySelHighlight();
   }
 
   private onEditDrag = (
@@ -768,29 +832,56 @@ export class OfficeScene extends Phaser.Scene {
     dragY: number
   ) => {
     if (!this.editMode) return;
-    const spr = obj as Phaser.GameObjects.Image;
-    if (spr.getData("locked")) return;
-    const i = spr.getData("idx") as number;
-    if (typeof i !== "number" || !this.editFurniture[i]) return;
-    const nx = Phaser.Math.Clamp(this.snap(dragX), 0, WORLD_W);
-    const ny = Phaser.Math.Clamp(this.snap(dragY), 0, WORLD_H);
-    spr.x = nx;
-    spr.y = ny;
-    spr.setDepth(ny);
-    this.editFurniture[i].x = nx;
-    this.editFurniture[i].y = ny;
-    if (this.editSelected !== i) this.selectEdit(i);
+    const go = obj as any;
+    const kind = go.getData?.("kind");
+    const i = go.getData?.("idx") as number;
+    if (kind === "furn" && this.editFurniture[i]) {
+      const nx = Phaser.Math.Clamp(this.snap(dragX), 0, WORLD_W);
+      const ny = Phaser.Math.Clamp(this.snap(dragY), 0, WORLD_H);
+      go.x = nx;
+      go.y = ny;
+      go.setDepth(ny);
+      this.editFurniture[i].x = nx;
+      this.editFurniture[i].y = ny;
+      if (!(this.editSelKind === "furn" && this.editSelIdx === i)) this.selectFurn(i);
+    } else if (kind === "wall" && this.editWalls[i]) {
+      const wll = this.editWalls[i];
+      // dragX/dragY = centro; converte pro canto sup-esq, snap
+      const nx = Phaser.Math.Clamp(this.snap(dragX - wll.w / 2), 0, WORLD_W - wll.w);
+      const ny = Phaser.Math.Clamp(this.snap(dragY - wll.h / 2), 0, WORLD_H - wll.h);
+      wll.x = nx;
+      wll.y = ny;
+      go.x = nx + wll.w / 2;
+      go.y = ny + wll.h / 2;
+      if (!(this.editSelKind === "wall" && this.editSelIdx === i)) this.selectWall(i);
+    }
   };
 
   private onEditPointerDown = (pointer: Phaser.Input.Pointer) => {
     if (!this.editMode) return;
-    // Se clicou em cima de algum móvel, a seleção é tratada pelo
-    // handler do próprio sprite (spr.on("pointerdown")). Aqui só tratamos
-    // clique no VAZIO. hitTestPointer é confiável (usa a câmera ativa).
     const over = this.input.hitTestPointer(pointer);
-    const onSprite = over.some((o) => this.editSprites.includes(o as any));
-    if (onSprite) return;
-    // Clicou no vazio: se tem pincel, adiciona; senão, deseleciona
+    const onObj = over.some(
+      (o) => this.editSprites.includes(o as any) || this.editWallObjs.includes(o as any)
+    );
+
+    // Modo "desenhar parede": arrasta um retângulo no vazio
+    if (this.editBrush === "wall") {
+      if (onObj) return;
+      this.wallDrawStart = {
+        x: Phaser.Math.Clamp(this.snap(pointer.worldX), 0, WORLD_W),
+        y: Phaser.Math.Clamp(this.snap(pointer.worldY), 0, WORLD_H),
+      };
+      this.wallPreview?.destroy();
+      this.wallPreview = this.add
+        .rectangle(this.wallDrawStart.x, this.wallDrawStart.y, 1, 1, 0x22c55e, 0.4)
+        .setOrigin(0, 0)
+        .setDepth(90001);
+      return;
+    }
+
+    if (onObj) return; // clique em item → seleção tratada pelo próprio obj
+
+    // Pincel de móvel → adiciona; sem pincel → deseleciona
     if (this.editBrush) {
       const x = Phaser.Math.Clamp(this.snap(pointer.worldX), 0, WORLD_W);
       const y = Phaser.Math.Clamp(this.snap(pointer.worldY), 0, WORLD_H);
@@ -802,11 +893,40 @@ export class OfficeScene extends Phaser.Scene {
         hitbox: hitboxFor(this.editBrush),
       });
       this.renderEditFurniture();
-      this.selectEdit(this.editFurniture.length - 1);
-      this.notifyEditor();
+      this.selectFurn(this.editFurniture.length - 1);
     } else {
-      this.selectEdit(-1);
+      this.clearSel();
     }
+  };
+
+  private onEditPointerMove = (pointer: Phaser.Input.Pointer) => {
+    if (!this.editMode || !this.wallDrawStart || !this.wallPreview) return;
+    const ex = Phaser.Math.Clamp(this.snap(pointer.worldX), 0, WORLD_W);
+    const ey = Phaser.Math.Clamp(this.snap(pointer.worldY), 0, WORLD_H);
+    const x = Math.min(this.wallDrawStart.x, ex);
+    const y = Math.min(this.wallDrawStart.y, ey);
+    const w = Math.max(1, Math.abs(ex - this.wallDrawStart.x));
+    const h = Math.max(1, Math.abs(ey - this.wallDrawStart.y));
+    this.wallPreview.setPosition(x, y);
+    this.wallPreview.setSize(w, h);
+  };
+
+  private onEditPointerUp = (pointer: Phaser.Input.Pointer) => {
+    if (!this.editMode || !this.wallDrawStart) return;
+    const ex = Phaser.Math.Clamp(this.snap(pointer.worldX), 0, WORLD_W);
+    const ey = Phaser.Math.Clamp(this.snap(pointer.worldY), 0, WORLD_H);
+    const x = Math.min(this.wallDrawStart.x, ex);
+    const y = Math.min(this.wallDrawStart.y, ey);
+    const w = Math.abs(ex - this.wallDrawStart.x);
+    const h = Math.abs(ey - this.wallDrawStart.y);
+    this.wallDrawStart = null;
+    this.wallPreview?.destroy();
+    this.wallPreview = undefined;
+    // Ignora paredes minúsculas (clique sem arrastar)
+    if (w < this.editGrid || h < this.editGrid) return;
+    this.editWalls.push({ x, y, w, h });
+    this.renderEditWalls();
+    this.selectWall(this.editWalls.length - 1);
   };
 
   private setupStateListeners() {

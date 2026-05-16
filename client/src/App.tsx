@@ -1719,6 +1719,12 @@ export default function App() {
             >
               ✋ Mover/selecionar
             </button>
+            <button
+              onClick={() => { setEditorBrush("wall"); sceneRef.current?.setEditorBrush("wall"); }}
+              style={editorChip(editorBrush === "wall")}
+            >
+              🧱 Parede
+            </button>
             {EDITOR_FURNITURE_TYPES.map((t) => (
               <button
                 key={t}
@@ -1729,6 +1735,12 @@ export default function App() {
               </button>
             ))}
           </div>
+          {editorBrush === "wall" && (
+            <div style={{ fontSize: 11, opacity: 0.75, marginBottom: 8 }}>
+              Arraste no mapa pra desenhar uma parede. "✋ Mover/selecionar"
+              pra mover/deletar paredes existentes (clique nelas).
+            </div>
+          )}
           <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
             <button
               onClick={() => sceneRef.current?.deleteEditorSelection()}
@@ -1739,7 +1751,7 @@ export default function App() {
             </button>
           </div>
           <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 8 }}>
-            {editorInfo.count} móveis no mapa
+            {editorInfo.count} itens no mapa (móveis + paredes)
           </div>
           <div style={{ display: "flex", gap: 6 }}>
             <button
