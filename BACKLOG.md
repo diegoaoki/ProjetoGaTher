@@ -38,7 +38,7 @@ _(nenhum bug aberto no momento)_
   - (c) a pessoa escolhida precisa **autorizar** (fluxo de convite/aceitar, parecido com acesso a sala trancada);
   - (d) áudio do visitante isolado de todos até a autorização (reaproveitar `__pending` ou a bolha).
   - Esboço: role `visitor` no JWT/sessão; código de uso único com TTL curto gerado por user logado/admin; endpoint gerar/validar; `Player.role` no schema; gating de `desk:claim`; UI de seleção de host + modal de autorização. Interage com bolha e salas trancadas — definir precedência de áudio.
-- **Sala de Segurança bloqueada pra todos** — ninguém entra na `security_room`. Tratar como zona no-entry permanente (bloquear movimento no `tryMove`/`checkCollision` pra área da `security_room`, OU sala sempre-trancada sem dono e sem fluxo de pedir entrada). Atenção: `doors.ts` reabriu a porta da `security_room` pro NPC guarda "sair" quando trancam reunião — o bloqueio é só pra players (NPC é state, não passa por colisão), não quebra a feature. ❓ Confirmar se admin é barrado ou tem exceção.
+- 🟢 [FEITO] **Sala de Segurança bloqueada pra todos** — `refreshDynamicWalls` adiciona o retângulo da `security_room` como blocker permanente em `dynamicWalls`. Guarda NPC não usa `tryMove` nem A* usa `dynamicWalls` → não afetado. Admin também barrado (sem exceção por ora).
 
 ---
 

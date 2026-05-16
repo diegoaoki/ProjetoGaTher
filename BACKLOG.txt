@@ -70,14 +70,10 @@ FEATURES PEDIDAS PELO USER (2026-05-16)
   autorizacao. Interage com bolha e salas trancadas - definir precedencia
   de audio.
 
-[NORMAL] Sala de Seguranca bloqueada pra todos
-  Ninguem entra na security_room. Tratar como zona no-entry permanente
-  (bloquear movimento no tryMove/checkCollision pra area da security_room,
-  OU sala sempre-trancada sem dono e sem fluxo de pedir entrada). Atencao:
-  doors.ts reabriu a porta da security_room pro NPC guarda "sair" quando
-  trancam reuniao - o bloqueio e so pra players (NPC e state, nao passa
-  por colisao), nao quebra a feature. A CONFIRMAR: admin e barrado ou tem
-  excecao?
+[FEITO] Sala de Seguranca bloqueada pra todos
+  refreshDynamicWalls adiciona o retangulo da security_room como blocker
+  permanente em dynamicWalls. Guarda NPC nao usa tryMove nem A* usa
+  dynamicWalls -> nao afetado. Admin tambem barrado (sem excecao por ora).
 
 
 ------------------------------------------------------------------------------

@@ -41,6 +41,10 @@ interface DeskOverlay {
 
 const SPEED = 180;
 const NPC_SPEED = 130; // guarda anda um pouco mais devagar que o player
+// Guarda fica EM FRENTE de paredes/portas (que usam depth ~y+100 e
+// w.y+w.h-1). Soma uma base alta + y (mantém ordenação entre NPCs),
+// abaixo de 10000 (balões de vídeo DOM continuam por cima).
+const NPC_DEPTH_BASE = 4000;
 const SYNC_INTERVAL = 50;
 // Tamanho do mundo lido do layout (Fase A: 80×55 tiles = 2560×1760 px).
 // Default mantido caso layout falhe — não deve acontecer em produção.
@@ -730,12 +734,12 @@ export class OfficeScene extends Phaser.Scene {
     if (existing) {
       const p = findPath({ x: existing.x, y: existing.y }, { x: npc.x, y: npc.y }, this.layout);
       if (p && p.length) this.securityNpcNav.set(roomId, { path: p });
-      else { existing.x = npc.x; existing.y = npc.y; existing.setDepth(npc.y); }
+      else { existing.x = npc.x; existing.y = npc.y; existing.setDepth(npc.y + NPC_DEPTH_BASE); }
       return;
     }
 
     const container = this.add.container(origin.x, origin.y);
-    container.setDepth(origin.y);
+    container.setDepth(origin.y + NPC_DEPTH_BASE);
     container.setAlpha(0);
 
     // Avatar de verdade (mesmo sistema de sprite/animação dos players).
@@ -771,7 +775,7 @@ export class OfficeScene extends Phaser.Scene {
       // Sem rota → vai direto pro posto (fallback, não trava o cadeado)
       container.x = npc.x;
       container.y = npc.y;
-      container.setDepth(npc.y);
+      container.setDepth(npc.y + NPC_DEPTH_BASE);
     }
   }
 
@@ -848,7 +852,7 @@ export class OfficeScene extends Phaser.Scene {
         c.x += (dx / d) * step;
         c.y += (dy / d) * step;
       }
-      c.setDepth(c.y);
+      c.setDepth(c.y + NPC_DEPTH_BASE);
 
       const dir = Math.abs(dx) > Math.abs(dy)
         ? (dx > 0 ? "right" : "left")
@@ -875,6 +879,13 @@ export class OfficeScene extends Phaser.Scene {
       const h = isVertical ? span : thickness;
       walls.push({ x: door.x - w / 2, y: door.y - h / 2, w, h });
     });
+
+    // Sala de Segurança = no-entry pra TODOS: bloqueia o interior inteiro
+    // (independente da porta abrir/fechar). O guarda NPC não usa tryMove
+    // nem o A* usa dynamicWalls, então não é afetado.
+    const sec = this.layout.rooms.find((r) => r.id === "security_room");
+    if (sec) walls.push({ x: sec.x, y: sec.y, w: sec.w, h: sec.h });
+
     this.dynamicWalls = walls;
   }
 
