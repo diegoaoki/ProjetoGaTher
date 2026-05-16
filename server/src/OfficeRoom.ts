@@ -248,6 +248,11 @@ export class OfficeRoom extends Room<OfficeState> {
         player.zoneId = zoneId;
         this.pendingModalSent.delete(client.sessionId);
       }
+
+      // Se quem trancou uma sala saiu fisicamente dela, destranca (a sala
+      // não fica presa quando o dono vai "pegar um café"). Posição atual do
+      // player é autoritativa aqui.
+      this.autoReleaseRoomsOwnedBy(userId, player);
     });
 
     // Inicializa portas (sempre fechadas no boot)
@@ -426,7 +431,10 @@ export class OfficeRoom extends Room<OfficeState> {
       });
       for (const k of keysToDelete) this.state.accessRequests.delete(k);
     }
-    // NÃO libera mesas nem destranca salas — persistem mesmo offline.
+    // Destranca salas que esse user trancou — se ele desconectou, ninguém
+    // conseguiria destrancar pela UI e a sala ficaria presa pra sempre.
+    if (auth?.userId) this.autoReleaseRoomsOwnedBy(auth.userId);
+    // NÃO libera mesas — reservas persistem mesmo offline.
   }
 
   onDispose() {
@@ -790,8 +798,9 @@ export class OfficeRoom extends Room<OfficeState> {
   // ============================================================
   //  Cadeado de sala de reunião
   //  - Qualquer ocupante da sala pode trancar (vira "dono" da sessão).
-  //  - Dono destranca a qualquer momento. Sai da sala = não destranca
-  //    automaticamente (intencional — protege contra "saí pra pegar café").
+  //  - Dono destranca a qualquer momento. Se o dono SAI da sala (anda pra
+  //    fora) ou desconecta, a sala destranca automaticamente — não fica
+  //    presa sem ninguém que consiga destrancar. Ver autoReleaseRoomsOwnedBy.
   //  - Movimento é LIVRE: quem entra numa sala trancada sem permissão entra
   //    fisicamente, mas a zona vira "<roomId>__pending" → áudio mudo (não
   //    ouve nem é ouvido). Modal obrigatório força "pedir entrada" ou "sair".
@@ -869,29 +878,62 @@ export class OfficeRoom extends Room<OfficeState> {
         return;
       }
 
-      this.state.lockedRooms.delete(roomId);
-      this.state.securityNPCs.delete(roomId);
-      this.allowedInRoom.delete(roomId);
-
-      // Normaliza zona de quem estava pendente nessa sala (libera áudio)
-      this.state.players.forEach((p) => {
-        if (p.zoneId === roomId + "__pending") p.zoneId = roomId;
-      });
-      // Limpa flags de modal pendente dessa sala
-      this.pendingModalSent.forEach((rid, sid) => {
-        if (rid === roomId) this.pendingModalSent.delete(sid);
-      });
-
-      // Remove pedidos pendentes pra essa sala
-      const keysToDelete: string[] = [];
-      this.state.accessRequests.forEach((req, key) => {
-        if (req.roomId === roomId) keysToDelete.push(key);
-      });
-      for (const k of keysToDelete) this.state.accessRequests.delete(k);
-
+      this.releaseRoom(roomId);
       console.log(`[room:unlock] ${auth.email} destrancou ${roomId}`);
     } catch (err) {
       console.error("[room:unlock] EXCEPTION:", err);
+    }
+  }
+
+  /**
+   * Limpeza completa de uma sala trancada (idempotente). Usado pelo unlock
+   * manual (handleRoomUnlock) e pelo auto-release quando o dono sai/desconecta.
+   * Remove lock + NPC + whitelist, normaliza zonas "__pending" (libera áudio),
+   * e limpa flags de modal e pedidos de acesso pendentes daquela sala.
+   */
+  private releaseRoom(roomId: string) {
+    if (!this.state.lockedRooms.has(roomId)) return;
+    this.state.lockedRooms.delete(roomId);
+    this.state.securityNPCs.delete(roomId);
+    this.allowedInRoom.delete(roomId);
+
+    // Normaliza zona de quem estava pendente nessa sala (libera áudio)
+    this.state.players.forEach((p) => {
+      if (p.zoneId === roomId + "__pending") p.zoneId = roomId;
+    });
+    // Limpa flags de modal pendente dessa sala
+    this.pendingModalSent.forEach((rid, sid) => {
+      if (rid === roomId) this.pendingModalSent.delete(sid);
+    });
+
+    // Remove pedidos pendentes pra essa sala
+    const keysToDelete: string[] = [];
+    this.state.accessRequests.forEach((req, key) => {
+      if (req.roomId === roomId) keysToDelete.push(key);
+    });
+    for (const k of keysToDelete) this.state.accessRequests.delete(k);
+  }
+
+  /**
+   * Auto-release: destranca toda sala cujo dono (lockedBy === userId) não está
+   * mais fisicamente dentro dela. Chamado quando o dono troca de zona (anda pra
+   * fora) ou desconecta. `player` opcional — se ausente (desconexão), o dono
+   * com certeza não está mais na sala, então destranca direto.
+   */
+  private autoReleaseRoomsOwnedBy(userId: string, player?: Player) {
+    if (!userId) return;
+    // Coleta antes de deletar — mutar o MapSchema durante o forEach pode
+    // bagunçar o iterador dos proxies do Colyseus.
+    const toRelease: string[] = [];
+    this.state.lockedRooms.forEach((lock, roomId) => {
+      if (lock.lockedBy !== userId) return;
+      const stillInside =
+        !!player && this.getLockableRoomAt(player.x, player.y) === roomId;
+      if (!stillInside) toRelease.push(roomId);
+    });
+    for (const roomId of toRelease) {
+      this.releaseRoom(roomId);
+      console.log(`[room:auto-unlock] dono saiu → ${roomId} destrancada`);
     }
   }
 
