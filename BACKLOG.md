@@ -7,10 +7,9 @@ Legenda: 🔴 prioridade · 🐞 bug · 🟢 feito (mantido como referência) ·
 
 ## 🔴 Prioridades (áudio ruim — reportado pelo user 2026-05-16)
 
-- **Controles de volume** — o áudio está ruim. Precisa de:
-  - (a) slider pra **aumentar o volume do microfone** (ganho de entrada — Web Audio `GainNode` na track local, pode passar de 1.0);
-  - (b) slider pra **aumentar o volume do alto-falante / peers** (ganho de saída por peer ou master, Web Audio permite > 1.0).
-  - Persistir a preferência (localStorage).
+- **Controles de volume** (parcial):
+  - (b) 🟢 [FEITO] volume de saída/peers > 1.0 — per-peer `GainNode` (Web Audio) no lugar de `audioElement.volume`; persiste em localStorage; slider no painel 🎧; `SpatialAudio.setPeerGain` ao vivo.
+  - (a) ⏳ ganho do **microfone** > 1.0 — pendente: rebuildar o pipeline de publish conflita com `setMicrophoneEnabled` (toggle de mic) e `switchActiveDevice` (troca de device). Decidir abordagem (TrackProcessor LiveKit vs. dono do pipeline) antes.
 - 🟢 [FEITO] **Seleção de microfone + saída** — `<select>` no painel 🎧 com `enumerateDevices`; `audioPrefs.ts` persiste em localStorage; SpatialAudio aplica no `createLocalTracks` e troca ao vivo via `room.switchActiveDevice`. Saída por setSinkId (LiveKit) onde suportado.
 
 ---

@@ -13,6 +13,8 @@ import {
   setMicDeviceId,
   getSpeakerDeviceId,
   setSpeakerDeviceId,
+  getPeerGain,
+  setPeerGain,
 } from "./audioPrefs";
 
 /** Volume de quem está numa bolha pra quem está fora dela (mesma sala). */
@@ -34,6 +36,9 @@ interface RemotePeer {
   screenElement?: HTMLVideoElement;
   isSpeaking: boolean;
   screenStopTimer?: number;
+  // Web Audio: permite ganho > 1.0 (HTMLMediaElement.volume trava em 1).
+  srcNode?: MediaStreamAudioSourceNode;
+  gainNode?: GainNode;
 }
 
 const SCREEN_STOP_DEBOUNCE_MS = 800;
@@ -44,6 +49,34 @@ export class SpatialAudio {
   private nearRadius: number;
   private farRadius: number;
   private localParticipant?: LocalParticipant;
+  /** Contexto Web Audio (lazy) pra ganho de peers > 1.0. */
+  private audioCtx?: AudioContext;
+  /** Multiplicador master da saída (peers). Persiste em localStorage. */
+  private peerMasterGain = getPeerGain();
+
+  /** Cria/retoma o AudioContext (autoplay: precisa de gesto do usuário). */
+  private ensureAudioCtx(): AudioContext | null {
+    try {
+      if (!this.audioCtx) {
+        const Ctx = (window as any).AudioContext || (window as any).webkitAudioContext;
+        if (!Ctx) return null;
+        this.audioCtx = new Ctx();
+      }
+      if (this.audioCtx!.state === "suspended") this.audioCtx!.resume().catch(() => {});
+      return this.audioCtx!;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Aplica volume num peer: GainNode (permite > 1) ou fallback no element. */
+  private applyPeerVolume(peer: RemotePeer, vol: number) {
+    if (peer.gainNode) {
+      peer.gainNode.gain.value = vol * this.peerMasterGain;
+    } else if (peer.audioElement) {
+      peer.audioElement.volume = Math.min(1, vol); // fallback: trava em 1
+    }
+  }
 
   public onPeerSpeaking?: (identity: string, speaking: boolean) => void;
   public onPeerJoined?: (identity: string) => void;
@@ -163,6 +196,8 @@ export class SpatialAudio {
     const peer = this.peers.get(p.identity);
     if (peer) {
       if (peer.screenStopTimer) clearTimeout(peer.screenStopTimer);
+      try { peer.gainNode?.disconnect(); } catch {}
+      try { peer.srcNode?.disconnect(); } catch {}
       peer.audioElement?.remove();
       peer.cameraElement?.remove();
       peer.screenElement?.remove();
@@ -180,11 +215,33 @@ export class SpatialAudio {
     }
 
     if (track.kind === Track.Kind.Audio) {
+      // Mantém o element anexado (lifecycle do LiveKit + workaround Chrome
+      // pra MediaStreamSource), mas mutado: o playback é via Web Audio,
+      // que permite ganho > 1.0.
       const el = track.attach() as HTMLAudioElement;
       el.style.display = "none";
-      el.volume = 0;
       document.body.appendChild(el);
       peer.audioElement = el;
+
+      const ctx = this.ensureAudioCtx();
+      const mst = (track as any).mediaStreamTrack as MediaStreamTrack | undefined;
+      if (ctx && mst) {
+        try {
+          const src = ctx.createMediaStreamSource(new MediaStream([mst]));
+          const gain = ctx.createGain();
+          gain.gain.value = 0; // updateVolumes ajusta no próximo frame
+          src.connect(gain);
+          gain.connect(ctx.destination);
+          peer.srcNode = src;
+          peer.gainNode = gain;
+          el.muted = true;
+          el.volume = 0;
+        } catch {
+          el.volume = 0; // fallback: element-based (sem ganho > 1)
+        }
+      } else {
+        el.volume = 0;
+      }
     } else if (track.kind === Track.Kind.Video) {
       const el = track.attach() as HTMLVideoElement;
       el.muted = true;
@@ -217,6 +274,10 @@ export class SpatialAudio {
     if (!peer) return;
 
     if (track.kind === Track.Kind.Audio) {
+      try { peer.gainNode?.disconnect(); } catch {}
+      try { peer.srcNode?.disconnect(); } catch {}
+      peer.gainNode = undefined;
+      peer.srcNode = undefined;
       peer.audioElement?.remove();
       peer.audioElement = undefined;
     } else if (track.kind === Track.Kind.Video) {
@@ -241,48 +302,41 @@ export class SpatialAudio {
     myInfo: { x: number; y: number; zoneId?: string; bubbleId?: string },
     peerInfo: Map<string, { x: number; y: number; zoneId?: string; bubbleId?: string }>
   ) {
+    // Garante o AudioContext ativo (autoplay pode tê-lo deixado suspenso).
+    if (this.audioCtx?.state === "suspended") this.audioCtx.resume().catch(() => {});
+
     this.peers.forEach((peer, identity) => {
       const info = peerInfo.get(identity);
       if (!info || !peer.audioElement) {
-        if (peer.audioElement) peer.audioElement.volume = 0;
+        this.applyPeerVolume(peer, 0);
         return;
       }
       const myZone = myInfo.zoneId || "open";
       const peerZone = info.zoneId || "open";
 
-      // Zonas diferentes → muta (paredes isolam o áudio). Vale ANTES da
-      // bolha: bolha não fura parede de sala trancada.
+      // Calcula o volume "espacial" (0..1); o master de saída é aplicado
+      // em applyPeerVolume (que permite ultrapassar 1.0 via Web Audio).
+      let vol: number;
       if (myZone !== peerZone) {
-        peer.audioElement.volume = 0;
-        return;
+        // Zonas diferentes → muta (paredes isolam). ANTES da bolha.
+        vol = 0;
+      } else {
+        const myBub = myInfo.bubbleId || "";
+        const peerBub = info.bubbleId || "";
+        if (myBub && myBub === peerBub) {
+          vol = 1.0; // mesma bolha → cheio
+        } else if (myBub || peerBub) {
+          vol = BUBBLE_OUTSIDE_VOL; // alguém em bolha, não juntos → baixo
+        } else if (myZone !== "open") {
+          vol = 1.0; // mesma sala isolada → cheio (premissa de reunião)
+        } else {
+          // Open space: por distância (raio pequeno)
+          const dx = info.x - myInfo.x;
+          const dy = info.y - myInfo.y;
+          vol = this.computeVolume(Math.sqrt(dx * dx + dy * dy));
+        }
       }
-
-      // Bolha de conversa privada (mesma zona). Avaliada ANTES da regra de
-      // sala/distância pra poder "abaixar" o áudio mesmo dentro de uma sala.
-      const myBub = myInfo.bubbleId || "";
-      const peerBub = info.bubbleId || "";
-      if (myBub && myBub === peerBub) {
-        peer.audioElement.volume = 1.0; // mesma bolha → cheio
-        return;
-      }
-      if (myBub || peerBub) {
-        // Alguém está numa bolha mas não juntos → áudio baixo (não mudo)
-        peer.audioElement.volume = BUBBLE_OUTSIDE_VOL;
-        return;
-      }
-
-      // Mesma sala isolada (qualquer coisa diferente de "open") → 100% volume.
-      // Dentro de uma sala, sempre se ouvem (premissa de "reunião").
-      if (myZone !== "open") {
-        peer.audioElement.volume = 1.0;
-        return;
-      }
-
-      // Open space: aplica distância (raio pequeno — só ouve quem está perto).
-      const dx = info.x - myInfo.x;
-      const dy = info.y - myInfo.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      peer.audioElement.volume = this.computeVolume(dist);
+      this.applyPeerVolume(peer, vol);
     });
   }
 
@@ -316,6 +370,18 @@ export class SpatialAudio {
     } catch (e) {
       console.warn("[spatial] falha ao trocar saída de áudio:", e);
     }
+  }
+
+  /** Ganho master da saída (peers). 1 = normal; > 1 amplifica. Persiste. */
+  public setPeerGain(v: number) {
+    const g = Number.isFinite(v) && v >= 0 ? v : 1;
+    this.peerMasterGain = g;
+    setPeerGain(g);
+    this.ensureAudioCtx(); // garante ctx ativo ao ajustar
+    // Não precisa reaplicar manualmente: updateVolumes roda a cada frame.
+  }
+  public getPeerGainValue(): number {
+    return this.peerMasterGain;
   }
 
   public async setCameraEnabled(enabled: boolean) {

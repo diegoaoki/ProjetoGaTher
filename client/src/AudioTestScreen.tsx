@@ -6,6 +6,8 @@ import {
   setMicDeviceId,
   getSpeakerDeviceId,
   setSpeakerDeviceId,
+  getPeerGain,
+  setPeerGain,
 } from "./audioPrefs";
 
 interface Props {
@@ -36,6 +38,7 @@ export default function AudioTestScreen({ onClose, spatial }: Props) {
   const [spkDevices, setSpkDevices] = useState<MediaDeviceInfo[]>([]);
   const [micId, setMicId] = useState(getMicDeviceId());
   const [spkId, setSpkId] = useState(getSpeakerDeviceId());
+  const [peerGain, setPeerGainState] = useState(getPeerGain());
 
   async function refreshDevices() {
     try {
@@ -68,6 +71,11 @@ export default function AudioTestScreen({ onClose, spatial }: Props) {
     setSpkId(id);
     setSpeakerDeviceId(id);
     spatial?.setSpeakerDevice(id);
+  }
+  function changePeerGain(v: number) {
+    setPeerGainState(v);
+    if (spatial) spatial.setPeerGain(v);
+    else setPeerGain(v); // pré-jogo: só persiste, aplica ao conectar
   }
 
   // Refs pra cleanup
@@ -229,6 +237,24 @@ export default function AudioTestScreen({ onClose, spatial }: Props) {
               Seleção de saída não suportada neste navegador — use as configs do sistema.
             </p>
           )}
+          <div style={{ marginTop: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
+              <span>Volume dos outros (peers)</span>
+              <strong>{Math.round(peerGain * 100)}%</strong>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={3}
+              step={0.05}
+              value={peerGain}
+              onChange={(e) => changePeerGain(parseFloat(e.target.value))}
+              style={{ width: "100%" }}
+            />
+            <p style={hintTextStyle}>
+              Acima de 100% amplifica (pra quando os outros estão baixos).
+            </p>
+          </div>
           <p style={hintTextStyle}>
             Você deve ouvir um som curto. Se não, ajuste o volume do seu dispositivo.
           </p>

@@ -5,6 +5,7 @@
 
 const MIC_KEY = "vo-mic-device-v1";
 const SPK_KEY = "vo-spk-device-v1";
+const PEER_GAIN_KEY = "vo-peer-gain-v1";
 
 function read(key: string): string {
   try {
@@ -33,4 +34,13 @@ export function getSpeakerDeviceId(): string {
 }
 export function setSpeakerDeviceId(id: string) {
   write(SPK_KEY, id);
+}
+
+/** Ganho de saída (peers). 1 = normal; pode passar de 1 (Web Audio). */
+export function getPeerGain(): number {
+  const v = parseFloat(read(PEER_GAIN_KEY));
+  return Number.isFinite(v) && v >= 0 ? v : 1;
+}
+export function setPeerGain(v: number) {
+  write(PEER_GAIN_KEY, String(v));
 }
