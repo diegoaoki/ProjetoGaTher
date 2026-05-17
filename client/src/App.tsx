@@ -107,6 +107,8 @@ export default function App() {
   const [editorBrush, setEditorBrush] = useState<string | null>(null);
   const [editorInfo, setEditorInfo] = useState<{ count: number; selected: boolean }>({ count: 0, selected: false });
   const [editorSaving, setEditorSaving] = useState(false);
+  // Miniaturas (dataURL) por tipo de móvel, geradas da textura Phaser
+  const [editorThumbs, setEditorThumbs] = useState<Record<string, string>>({});
   const sceneRef = useRef<OfficeScene | null>(null);
 
   // === Auth state ===
@@ -1044,6 +1046,32 @@ export default function App() {
       });
   }, [peerCards, visiblePeerIds, onlinePlayers, conn, currentZoneId, isMobile]);
 
+  // Gera as miniaturas dos móveis quando o editor abre (texturas Phaser
+  // já carregadas nessa altura). Pequeno retry caso ainda não estejam.
+  useEffect(() => {
+    if (!mapEditorOpen) return;
+    let tries = 0;
+    let timer: number | undefined;
+    const build = () => {
+      const scene = sceneRef.current;
+      if (!scene) return;
+      const map: Record<string, string> = {};
+      let missing = 0;
+      for (const t of EDITOR_FURNITURE_TYPES) {
+        const url = scene.getFurnitureThumbnail?.(t);
+        if (url) map[t] = url;
+        else missing++;
+      }
+      setEditorThumbs(map);
+      if (missing > 0 && tries < 5) {
+        tries++;
+        timer = window.setTimeout(build, 250);
+      }
+    };
+    build();
+    return () => { if (timer) window.clearTimeout(timer); };
+  }, [mapEditorOpen]);
+
   useEffect(() => {
     if (conn !== "connected" || !spatialRef.current || !localVideoRef.current) return;
     const tryAttach = () => {
@@ -1325,7 +1353,24 @@ export default function App() {
   // === Render: conectado (jogo + HUD) ===
   return (
     <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
-      <div ref={containerRef} style={{ position: "absolute", top: 0, left: 0, width: "100vw", height: "100vh", background: "#0f172a" }} />
+      <div
+        ref={containerRef}
+        style={{ position: "absolute", top: 0, left: 0, width: "100vw", height: "100vh", background: "#0f172a" }}
+        onDragOver={(e) => {
+          // Necessário pra o onDrop disparar (só quando arrastando móvel)
+          if (mapEditorOpen && e.dataTransfer.types.includes("text/vo-furn")) {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = "copy";
+          }
+        }}
+        onDrop={(e) => {
+          if (!mapEditorOpen) return;
+          const t = e.dataTransfer.getData("text/vo-furn");
+          if (!t) return;
+          e.preventDefault();
+          sceneRef.current?.addFurnitureAtScreen(t, e.clientX, e.clientY);
+        }}
+      />
 
       {/* HUD esquerdo: info do user. Some quando a lista de usuários ou
           o mini-mapa estão abertos (top-left compartilhado). */}
@@ -2212,31 +2257,79 @@ export default function App() {
         <div style={editorPanelStyle}>
           <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>🗺️ Editor de mapa</div>
           <div style={{ fontSize: 11, opacity: 0.75, marginBottom: 8 }}>
-            Etapa 1: mobília. Escolha um móvel e clique no mapa pra adicionar.
-            Arraste pra mover. Clique pra selecionar. Mesas (reserváveis) ficam travadas.
+            <b>Arraste</b> uma miniatura pro mapa pra adicionar (ou clique nela
+            e depois no mapa). Arraste itens no mapa pra mover; clique pra
+            selecionar. Mesas (reserváveis) ficam travadas.
           </div>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
+          <div style={{ display: "flex", gap: 4, marginBottom: 8 }}>
             <button
               onClick={() => { setEditorBrush(null); sceneRef.current?.setEditorBrush(null); }}
-              style={editorChip(editorBrush === null)}
+              style={{ ...editorChip(editorBrush === null), flex: 1 }}
             >
               ✋ Mover/selecionar
             </button>
             <button
               onClick={() => { setEditorBrush("wall"); sceneRef.current?.setEditorBrush("wall"); }}
-              style={editorChip(editorBrush === "wall")}
+              style={{ ...editorChip(editorBrush === "wall"), flex: 1 }}
             >
               🧱 Parede
             </button>
-            {EDITOR_FURNITURE_TYPES.map((t) => (
-              <button
-                key={t}
-                onClick={() => { setEditorBrush(t); sceneRef.current?.setEditorBrush(t); }}
-                style={editorChip(editorBrush === t)}
-              >
-                {t}
-              </button>
-            ))}
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(3, 1fr)",
+              gap: 6,
+              marginBottom: 8,
+              maxHeight: 260,
+              overflowY: "auto",
+            }}
+          >
+            {EDITOR_FURNITURE_TYPES.map((t) => {
+              const sel = editorBrush === t;
+              return (
+                <div
+                  key={t}
+                  title={t}
+                  draggable
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData("text/vo-furn", t);
+                    e.dataTransfer.effectAllowed = "copy";
+                    setEditorBrush(t);
+                    sceneRef.current?.setEditorBrush(t);
+                  }}
+                  onClick={() => { setEditorBrush(t); sceneRef.current?.setEditorBrush(t); }}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    gap: 2,
+                    padding: 4,
+                    height: 64,
+                    borderRadius: 6,
+                    cursor: "grab",
+                    background: sel ? "#2563eb" : "#0f172a",
+                    border: `1px solid ${sel ? "#60a5fa" : "#334155"}`,
+                    userSelect: "none",
+                  }}
+                >
+                  {editorThumbs[t] ? (
+                    <img
+                      src={editorThumbs[t]}
+                      alt={t}
+                      draggable={false}
+                      style={{ maxWidth: 40, maxHeight: 40, imageRendering: "pixelated", pointerEvents: "none" }}
+                    />
+                  ) : (
+                    <div style={{ fontSize: 16 }}>📦</div>
+                  )}
+                  <span style={{ fontSize: 9, opacity: 0.8, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {t}
+                  </span>
+                </div>
+              );
+            })}
           </div>
           {editorBrush === "wall" && (
             <div style={{ fontSize: 11, opacity: 0.75, marginBottom: 8 }}>

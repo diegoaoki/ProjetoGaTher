@@ -49,6 +49,7 @@ _(nenhum bug aberto no momento)_
 
 ### Interação
 - 🟢 [FEITO] menu de contexto right-click no avatar: "📢 Pedir pra vir aqui" (`summon` → toast + caminha até você, sem modal) + "📍 Ir até". Pan no vazio preservado.
+- ⚪ [pedido 2026-05-16] **melhorar a abertura das portas** — revisar animação/feedback/timing da abertura (hoje não está boa). Alinhar com o user o que incomoda.
 
 ### Visual / mapa
 - revisar visual da **Recepção** — só sofás + mesa de centro; falta balcão de atendimento, plantas, totem/quadro de boas-vindas, cadeiras de espera

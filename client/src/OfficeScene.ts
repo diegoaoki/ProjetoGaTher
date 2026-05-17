@@ -842,6 +842,41 @@ export class OfficeScene extends Phaser.Scene {
     this.notifyEditor();
   }
 
+  /** Miniatura (dataURL) da textura de um tipo de móvel, pro painel. */
+  public getFurnitureThumbnail(type: string, max = 44): string | null {
+    if (!this.textures.exists(type)) return null;
+    const src = this.textures.get(type).getSourceImage() as any;
+    const sw = src?.width, sh = src?.height;
+    if (!sw || !sh) return null;
+    const scale = Math.min(max / sw, max / sh, 4);
+    const w = Math.max(1, Math.round(sw * scale));
+    const h = Math.max(1, Math.round(sh * scale));
+    const c = document.createElement("canvas");
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext("2d");
+    if (!ctx) return null;
+    ctx.imageSmoothingEnabled = false; // pixel-art nítido
+    ctx.drawImage(src, 0, 0, sw, sh, 0, 0, w, h);
+    try {
+      return c.toDataURL();
+    } catch {
+      return null;
+    }
+  }
+
+  /** Adiciona um móvel na posição de TELA (drop do painel no canvas). */
+  public addFurnitureAtScreen(type: string, clientX: number, clientY: number) {
+    if (!this.editMode || !type) return;
+    const rect = this.game.canvas.getBoundingClientRect();
+    const wp = this.cameras.main.getWorldPoint(clientX - rect.left, clientY - rect.top);
+    const x = Phaser.Math.Clamp(this.snap(wp.x), 0, WORLD_W);
+    const y = Phaser.Math.Clamp(this.snap(wp.y), 0, WORLD_H);
+    this.editFurniture.push({ type, x, y, depth: 1, hitbox: hitboxFor(type) });
+    this.renderEditFurniture();
+    this.selectFurn(this.editFurniture.length - 1);
+  }
+
   /** Layout editado pra salvar (mobília + paredes editadas). */
   public getEditedLayout(): { furniture: FurnitureItem[]; walls: Wall[] } {
     return { furniture: this.editFurniture, walls: this.editWalls };

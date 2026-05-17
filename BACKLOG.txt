@@ -100,6 +100,9 @@ Interacao:
   - [FEITO] menu de contexto right-click no avatar: "Pedir pra vir
     aqui" (summon -> toast + caminha ate voce, sem modal) + "Ir ate".
     Pan no vazio preservado.
+  - [pedido 2026-05-16] melhorar a abertura das portas - revisar
+    animacao/feedback/timing (hoje nao esta boa). Alinhar com o
+    user o que incomoda.
 
 Visual / mapa:
   - revisar visual da Recepcao - so sofas + mesa de centro; falta balcao
