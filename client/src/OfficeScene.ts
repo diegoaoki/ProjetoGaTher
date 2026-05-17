@@ -1247,13 +1247,29 @@ export class OfficeScene extends Phaser.Scene {
     const tb = door.open ? bOpen : bClosed;
     const alpha = door.open ? 0 : 1;
 
+    // Depth: FECHADA fica por cima (door.y+100) pra esconder quem está
+    // atrás. ABERTA vai pra trás (-5) IMEDIATAMENTE — assim um avatar
+    // rápido que já entrou aparece NA FRENTE da folha que ainda some,
+    // em vez de "passar por baixo da porta". Resolve a sensação ruim.
+    // Depth pelo estado-alvo, aplicado JÁ: aberta vai pra trás (-5) →
+    // um avatar rápido que entrou aparece NA FRENTE da folha que ainda
+    // some (acaba a sensação de "passar por baixo da porta"). Fechada
+    // volta pro topo (door.y+100) pra ocluir quem está atrás.
+    const d = door.open ? -5 : door.y + 100;
+    a.setDepth(d);
+    b.setDepth(d);
+
     const prev = this.doorOpenState.get(doorId);
     this.doorOpenState.set(doorId, door.open);
     const shouldAnimate = prev !== undefined && prev !== door.open;
 
     if (shouldAnimate) {
-      this.tweens.add({ targets: a, x: ta.x, y: ta.y, alpha, duration: 280, ease: "Cubic.Out" });
-      this.tweens.add({ targets: b, x: tb.x, y: tb.y, alpha, duration: 280, ease: "Cubic.Out" });
+      // Abrir é rápido (sai logo do caminho); fechar lê melhor um
+      // pouco mais lento. Alpha resolve antes do slide terminar.
+      const dur = door.open ? 170 : 240;
+      this.tweens.add({ targets: a, x: ta.x, y: ta.y, duration: dur, ease: "Cubic.Out" });
+      this.tweens.add({ targets: b, x: tb.x, y: tb.y, duration: dur, ease: "Cubic.Out" });
+      this.tweens.add({ targets: [a, b], alpha, duration: Math.round(dur * 0.6), ease: "Linear" });
     } else {
       // Primeira render (ou sem mudança real): aplica direto, sem animar.
       this.tweens.killTweensOf(a);
