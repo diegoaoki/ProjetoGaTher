@@ -643,8 +643,9 @@ export class OfficeScene extends Phaser.Scene {
       if (item.type === "desk" && item.deskId) {
         const deskId = item.deskId;
         sprite.setInteractive({ useHandCursor: true });
-        sprite.on("pointerdown", () => {
+        sprite.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
           if (this.editMode) return;
+          if (pointer.rightButtonDown()) return; // right-click = pan, não mesa
           this.onDeskClick?.(deskId);
         });
       }
