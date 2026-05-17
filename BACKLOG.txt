@@ -133,8 +133,11 @@ Sidebar:
     -> deskOfUser (userId->deskId); clica -> navigateTo (caminhada A*,
     igual "minha mesa") ate a mesa via getDeskCatalog(). Offline sem
     mesa = botao translucido/desabilitado. Sem mudanca no server.
-  - indicador "esta falando agora" (microfone animado) - parcialmente
-    feito: badge via activeSpeakerIds ja existe; revisar se esta completo
+  - [FEITO - revisado] indicador "esta falando agora" - gap corrigido:
+    ActiveSpeakersChanged so via remotos; agora SpatialAudio.onLocalSpeaking
+    detecta o participante local -> anel verde no proprio avatar
+    (setMySpeaking, que existia mas nunca era chamado) + badge no "voce"
+    da sidebar. Remotos ja ok.
 
 
 ------------------------------------------------------------------------------

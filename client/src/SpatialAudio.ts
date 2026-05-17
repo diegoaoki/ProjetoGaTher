@@ -151,6 +151,9 @@ export class SpatialAudio {
   }
 
   public onPeerSpeaking?: (identity: string, speaking: boolean) => void;
+  /** Eu mesmo comecei/parei de falar (detecção de voz do LiveKit). */
+  public onLocalSpeaking?: (speaking: boolean) => void;
+  private localSpeaking = false;
   public onPeerJoined?: (identity: string) => void;
   public onPeerLeft?: (identity: string) => void;
   public onCameraTrack?: (identity: string, element: HTMLVideoElement) => void;
@@ -252,6 +255,15 @@ export class SpatialAudio {
           this.onPeerSpeaking?.(id, nowSpeaking);
         }
       });
+      // O participante local também entra na lista do LiveKit quando fala —
+      // mas não está em `this.peers`, então tratamos à parte (anel próprio
+      // + badge 🎙️ no "você" da sidebar).
+      const meId = this.localParticipant?.identity;
+      const meSpeaking = !!meId && speakingIds.has(meId);
+      if (this.localSpeaking !== meSpeaking) {
+        this.localSpeaking = meSpeaking;
+        this.onLocalSpeaking?.(meSpeaking);
+      }
     });
 
     // Local screen share: pra mostrar balão em cima do meu próprio avatar

@@ -949,6 +949,17 @@ export default function App() {
         }
       };
 
+      // Eu mesmo falando: anel verde no meu avatar + 🎙️ no "você" da sidebar.
+      spatial.onLocalSpeaking = (speaking) => {
+        sceneRef.current?.setMySpeaking(speaking);
+        const mySid = room.sessionId;
+        setActiveSpeakerIds((prev) => {
+          const next = new Set(prev);
+          if (speaking) next.add(mySid); else next.delete(mySid);
+          return next;
+        });
+      };
+
       spatialRef.current = spatial;
       setAudioStatus("");
       setConn("connected");

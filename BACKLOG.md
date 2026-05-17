@@ -66,7 +66,7 @@ _(nenhum bug aberto no momento)_
 ### Sidebar
 - 🟢 [FEITO `1f8d269`] mostrar usuários **offline** — `GET /users` (presence.ts + endpoint autenticado); sidebar mescla diretório com state.players, bolinha verde/cinza, ações só pros online
 - 🟢 [FEITO] botão **🪑 "ir até a mesa de X"** (online **e offline**) — client lê `roomRef.state.desks` (hidratado do Postgres no boot, inclui offline) → `deskOfUser` (userId→deskId); clica → `navigateTo` (caminhada A*, igual "minha mesa") até a mesa via `getDeskCatalog()`. Offline sem mesa = botão translúcido/desabilitado. Sem mudança no server.
-- indicador "está falando agora" (🎙️ animado) — *parcialmente feito: badge via `activeSpeakerIds` já existe; revisar se está completo*
+- 🟢 [FEITO — revisado] indicador "está falando agora" (🎙️ animado) — gap corrigido: `ActiveSpeakersChanged` só via remotos; agora `SpatialAudio.onLocalSpeaking` detecta o participante local → anel verde no próprio avatar (`setMySpeaking`, que existia mas nunca era chamado) + badge 🎙️ no "você" da sidebar. Remotos já ok.
 
 ---
 
