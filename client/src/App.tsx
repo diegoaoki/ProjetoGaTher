@@ -278,6 +278,9 @@ export default function App() {
   const [myDeskId, setMyDeskId] = useState<string | null>(null);
   // Toast efêmero — usado pra confirmação de claim/release e mensagens de erro do server
   const [deskToast, setDeskToast] = useState<{ text: string; tone: "info" | "error" } | null>(null);
+  const [deskAction, setDeskAction] = useState<
+    { deskId: string; free: boolean; mine: boolean; ownerName?: string } | null
+  >(null);
 
   // === Zona atual (sala ou open space) — pra mostrar no HUD ===
   const [currentZoneId, setCurrentZoneId] = useState<string>("open");
@@ -506,6 +509,17 @@ export default function App() {
           });
         };
         scene.onDeskError = (msg) => setDeskToast({ text: msg, tone: "error" });
+        scene.onDeskClick = (deskId) => {
+          const st: any = roomRef.current?.state;
+          const desk = st?.desks?.get?.(deskId);
+          const mine = !!desk && desk.ownerId === session.user.id;
+          setDeskAction({
+            deskId,
+            free: !desk,
+            mine,
+            ownerName: desk && !mine ? desk.ownerName : undefined,
+          });
+        };
       }, 100);
     };
 
@@ -1652,11 +1666,11 @@ export default function App() {
       {nearbyDesk && (
         <div style={deskHintStyle}>
           {nearbyDesk.isMine ? (
-            <>Aperte <kbd style={kbdStyle}>E</kbd> pra liberar sua mesa</>
+            <>Clique na mesa pra liberar (ou <kbd style={kbdStyle}>E</kbd>)</>
           ) : nearbyDesk.ownerName ? (
             <>Mesa de <strong>{nearbyDesk.ownerName}</strong></>
           ) : (
-            <>Aperte <kbd style={kbdStyle}>E</kbd> pra reservar essa mesa</>
+            <>Clique na mesa pra reservar (ou <kbd style={kbdStyle}>E</kbd>)</>
           )}
         </div>
       )}
@@ -1834,6 +1848,77 @@ export default function App() {
             >
               Fechar
             </button>
+          </div>
+        </div>
+      )}
+
+      {deskAction && (
+        <div style={modalStyle} onClick={() => setDeskAction(null)}>
+          <div style={{ ...cardStyle, width: 360 }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ margin: "0 0 8px", fontSize: 20 }}>🪑 Mesa</h2>
+            {deskAction.mine ? (
+              <>
+                <p style={{ margin: "0 0 18px", fontSize: 14 }}>
+                  Esta é a <strong>sua mesa</strong>. Quer liberá-la?
+                </p>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => setDeskAction(null)} style={{ ...buttonStyle, background: "#334155", color: "#e2e8f0" }}>Cancelar</button>
+                  <button
+                    onClick={() => {
+                      roomRef.current?.send("desk:release", { deskId: deskAction.deskId });
+                      setDeskAction(null);
+                    }}
+                    style={{ ...buttonStyle, background: "#b91c1c" }}
+                  >
+                    Liberar mesa
+                  </button>
+                </div>
+              </>
+            ) : !deskAction.free ? (
+              <>
+                <p style={{ margin: "0 0 18px", fontSize: 14 }}>
+                  Mesa de <strong>{deskAction.ownerName || "outra pessoa"}</strong>.
+                </p>
+                <button onClick={() => setDeskAction(null)} style={buttonStyle}>OK</button>
+              </>
+            ) : myDeskId ? (
+              <>
+                <p style={{ margin: "0 0 18px", fontSize: 14 }}>
+                  Você já tem uma mesa reservada. Liberar a atual e reservar esta?
+                </p>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => setDeskAction(null)} style={{ ...buttonStyle, background: "#334155", color: "#e2e8f0" }}>Cancelar</button>
+                  <button
+                    onClick={() => {
+                      // Server libera a anterior automaticamente no novo claim
+                      roomRef.current?.send("desk:claim", { deskId: deskAction.deskId });
+                      setDeskAction(null);
+                    }}
+                    style={buttonStyle}
+                  >
+                    Trocar de mesa
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p style={{ margin: "0 0 18px", fontSize: 14 }}>
+                  Reservar esta mesa pra você?
+                </p>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <button onClick={() => setDeskAction(null)} style={{ ...buttonStyle, background: "#334155", color: "#e2e8f0" }}>Cancelar</button>
+                  <button
+                    onClick={() => {
+                      roomRef.current?.send("desk:claim", { deskId: deskAction.deskId });
+                      setDeskAction(null);
+                    }}
+                    style={buttonStyle}
+                  >
+                    Reservar
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

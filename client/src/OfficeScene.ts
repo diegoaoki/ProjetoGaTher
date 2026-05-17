@@ -193,6 +193,8 @@ export class OfficeScene extends Phaser.Scene {
   public onNearbyDeskChange?: (info: { deskId: string; isMine: boolean; ownerName?: string } | null) => void;
   public onMyDeskChange?: (deskId: string | null) => void;
   public onDeskError?: (msg: string) => void;
+  /** Clique numa mesa (reserva): App abre o modal de reservar/liberar. */
+  public onDeskClick?: (deskId: string) => void;
 
   // === Callback de câmera (pra App.tsx mostrar hint "C pra centralizar") ===
   public onCameraFollowingChange?: (following: boolean) => void;
@@ -612,6 +614,17 @@ export class OfficeScene extends Phaser.Scene {
         this.tvSprite = sprite;
         this.tvX = item.x;
         this.tvY = item.y;
+      }
+
+      // Clicar numa mesa (deskId) → App abre modal de reservar/liberar.
+      // Desabilitado no editor de mapa (lá o clique edita o móvel).
+      if (item.type === "desk" && item.deskId) {
+        const deskId = item.deskId;
+        sprite.setInteractive({ useHandCursor: true });
+        sprite.on("pointerdown", () => {
+          if (this.editMode) return;
+          this.onDeskClick?.(deskId);
+        });
       }
 
       // Mesa-conversa: marca discreta no piso dos 3 lugares (sentado +
