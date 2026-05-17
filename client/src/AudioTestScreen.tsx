@@ -8,6 +8,8 @@ import {
   setSpeakerDeviceId,
   getPeerGain,
   setPeerGain,
+  getMirrorSelf,
+  setMirrorSelf,
 } from "./audioPrefs";
 
 interface Props {
@@ -15,6 +17,8 @@ interface Props {
   onClose: () => void;
   /** Sessão de áudio ativa (quando aberto em jogo) — pra trocar device ao vivo. */
   spatial?: SpatialAudio | null;
+  /** Avisa o App quando o usuário liga/desliga o espelhamento do vídeo. */
+  onMirrorChange?: (mirror: boolean) => void;
 }
 
 const sinkIdSupported =
@@ -25,7 +29,8 @@ const sinkIdSupported =
  * Tela pré-conexão pra usuário testar mic, speaker e câmera antes de entrar.
  * Não obrigatório — só botões. Pra dispensar, clica em "Entrar no escritório".
  */
-export default function AudioTestScreen({ onClose, spatial }: Props) {
+export default function AudioTestScreen({ onClose, spatial, onMirrorChange }: Props) {
+  const [mirror, setMirror] = useState(getMirrorSelf());
   const [micLevel, setMicLevel] = useState(0);   // 0..1
   const [micActive, setMicActive] = useState(false);
   const [micError, setMicError] = useState("");
@@ -272,11 +277,29 @@ export default function AudioTestScreen({ onClose, spatial }: Props) {
           </div>
           <div style={cameraPreviewWrap}>
             {cameraActive ? (
-              <video ref={videoRef} muted playsInline style={cameraVideoStyle} />
+              <video
+                ref={videoRef}
+                muted
+                playsInline
+                style={{ ...cameraVideoStyle, transform: mirror ? "scaleX(-1)" : "none" }}
+              />
             ) : (
               <p style={{ ...hintTextStyle, margin: 0 }}>Preview aparece aqui após testar</p>
             )}
           </div>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, marginTop: 8, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={mirror}
+              onChange={(e) => {
+                const v = e.target.checked;
+                setMirror(v);
+                setMirrorSelf(v);
+                onMirrorChange?.(v);
+              }}
+            />
+            Espelhar meu vídeo (como num espelho)
+          </label>
           {cameraError && <p style={errorTextStyle}>{cameraError}</p>}
         </div>
 

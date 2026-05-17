@@ -9,6 +9,7 @@ import AdminPanel from "./AdminPanel";
 import ChatPanel from "./ChatPanel";
 import MobileControls from "./MobileControls";
 import AudioTestScreen from "./AudioTestScreen";
+import { getMirrorSelf } from "./audioPrefs";
 import { ChatMessage, playNotificationBeep } from "./chat";
 import { useIsMobile } from "./useIsMobile";
 import { requestNotificationPermissionOnce, showNotificationIfHidden } from "./notifications";
@@ -94,6 +95,7 @@ export default function App() {
   const containerRef = useRef<HTMLDivElement>(null);
   const localVideoRef = useRef<HTMLDivElement>(null);
   const cardsContainerRef = useRef<HTMLDivElement>(null);
+  const roomCardsRef = useRef<HTMLDivElement>(null);
   const fullscreenVideoRef = useRef<HTMLDivElement>(null);
   const gameRef = useRef<Phaser.Game | null>(null);
   const roomRef = useRef<Room | null>(null);
@@ -128,6 +130,7 @@ export default function App() {
   const [peerCards, setPeerCards] = useState<PeerCard[]>([]);
   const [visiblePeerIds, setVisiblePeerIds] = useState<Set<string>>(new Set());
   const [fullscreenStream, setFullscreenStream] = useState<MediaStream | null>(null);
+  const [mirrorSelf, setMirrorSelf] = useState(getMirrorSelf());
 
   // === Modal de edição de avatar durante sessão ===
   const [editingAvatar, setEditingAvatar] = useState(false);
@@ -913,12 +916,21 @@ export default function App() {
   }
 
 
-  // Renderiza cards laterais filtrando peerCards pelos visíveis (mesma zona/perto)
+  // Renderiza os vídeos dos peers visíveis. Em sala (não open space),
+  // vai pra um grid maior centralizado ("primeiro plano"); no open
+  // space, fica na coluninha lateral discreta.
   useEffect(() => {
     if (conn !== "connected") return;
-    if (!cardsContainerRef.current) return;
-    const c = cardsContainerRef.current;
-    c.innerHTML = "";
+    const side = cardsContainerRef.current;
+    const room = roomCardsRef.current;
+    if (side) side.innerHTML = "";
+    if (room) room.innerHTML = "";
+
+    const inRoom = !!currentZoneId && currentZoneId !== "open";
+    const target = inRoom ? room : side;
+    if (!target) return;
+    const W = inRoom ? 220 : 120;
+    const H = inRoom ? 165 : 80;
 
     peerCards
       .filter((card) => visiblePeerIds.has(card.identity))
@@ -928,9 +940,9 @@ export default function App() {
         const displayName = player?.name || userId.slice(0, 8);
 
         const wrap = document.createElement("div");
-        wrap.style.cssText = "position:relative;border:1px solid #334155;border-radius:6px;overflow:hidden;background:#000;";
-        card.element.style.width = "120px";
-        card.element.style.height = "80px";
+        wrap.style.cssText = "position:relative;border:1px solid #334155;border-radius:8px;overflow:hidden;background:#000;";
+        card.element.style.width = `${W}px`;
+        card.element.style.height = `${H}px`;
         card.element.style.objectFit = "cover";
         card.element.style.display = "block";
 
@@ -939,10 +951,10 @@ export default function App() {
         lbl.style.cssText = "position:absolute;bottom:0;left:0;right:0;background:#000a;color:#fff;font-size:11px;padding:2px 6px;";
         wrap.appendChild(card.element);
         wrap.appendChild(lbl);
-        c.appendChild(wrap);
+        target.appendChild(wrap);
         safePlay(card.element);
       });
-  }, [peerCards, visiblePeerIds, onlinePlayers, conn]);
+  }, [peerCards, visiblePeerIds, onlinePlayers, conn, currentZoneId]);
 
   useEffect(() => {
     if (conn !== "connected" || !spatialRef.current || !localVideoRef.current) return;
@@ -953,13 +965,19 @@ export default function App() {
         el.style.width = "160px";
         el.style.height = "120px";
         el.style.objectFit = "cover";
-        el.style.transform = "scaleX(-1)";
+        el.style.transform = mirrorSelf ? "scaleX(-1)" : "none";
         localVideoRef.current.appendChild(el);
       }
     };
     const t = setTimeout(tryAttach, 800);
     return () => clearTimeout(t);
-  }, [conn, camOn]);
+  }, [conn, camOn, mirrorSelf]);
+
+  // Aplica o espelhamento na hora (sem esperar o re-attach de 800ms)
+  useEffect(() => {
+    const el = localVideoRef.current?.querySelector("video") as HTMLVideoElement | null;
+    if (el) el.style.transform = mirrorSelf ? "scaleX(-1)" : "none";
+  }, [mirrorSelf]);
 
   useEffect(() => {
     if (!fullscreenVideoRef.current || !fullscreenStream) return;
@@ -1566,8 +1584,17 @@ export default function App() {
 
       <div ref={cardsContainerRef} style={{
         position: "absolute", top: 16, right: 16,
-        display: visiblePeerIds.size > 0 ? "flex" : "none",
+        display: visiblePeerIds.size > 0 && currentZoneId === "open" ? "flex" : "none",
         flexDirection: "column", gap: 4, zIndex: 10,
+      }} />
+
+      {/* Primeiro plano: grid maior centralizado quando você está numa sala */}
+      <div ref={roomCardsRef} style={{
+        position: "absolute", top: 70, left: "50%",
+        transform: "translateX(-50%)",
+        display: visiblePeerIds.size > 0 && !!currentZoneId && currentZoneId !== "open" ? "flex" : "none",
+        flexWrap: "wrap", justifyContent: "center", gap: 8,
+        maxWidth: "80vw", zIndex: 9,
       }} />
 
 
@@ -1999,7 +2026,11 @@ export default function App() {
       )}
 
       {audioTestOpen && (
-        <AudioTestScreen onClose={() => setAudioTestOpen(false)} spatial={spatialRef.current} />
+        <AudioTestScreen
+          onClose={() => setAudioTestOpen(false)}
+          spatial={spatialRef.current}
+          onMirrorChange={(v) => setMirrorSelf(v)}
+        />
       )}
 
       {confirmingLogout && (

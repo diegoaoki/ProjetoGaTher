@@ -6,6 +6,7 @@
 const MIC_KEY = "vo-mic-device-v1";
 const SPK_KEY = "vo-spk-device-v1";
 const PEER_GAIN_KEY = "vo-peer-gain-v1";
+const MIRROR_KEY = "vo-mirror-self-v1";
 
 function read(key: string): string {
   try {
@@ -43,4 +44,12 @@ export function getPeerGain(): number {
 }
 export function setPeerGain(v: number) {
   write(PEER_GAIN_KEY, String(v));
+}
+
+/** Espelhar (scaleX -1) o próprio vídeo. Default: true (mais natural). */
+export function getMirrorSelf(): boolean {
+  return read(MIRROR_KEY) !== "0";
+}
+export function setMirrorSelf(on: boolean) {
+  write(MIRROR_KEY, on ? "1" : "0");
 }

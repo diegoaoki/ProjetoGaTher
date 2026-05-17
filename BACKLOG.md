@@ -58,8 +58,8 @@ _(nenhum bug aberto no momento)_
 
 ### Áudio / câmera
 - áudio/microfone: relatos de microfone abafado — UI pra (a) escolher dispositivo de entrada, (b) ajustar ganho do mic, (c) ajustar volume de saída/peers *(coberto pelas prioridades acima)*
-- câmera: dentro de sala (não open space), trazer cards de vídeo dos peers pra "primeiro plano" — destaque maior, grid centralizado
-- câmera: opção "espelhar" o vídeo local (`transform: scaleX(-1)`) — toggle no painel
+- 🟢 [FEITO] câmera "primeiro plano em sala": fora do open space, peers num grid maior centralizado; no open space, coluninha lateral
+- 🟢 [FEITO] câmera "espelhar" o vídeo local — toggle no painel 🎧 (audioPrefs, default ligado)
 - volume: aumentar limite máximo do ganho do peer (LiveKit limita a 1.0; subir até 2.0 via Web Audio) + slider individual por peer
 - 🟢 [FEITO `4657878`] mesa = zona de áudio (mesa-conversa): tecla G (fantasma) → ocupa 1 de 3 slots numa mesa; mesma mesa = áudio isolado total. Coexiste com reserva (E).
 
