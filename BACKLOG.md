@@ -45,7 +45,7 @@ _(nenhum bug aberto no momento)_
 - editor de mapas
 
 ### Interação
-- menu de contexto (right-click) em outro player com opção "vir para cá" — chama o outro até a minha posição (semelhante ao convite, sem modal aceitar/recusar — ou com, a definir)
+- 🟢 [FEITO] menu de contexto right-click no avatar: "📢 Pedir pra vir aqui" (`summon` → toast + caminha até você, sem modal) + "📍 Ir até". Pan no vazio preservado.
 
 ### Visual / mapa
 - revisar visual da **Recepção** — só sofás + mesa de centro; falta balcão de atendimento, plantas, totem/quadro de boas-vindas, cadeiras de espera

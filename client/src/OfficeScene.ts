@@ -195,6 +195,14 @@ export class OfficeScene extends Phaser.Scene {
   public onDeskError?: (msg: string) => void;
   /** Clique numa mesa (reserva): App abre o modal de reservar/liberar. */
   public onDeskClick?: (deskId: string) => void;
+  /** Right-click num avatar de outro player → App abre menu de contexto. */
+  public onPeerContextMenu?: (info: {
+    sessionId: string;
+    userId: string;
+    name: string;
+    clientX: number;
+    clientY: number;
+  }) => void;
 
   // === Callback de câmera (pra App.tsx mostrar hint "C pra centralizar") ===
   public onCameraFollowingChange?: (following: boolean) => void;
@@ -327,6 +335,20 @@ export class OfficeScene extends Phaser.Scene {
     this.input.mouse?.disableContextMenu();
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
       if (pointer.rightButtonDown()) {
+        // Right-click sobre um avatar → menu de contexto (não dá pan).
+        const over = this.input.hitTestPointer(pointer);
+        const hit = over.find((o: any) => o.getData && o.getData("rpSession"));
+        if (hit && this.onPeerContextMenu) {
+          const ev = pointer.event as MouseEvent;
+          this.onPeerContextMenu({
+            sessionId: (hit as any).getData("rpSession"),
+            userId: (hit as any).getData("rpUser") || "",
+            name: (hit as any).getData("rpName") || "",
+            clientX: ev?.clientX ?? pointer.x,
+            clientY: ev?.clientY ?? pointer.y,
+          });
+          return;
+        }
         this.startPan(pointer.x, pointer.y);
       }
     });
@@ -1595,6 +1617,11 @@ export class OfficeScene extends Phaser.Scene {
     const container = this.add.container(player.x, player.y, [ring, sprite, nameText]);
     container.setDepth(player.y);
     sprite.play(`${charId}_down_idle`);
+    // Pra right-click → menu de contexto (achar via hitTestPointer)
+    sprite.setInteractive();
+    sprite.setData("rpSession", sessionId);
+    sprite.setData("rpUser", player.userId || "");
+    sprite.setData("rpName", player.name || "");
     if (player.role === "visitor") {
       if (player.visitorOk) {
         // Visitante já autorizado (ex: entrei e ele já estava aqui)

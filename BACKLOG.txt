@@ -80,9 +80,9 @@ Auth / infra:
   - editor de mapas
 
 Interacao:
-  - menu de contexto (right-click) em outro player com opcao "vir para
-    ca" - chama o outro ate a minha posicao (semelhante ao convite, sem
-    modal aceitar/recusar - ou com, a definir)
+  - [FEITO] menu de contexto right-click no avatar: "Pedir pra vir
+    aqui" (summon -> toast + caminha ate voce, sem modal) + "Ir ate".
+    Pan no vazio preservado.
 
 Visual / mapa:
   - revisar visual da Recepcao - so sofas + mesa de centro; falta balcao

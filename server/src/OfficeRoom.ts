@@ -410,6 +410,21 @@ export class OfficeRoom extends Room<OfficeState> {
       const player = this.state.players.get(client.sessionId);
       if (player) this.leaveDeskConversation(client.sessionId, player);
     });
+
+    // "Vir para cá": chama outro player até a minha posição (sem modal).
+    this.onMessage<{ targetSessionId: string }>("summon", (client, msg) => {
+      const me = this.state.players.get(client.sessionId);
+      if (!me) return;
+      const targetSid = String(msg?.targetSessionId || "");
+      if (!targetSid || targetSid === client.sessionId) return;
+      const target = this.clients.find((c) => c.sessionId === targetSid);
+      if (!target) return;
+      target.send("summon:incoming", {
+        fromName: me.name,
+        x: me.x,
+        y: me.y,
+      });
+    });
     this.onMessage<DeskClaimMessage>("desk:release", (client, msg) =>
       this.handleDeskRelease(client, msg)
     );

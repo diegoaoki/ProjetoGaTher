@@ -281,6 +281,9 @@ export default function App() {
   const [deskAction, setDeskAction] = useState<
     { deskId: string; free: boolean; mine: boolean; ownerName?: string } | null
   >(null);
+  const [peerMenu, setPeerMenu] = useState<
+    { sessionId: string; userId: string; name: string; x: number; y: number } | null
+  >(null);
 
   // === Zona atual (sala ou open space) — pra mostrar no HUD ===
   const [currentZoneId, setCurrentZoneId] = useState<string>("open");
@@ -520,6 +523,15 @@ export default function App() {
             ownerName: desk && !mine ? desk.ownerName : undefined,
           });
         };
+        scene.onPeerContextMenu = (info) => {
+          setPeerMenu({
+            sessionId: info.sessionId,
+            userId: info.userId,
+            name: info.name,
+            x: info.clientX,
+            y: info.clientY,
+          });
+        };
       }, 100);
     };
 
@@ -661,6 +673,12 @@ export default function App() {
       });
       room.onMessage("bubble:error", (msg: { error: string }) => {
         setSocialToast({ text: msg?.error || "Falha na bolha", tone: "error" });
+      });
+
+      // "Vir para cá": alguém te chamou → toast + caminha até lá
+      room.onMessage("summon:incoming", (msg: { fromName: string; x: number; y: number }) => {
+        setSocialToast({ text: `${msg.fromName} chamou você`, tone: "info" });
+        sceneRef.current?.navigateTo(msg.x, msg.y);
       });
 
       // === Modo visitante ===
@@ -1843,6 +1861,53 @@ export default function App() {
               style={{ ...buttonStyle, background: "#334155", color: "#e2e8f0" }}
             >
               Fechar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {peerMenu && (
+        <div
+          style={{ position: "fixed", inset: 0, zIndex: 60 }}
+          onClick={() => setPeerMenu(null)}
+          onContextMenu={(e) => { e.preventDefault(); setPeerMenu(null); }}
+        >
+          <div
+            style={{
+              position: "absolute",
+              left: Math.min(peerMenu.x, window.innerWidth - 200),
+              top: Math.min(peerMenu.y, window.innerHeight - 110),
+              minWidth: 180,
+              background: "#0f172af2",
+              border: "1px solid #334155",
+              borderRadius: 8,
+              padding: 4,
+              color: "#e2e8f0",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontSize: 12, fontWeight: 700, padding: "6px 8px", opacity: 0.8 }}>
+              {peerMenu.name}
+            </div>
+            <button
+              onClick={() => {
+                roomRef.current?.send("summon", { targetSessionId: peerMenu.sessionId });
+                setSocialToast({ text: `Você chamou ${peerMenu.name}`, tone: "info" });
+                setPeerMenu(null);
+              }}
+              style={menuItemStyle}
+            >
+              📢 Pedir pra vir aqui
+            </button>
+            <button
+              onClick={() => {
+                const p: any = (roomRef.current as any)?.state?.players?.get?.(peerMenu.sessionId);
+                if (p && sceneRef.current) sceneRef.current.navigateTo(p.x, p.y);
+                setPeerMenu(null);
+              }}
+              style={menuItemStyle}
+            >
+              📍 Ir até {peerMenu.name}
             </button>
           </div>
         </div>
