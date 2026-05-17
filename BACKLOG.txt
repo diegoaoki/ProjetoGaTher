@@ -134,6 +134,12 @@ Visual / mapa:
     CCTV + 2 consoles+cadeiras + rack + camera + planta. Verificado:
     sala segue no-entry pra todos (blocker de layout.rooms no
     refreshDynamicWalls) e o editor nao remove (rooms e do codigo).
+  - [FEITO] porta da Seguranca nao abre + aviso ao insistir -
+    tickDoors forca door-security_room sempre fechada e manda
+    room:error ("Area restrita") com throttle 2s/player. Server-only.
+  - [pedido 2026-05-17] ao tentar entrar na Seguranca, mostrar na
+    tela um painel de fechadura (teclado de senha + digital) em vez
+    do toast; se o user digitar algo -> "ACESSO NEGADO". (proximo)
   - redesign do mapa baseado em print de referencia do user (verificar
     Downloads/Erro.jpeg ou similar - nao localizado ainda) - possivelmente
     reorganizar departamentos, mobilia, cores

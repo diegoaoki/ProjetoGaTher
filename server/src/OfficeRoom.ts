@@ -744,6 +744,31 @@ export class OfficeRoom extends Room<OfficeState> {
     const FRONT = DOOR_OPEN_RADIUS_PX;       // alcance perpendicular à porta
     const SIDE = 40;                          // tolerância lateral (paralela à parede)
     this.state.doors.forEach((door, doorId) => {
+      // Sala de Segurança: porta NUNCA abre pra avatar normal (área
+      // restrita / no-entry). Se a pessoa insistir (fica na frente da
+      // porta), avisa — com throttle por player pra não floodar.
+      if (doorId === "door-security_room") {
+        if (door.open) door.open = false;
+        this.state.players.forEach((p, sid) => {
+          const dx = Math.abs(p.x - door.x);
+          const dy = Math.abs(p.y - door.y);
+          const inFront =
+            door.orientation === "vertical"
+              ? dx < FRONT && dy < SIDE
+              : dy < FRONT && dx < SIDE;
+          if (!inFront) return;
+          const last = this.lastBlockedNotify.get(sid) || 0;
+          if (now - last > BLOCKED_NOTIFY_THROTTLE_MS) {
+            this.lastBlockedNotify.set(sid, now);
+            const c = this.clients.find((cl) => cl.sessionId === sid);
+            c?.send("room:error", {
+              error: "🔒 Área restrita — só a Segurança tem acesso. A porta não abre.",
+            });
+          }
+        });
+        return; // pula a lógica normal de abrir/fechar
+      }
+
       let nearby = false;
       this.state.players.forEach((p) => {
         const dx = Math.abs(p.x - door.x);
