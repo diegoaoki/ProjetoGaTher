@@ -106,6 +106,16 @@ const LOCKABLE_ROOMS: Record<string, { x: number; y: number; w: number; h: numbe
 };
 
 /**
+ * Escadas rolantes (espelha ESCALATORS de client/src/OfficeLayout.ts —
+ * manter em sync, mesma lógica do desks.ts/doors.ts). Pisar no pad
+ * estando em `fromFloor` → teleporta pra `to`. y ≥ 60*32 = 2º andar.
+ */
+const ESCALATORS = [
+  { fromFloor: 1, pad: { x: 40 * 32, y: 27 * 32, r: 26 }, to: { x: 40 * 32, y: 65 * 32, floor: 2 } },
+  { fromFloor: 2, pad: { x: 40 * 32, y: 63 * 32, r: 26 }, to: { x: 40 * 32, y: 29 * 32, floor: 1 } },
+];
+
+/**
  * Throttle pra "room:blocked" — server só notifica cliente 1x a cada 2s
  * pra não floodar quando o player segura tecla contra a porta trancada.
  */
@@ -220,6 +230,8 @@ export class OfficeRoom extends Room<OfficeState> {
 
   /** Timestamp (ms) da última vez que cada porta teve player próximo. */
   private doorLastActivity = new Map<string, number>();
+  /** Cooldown (ms epoch) por sessionId pra não quicar na escada rolante. */
+  private escalatorCooldown = new Map<string, number>();
 
   /**
    * Cadeado: userIds aprovados a entrar em cada sala trancada (além do dono).
@@ -365,8 +377,11 @@ export class OfficeRoom extends Room<OfficeState> {
       this.state.doors.set(cfg.doorId, d);
     }
 
-    // Tick periódico: abre/fecha portas baseado em proximidade dos players
-    this.setSimulationInterval((deltaTime) => this.tickDoors(), 250);
+    // Tick periódico: abre/fecha portas + escada rolante (troca de andar)
+    this.setSimulationInterval((deltaTime) => {
+      this.tickDoors();
+      this.tickEscalators();
+    }, 250);
 
     this.onMessage<DeskClaimMessage>("desk:claim", (client, msg) =>
       this.handleDeskClaim(client, msg)
@@ -790,6 +805,41 @@ export class OfficeRoom extends Room<OfficeState> {
         if (door.open && now - lastActivity > DOOR_CLOSE_TIMEOUT_MS) {
           door.open = false;
         }
+      }
+    });
+  }
+
+  /**
+   * Escada rolante: quem pisa no pad da escada do seu andar é
+   * teleportado pro outro andar. Server-autoritativo + manda
+   * `floor:moved` pro client fazer forceTeleport (evita o race do
+   * authoritative-light). Cooldown evita quicar.
+   */
+  private tickEscalators() {
+    const now = Date.now();
+    this.state.players.forEach((p, sid) => {
+      const cd = this.escalatorCooldown.get(sid) || 0;
+      if (now < cd) return;
+      for (const esc of ESCALATORS) {
+        if ((p.floor || 1) !== esc.fromFloor) continue;
+        const dx = p.x - esc.pad.x;
+        const dy = p.y - esc.pad.y;
+        if (Math.sqrt(dx * dx + dy * dy) > esc.pad.r) continue;
+        // Sobe/desce
+        p.x = esc.to.x;
+        p.y = esc.to.y;
+        p.floor = esc.to.floor;
+        p.isMoving = false;
+        // zona: 2º andar = "floor2" (áudio isolado pela regra de zona +
+        // pela regra de floor no SpatialAudio). No térreo o client
+        // recalcula e manda "zone".
+        p.zoneId = esc.to.floor === 2 ? "floor2" : "open";
+        if (p.bubbleId) p.bubbleId = ""; // bolha não cruza andar
+        if (p.deskSeat) { p.deskSeat = ""; p.deskSlot = -1; }
+        this.escalatorCooldown.set(sid, now + 2000);
+        const c = this.clients.find((cl) => cl.sessionId === sid);
+        c?.send("floor:moved", { x: p.x, y: p.y, floor: p.floor });
+        break;
       }
     });
   }

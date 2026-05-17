@@ -78,6 +78,8 @@ export class OfficeScene extends Phaser.Scene {
   private myDirection = "down";
 
   private remotePlayers = new Map<string, RemotePlayer>();
+  /** Andar do meu avatar (1|2). Atualizado via setMyFloor (floor:moved). */
+  private myFloor = 1;
   private myUserId = "";
 
   // === Mesas reserváveis ===
@@ -197,8 +199,8 @@ export class OfficeScene extends Phaser.Scene {
   private readonly BALLOON_HEARING_RADIUS = 60;
 
   public onPositionsUpdate?: (
-    myInfo: { x: number; y: number; zoneId: string; bubbleId: string; role: string; visitorOk: boolean; deskSeat: string },
-    peerInfo: Map<string, { x: number; y: number; zoneId: string; bubbleId: string; role: string; visitorOk: boolean; deskSeat: string }>
+    myInfo: { x: number; y: number; zoneId: string; bubbleId: string; role: string; visitorOk: boolean; deskSeat: string; floor: number },
+    peerInfo: Map<string, { x: number; y: number; zoneId: string; bubbleId: string; role: string; visitorOk: boolean; deskSeat: string; floor: number }>
   ) => void;
   public onZoneChange?: (zone: string | null) => void;
 
@@ -950,6 +952,13 @@ export class OfficeScene extends Phaser.Scene {
       const spr = this.add.image(item.x, item.y, item.type);
       spr.setOrigin(0.5, 0.5);
       spr.setDepth(item.y);
+      if (item.fixed) {
+        // Estrutura fixa (escada rolante): visível mas NÃO editável
+        // (sem interação/drag; applyLayoutOverride a re-anexa do código).
+        spr.setAlpha(0.85);
+        this.editSprites.push(spr);
+        return;
+      }
       spr.setInteractive({ draggable: true, useHandCursor: true });
       this.input.setDraggable(spr);
       spr.setData("kind", "furn");
@@ -1873,6 +1882,11 @@ export class OfficeScene extends Phaser.Scene {
     this.teleportTo(x, y);
   }
 
+  /** Define o andar do meu avatar (chamado no `floor:moved`). */
+  public setMyFloor(floor: number) {
+    this.myFloor = floor;
+  }
+
   /** Teleporte server-autoritativo-light: move e sincroniza imediatamente. */
   private teleportTo(x: number, y: number) {
     if (!this.myContainer) return;
@@ -2046,7 +2060,13 @@ export class OfficeScene extends Phaser.Scene {
     }
 
     const lerp = 0.2;
-    this.remotePlayers.forEach((rp) => {
+    this.remotePlayers.forEach((rp, sid) => {
+      // Esconde quem está em outro andar (isolamento de andar).
+      // No editor a visibilidade é controlada por setActorsVisible.
+      if (!this.editMode) {
+        const pf = (this.room.state as any)?.players?.get?.(sid)?.floor ?? 1;
+        rp.container.setVisible(pf === this.myFloor);
+      }
       const prevX = rp.container.x;
       const prevY = rp.container.y;
       rp.container.x = Phaser.Math.Linear(rp.container.x, rp.targetX, lerp);
@@ -2091,7 +2111,7 @@ export class OfficeScene extends Phaser.Scene {
     }
 
     if (this.onPositionsUpdate) {
-      const peerInfo = new Map<string, { x: number; y: number; zoneId: string; bubbleId: string; role: string; visitorOk: boolean; deskSeat: string }>();
+      const peerInfo = new Map<string, { x: number; y: number; zoneId: string; bubbleId: string; role: string; visitorOk: boolean; deskSeat: string; floor: number }>();
       const state: any = this.room.state;
       this.remotePlayers.forEach((rp, sessionId) => {
         const peerPlayer = state?.players?.get?.(sessionId);
@@ -2103,6 +2123,7 @@ export class OfficeScene extends Phaser.Scene {
           role: peerPlayer?.role || "user",
           visitorOk: peerPlayer?.visitorOk ?? true,
           deskSeat: peerPlayer?.deskSeat || "",
+          floor: peerPlayer?.floor ?? 1,
         });
       });
       const mySessionId = (this.room as any).sessionId;
@@ -2116,6 +2137,7 @@ export class OfficeScene extends Phaser.Scene {
           role: myPlayer?.role || "user",
           visitorOk: myPlayer?.visitorOk ?? true,
           deskSeat: myPlayer?.deskSeat || "",
+          floor: myPlayer?.floor ?? this.myFloor,
         },
         peerInfo
       );

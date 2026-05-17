@@ -142,6 +142,15 @@ Visual / mapa:
     fechadura: display + teclado numerico + leitor de digital);
     qualquer tentativa (4+ digitos / Enter / digital) -> "ACESSO
     NEGADO" com shake. Esc/X fecha.
+  - [FEITO] 2o andar + escada rolante: mundo estendido (2560x2720),
+    zona floor2 fechada (so via escada), Player.floor, ESCALATORS
+    client<->server, tickEscalators (server-autoritativo +
+    floor:moved/forceTeleport), audio 100% isolado entre andares
+    (regra de floor no SpatialAudio), avatares do outro andar
+    escondidos, HUD "N no 2o andar/terreo" + badge na sidebar,
+    escada fixa nao-editavel, 2o andar comeca c/ caixas + interior
+    editavel. Caveat: override antigo sem paredes do floor2 ->
+    "Restaurar layout padrao".
   - redesign do mapa baseado em print de referencia do user (verificar
     Downloads/Erro.jpeg ou similar - nao localizado ainda) - possivelmente
     reorganizar departamentos, mobilia, cores

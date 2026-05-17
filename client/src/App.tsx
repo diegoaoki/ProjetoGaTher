@@ -309,8 +309,11 @@ export default function App() {
     color: string;
     hairColor: string;
     isMe: boolean;
+    floor: number;
   }
   const [onlinePlayers, setOnlinePlayers] = useState<OnlinePlayer[]>([]);
+  // Andar do meu avatar (1|2) — pra HUD e isolar a contagem por andar.
+  const [myFloor, setMyFloor] = useState(1);
   // Diretório completo (todos cadastrados) — buscado ao abrir a sidebar.
   const [directory, setDirectory] = useState<DirectoryUser[]>([]);
   const [directoryErr, setDirectoryErr] = useState<string | null>(null);
@@ -575,6 +578,7 @@ export default function App() {
         color: p.color || "#4ade80",
         hairColor: p.hairColor || "#3b2c20",
         isMe: sessionId === room.sessionId,
+        floor: p.floor ?? 1,
       });
 
       // Snapshot inicial dos players já no state quando entramos
@@ -641,6 +645,17 @@ export default function App() {
       });
       room.onMessage("invite:error", (msg: { error: string }) => {
         setSocialToast({ text: msg?.error || "Falha no convite", tone: "error" });
+      });
+      // Escada rolante → server trocou meu andar. forceTeleport (evita
+      // o race do authoritative-light) + atualiza meu andar.
+      room.onMessage("floor:moved", (msg: { x: number; y: number; floor: number }) => {
+        sceneRef.current?.forceTeleport(msg.x, msg.y);
+        sceneRef.current?.setMyFloor(msg.floor);
+        setMyFloor(msg.floor);
+        setSocialToast({
+          text: msg.floor === 2 ? "🛗 Você subiu pro 2º andar" : "🛗 Você desceu pro térreo",
+          tone: "info",
+        });
       });
       // Convite aceito por mim → ando até o convidador (rota A*, sem teleporte)
       room.onMessage("invite:walk-to", (msg: { x: number; y: number }) => {
@@ -1410,6 +1425,16 @@ export default function App() {
           <>
             <div style={{ fontSize: 12, opacity: 0.7 }}>{playerCount} no escritório</div>
             {(() => {
+              const other = myFloor === 1 ? 2 : 1;
+              const n = onlinePlayers.filter((p) => (p.floor ?? 1) === other).length;
+              const lbl = other === 2 ? "no 2º andar" : "no térreo";
+              return (
+                <div style={{ fontSize: 12, opacity: 0.7 }} title="Áudio e avatares isolados entre andares">
+                  🛗 {n} {n === 1 ? "pessoa" : "pessoas"} {lbl}
+                </div>
+              );
+            })()}
+            {(() => {
               const z = ZONE_LABELS[currentZoneId] || { label: currentZoneId, isIsolated: false };
               return (
                 <div style={{
@@ -1588,6 +1613,7 @@ export default function App() {
           online: boolean;
           isMe: boolean;
           sessionId?: string;
+          floor?: number;
         }
         const onlineByUser = new Map(
           onlinePlayers.filter((o) => o.userId).map((o) => [o.userId, o] as const)
@@ -1622,6 +1648,7 @@ export default function App() {
             online: !!op,
             isMe: !!op?.isMe,
             sessionId: op?.sessionId,
+            floor: op?.floor,
           });
           seen.add(d.id);
         }
@@ -1635,6 +1662,7 @@ export default function App() {
             online: true,
             isMe: o.isMe,
             sessionId: o.sessionId,
+            floor: o.floor,
           });
         }
         rows.sort((a, b) => {
@@ -1672,6 +1700,14 @@ export default function App() {
                     />
                     {p.name}
                     {p.isMe && <span style={youBadgeStyle}>você</span>}
+                    {p.online && (p.floor ?? 1) === 2 && (
+                      <span
+                        title="Está no 2º andar"
+                        style={{ marginLeft: 6, fontSize: 10, padding: "1px 5px", borderRadius: 6, background: "#1e3a8a", color: "#bfdbfe" }}
+                      >
+                        🛗 2º andar
+                      </span>
+                    )}
                     {p.sessionId && activeSpeakerIds.has(p.sessionId) && (
                       <span title="Falando agora" style={{
                         marginLeft: 6, display: "inline-block",

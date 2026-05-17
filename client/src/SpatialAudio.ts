@@ -403,8 +403,8 @@ export class SpatialAudio {
   }
 
   public updateVolumes(
-    myInfo: { x: number; y: number; zoneId?: string; bubbleId?: string; role?: string; visitorOk?: boolean; deskSeat?: string },
-    peerInfo: Map<string, { x: number; y: number; zoneId?: string; bubbleId?: string; role?: string; visitorOk?: boolean; deskSeat?: string }>
+    myInfo: { x: number; y: number; zoneId?: string; bubbleId?: string; role?: string; visitorOk?: boolean; deskSeat?: string; floor?: number },
+    peerInfo: Map<string, { x: number; y: number; zoneId?: string; bubbleId?: string; role?: string; visitorOk?: boolean; deskSeat?: string; floor?: number }>
   ) {
     // Garante o AudioContext ativo (autoplay pode tê-lo deixado suspenso).
     if (this.audioCtx?.state === "suspended") this.audioCtx.resume().catch(() => {});
@@ -419,6 +419,13 @@ export class SpatialAudio {
         return;
       }
       if (meBlocked || (info.role === "visitor" && !info.visitorOk)) {
+        this.applyPeerVolume(peer, 0);
+        return;
+      }
+
+      // Andares diferentes = áudio TOTALMENTE isolado (regra dura,
+      // antes de qualquer outra). 2º andar não se mistura com o térreo.
+      if ((myInfo.floor ?? 1) !== (info.floor ?? 1)) {
         this.applyPeerVolume(peer, 0);
         return;
       }
