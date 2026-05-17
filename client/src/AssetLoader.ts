@@ -63,7 +63,29 @@ export function preloadLimezuAssets(scene: Phaser.Scene) {
   scene.load.image("tileset_roombuilder", "/assets/interiors/RoomBuilder_32x32.png");
   // Sala pronta usada como source pra extrair piso de madeira (parquet)
   scene.load.image("home_layer1", "/assets/interiors/GenericHome_Layer1.png");
+
+  // Mobília de cozinha (Copa) — sprites Singles do LimeZu Modern Interiors
+  // (pago). Cada PNG vira uma texture com a key = type do FurnitureItem,
+  // então OfficeScene.drawFurniture() (this.add.image(x,y,type)) usa
+  // direto. Tamanhos nativos: fridge 32×80, stove/counter_sink 32×64,
+  // counter 64×64, coffee_machine 32×48, microwave/range_hood/
+  // kitchen_table 32×32.
+  for (const k of KITCHEN_SPRITES) {
+    scene.load.image(k, `/assets/interiors/kitchen/${k}.png`);
+  }
 }
+
+/** Móveis de cozinha carregados como texturas próprias (key == type). */
+export const KITCHEN_SPRITES = [
+  "fridge",
+  "stove",
+  "microwave",
+  "coffee_machine",
+  "counter",
+  "counter_sink",
+  "kitchen_table",
+  "range_hood",
+] as const;
 
 /**
  * Extrai uma região do `home_layer1` (sala pronta com piso de madeira parquet)

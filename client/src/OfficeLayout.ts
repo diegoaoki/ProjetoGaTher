@@ -63,6 +63,15 @@ const HITBOXES: Record<string, Hitbox> = {
   whiteboard:   { offsetX: -40, offsetY: -20, w: 80, h: 12 },
   bookshelf:    { offsetX: -24, offsetY: -28, w: 48, h: 56 },
   tv:           { offsetX: -36, offsetY: -28, w: 72, h: 14 },
+  // Cozinha (Copa) — LimeZu. Footprint ~ base do sprite (origem central).
+  fridge:        { offsetX: -16, offsetY: -28, w: 32, h: 52 },
+  stove:         { offsetX: -16, offsetY: -22, w: 32, h: 44 },
+  counter_sink:  { offsetX: -16, offsetY: -22, w: 32, h: 44 },
+  counter:       { offsetX: -32, offsetY: -24, w: 64, h: 44 },
+  coffee_machine:{ offsetX: -14, offsetY: -18, w: 28, h: 36 },
+  microwave:     { offsetX: -14, offsetY: -10, w: 28, h: 22 },
+  kitchen_table: { offsetX: -16, offsetY: -10, w: 32, h: 22 },
+  // range_hood é decoração de parede (sem colisão) — não tem hitbox
 };
 
 /** Hitbox padrão de um tipo de móvel (usado pelo editor ao adicionar). */
@@ -74,6 +83,9 @@ export function hitboxFor(type: string): Hitbox {
 export const EDITOR_FURNITURE_TYPES = [
   "plant", "sofa", "coffeeTable", "bookshelf",
   "whiteboard", "tv", "chair", "meetingTable",
+  // Cozinha (Copa)
+  "fridge", "stove", "counter", "counter_sink",
+  "coffee_machine", "microwave", "kitchen_table", "range_hood",
 ];
 
 const TILE = 32;
@@ -297,18 +309,24 @@ export function getDefaultLayout(): OfficeLayoutData {
   // Quadro de avisos (placeholder usando whiteboard, na parede norte)
   items.push({ type: "whiteboard", x: 7 * TILE, y: 19 * TILE, depth: 1, hitbox: HITBOXES.whiteboard, tag: "notice_board" });
 
-  // --- COPA — mesa redonda no centro, "geladeira/fogão" placeholders ---
-  items.push({ type: "coffeeTable", x: 7 * TILE, y: 32 * TILE, depth: 1, hitbox: HITBOXES.coffeeTable });
-  // Cadeiras em volta
-  items.push({ type: "chair", x: 5 * TILE, y: 32 * TILE, depth: 0, hitbox: HITBOXES.chair });
-  items.push({ type: "chair", x: 9 * TILE, y: 32 * TILE, depth: 0, hitbox: HITBOXES.chair });
-  items.push({ type: "chair", x: 7 * TILE, y: 30 * TILE, depth: 0, hitbox: HITBOXES.chair });
-  items.push({ type: "chair", x: 7 * TILE, y: 34 * TILE, depth: 0, hitbox: HITBOXES.chair });
-  // "Bancada/geladeira/fogão" placeholders com bookshelf + tags
-  items.push({ type: "bookshelf", x: 2 * TILE, y: 28 * TILE, depth: 1, hitbox: HITBOXES.bookshelf, tag: "fridge" });
-  items.push({ type: "bookshelf", x: 4 * TILE, y: 28 * TILE, depth: 1, hitbox: HITBOXES.bookshelf, tag: "stove" });
-  items.push({ type: "bookshelf", x: 10 * TILE, y: 28 * TILE, depth: 1, hitbox: HITBOXES.bookshelf, tag: "coffee_machine" });
-  items.push({ type: "bookshelf", x: 12 * TILE, y: 28 * TILE, depth: 1, hitbox: HITBOXES.bookshelf, tag: "microwave" });
+  // --- COPA — cozinha de verdade (sprites LimeZu pago, Kitchen Singles) ---
+  // Bancada encostada na parede de cima: geladeira, fogão+coifa, pia,
+  // balcão, cafeteira e microondas. Mesa de refeição embaixo.
+  const copaTop = 28 * TILE; // y da bancada (sob a parede de cima da Copa)
+  items.push({ type: "fridge",         x: 2 * TILE,  y: copaTop, depth: 1, hitbox: HITBOXES.fridge });
+  items.push({ type: "range_hood",     x: 4 * TILE,  y: 27 * TILE, depth: 1 }); // decoração de parede
+  items.push({ type: "stove",          x: 4 * TILE,  y: copaTop, depth: 1, hitbox: HITBOXES.stove });
+  items.push({ type: "counter_sink",   x: 6 * TILE,  y: copaTop, depth: 1, hitbox: HITBOXES.counter_sink });
+  items.push({ type: "counter",        x: 8 * TILE,  y: copaTop, depth: 1, hitbox: HITBOXES.counter });
+  items.push({ type: "coffee_machine", x: 10 * TILE, y: copaTop - 6, depth: 1, hitbox: HITBOXES.coffee_machine });
+  items.push({ type: "microwave",      x: 12 * TILE, y: copaTop, depth: 1, hitbox: HITBOXES.microwave });
+
+  // Área de refeição: mesa + cadeiras
+  items.push({ type: "kitchen_table", x: 7 * TILE, y: 33 * TILE, depth: 1, hitbox: HITBOXES.kitchen_table });
+  items.push({ type: "chair", x: 5 * TILE, y: 33 * TILE, depth: 0, hitbox: HITBOXES.chair });
+  items.push({ type: "chair", x: 9 * TILE, y: 33 * TILE, depth: 0, hitbox: HITBOXES.chair });
+  items.push({ type: "chair", x: 7 * TILE, y: 31 * TILE, depth: 0, hitbox: HITBOXES.chair });
+  items.push({ type: "chair", x: 7 * TILE, y: 35 * TILE, depth: 0, hitbox: HITBOXES.chair });
   items.push({ type: "plant", x: 12 * TILE, y: 36 * TILE, depth: 1, hitbox: HITBOXES.plant });
 
   // --- SEGURANÇA — mesa com monitor de câmera ---

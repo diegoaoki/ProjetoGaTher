@@ -105,12 +105,14 @@ Visual / mapa:
   - revisar visual da Recepcao - so sofas + mesa de centro; falta balcao
     de atendimento, plantas, totem/quadro de boas-vindas, cadeiras de
     espera
-  - revisar visual da Copa - hoje parece sala de reuniao (mesa redonda +
-    cadeiras). Deveria parecer cozinha completa usando LimeZu Modern
-    Interiors PAGO (Downloads/Assets Pagos/moderninteriors-win/, NAO o
-    Free): bancada com pia, fogao, geladeira, armarios, microondas, mesa
-    lateral. Placeholders (fridge, stove, coffee_machine, microwave) viram
-    sprites corretos
+  - [FEITO] visual da Copa (cozinha real) - sprites LimeZu pago
+    (Kitchen Singles) em client/public/assets/interiors/kitchen/;
+    AssetLoader carrega cada PNG key=type (KITCHEN_SPRITES);
+    OfficeLayout Copa reescrita: bancada (geladeira+fogao+coifa+pia+
+    balcao+cafeteira+microondas) + mesa+4 cadeiras+planta; HITBOXES
+    por tipo; tipos no EDITOR_FURNITURE_TYPES. Pipeline de asset
+    piloto validado -> replicavel p/ Recepcao/Seguranca. (Se houver
+    override de mapa no Postgres, re-salvar pra ver.)
   - visual da sala de Seguranca - so desk + 2 monitores + cadeira
     (placeholder). Falta painel de cameras (wall mount), rack,
     walkie-talkie/telefone, armario. Usar moderninteriors-win se houver
