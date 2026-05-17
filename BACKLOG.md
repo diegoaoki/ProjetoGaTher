@@ -49,7 +49,7 @@ Legenda: 🔴 prioridade · 🐞 bug · 🟢 feito (mantido como referência) ·
 
 ### Interação
 - 🟢 [FEITO] menu de contexto right-click no avatar: "📢 Pedir pra vir aqui" (`summon` → toast + caminha até você, sem modal) + "📍 Ir até". Pan no vazio preservado.
-- ⚪ [pedido 2026-05-16] **melhorar a abertura das portas** — revisar animação/feedback/timing da abertura (hoje não está boa). Alinhar com o user o que incomoda.
+- 🟢 [FEITO] **melhorar a abertura das portas** — antes "só sumia" (setVisible/alpha instantâneo). Agora porta dupla: 2 folhas deslizam pros lados + fade (tween 280ms) ao abrir/fechar; sem animar na 1ª render. Colisão segue o estado lógico. Client-only.
 
 ### Visual / mapa
 - revisar visual da **Recepção** — só sofás + mesa de centro; falta balcão de atendimento, plantas, totem/quadro de boas-vindas, cadeiras de espera

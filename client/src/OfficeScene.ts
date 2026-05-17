@@ -87,7 +87,9 @@ export class OfficeScene extends Phaser.Scene {
   private keyE!: Phaser.Input.Keyboard.Key;
 
   // === Portas (Fase C) ===
-  private doorVisuals = new Map<string, Phaser.GameObjects.Rectangle>();
+  // Porta dupla: 2 folhas que deslizam pros lados + fade ao abrir/fechar.
+  private doorLeaves = new Map<string, [Phaser.GameObjects.Rectangle, Phaser.GameObjects.Rectangle]>();
+  private doorOpenState = new Map<string, boolean>();
   /** Walls dinâmicos a partir das portas fechadas — usados em checkCollision. */
   private dynamicWalls: Array<{ x: number; y: number; w: number; h: number }> = [];
 
@@ -1165,8 +1167,9 @@ export class OfficeScene extends Phaser.Scene {
         door.onChange(() => this.renderDoor(doorId, door));
       });
       state.doors.onRemove((_door: any, doorId: string) => {
-        const r = this.doorVisuals.get(doorId);
-        if (r) { r.destroy(); this.doorVisuals.delete(doorId); }
+        const lv = this.doorLeaves.get(doorId);
+        if (lv) { lv[0].destroy(); lv[1].destroy(); this.doorLeaves.delete(doorId); }
+        this.doorOpenState.delete(doorId);
       });
     }
 
@@ -1204,26 +1207,62 @@ export class OfficeScene extends Phaser.Scene {
     }
   }
 
-  /** Renderiza a porta + atualiza wall dinâmico de colisão. */
+  /**
+   * Renderiza a porta como DUAS folhas. Fechada: as duas se encontram no
+   * meio (marrom, opacas, bloqueiam). Aberta: cada folha desliza pro seu
+   * lado (recolhe na parede) com fade-out. Animação suave via tween;
+   * primeira render (join) aplica o estado direto, sem animar.
+   */
   private renderDoor(doorId: string, door: { x: number; y: number; orientation: string; open: boolean; gapTiles?: number }) {
-    let rect = this.doorVisuals.get(doorId);
     const span = (door.gapTiles ?? 2) * 32;
     const thickness = WALL_T;
     const isVertical = door.orientation === "vertical";
-    const w = isVertical ? thickness : span;
-    const h = isVertical ? span : thickness;
+    const leafLen = span / 2; // cada folha cobre metade do vão
 
-    if (!rect) {
-      rect = this.add.rectangle(door.x, door.y, w, h, 0x8b4513);
-      rect.setStrokeStyle(2, 0x3d2817);
-      rect.setDepth(door.y + 100);
-      this.doorVisuals.set(doorId, rect);
+    let leaves = this.doorLeaves.get(doorId);
+    if (!leaves) {
+      const mk = () => {
+        const r = this.add.rectangle(
+          door.x, door.y,
+          isVertical ? thickness : leafLen,
+          isVertical ? leafLen : thickness,
+          0x8b4513
+        );
+        r.setStrokeStyle(2, 0x3d2817);
+        r.setDepth(door.y + 100);
+        return r;
+      };
+      leaves = [mk(), mk()];
+      this.doorLeaves.set(doorId, leaves);
     }
-    // Aberta: invisível e sem colisão. Fechada: marrom + bloqueia.
-    rect.setVisible(!door.open);
-    rect.setAlpha(door.open ? 0 : 1);
+    const [a, b] = leaves;
 
-    // Atualiza dynamicWalls com todas as portas fechadas
+    // Posições: fechada = encostadas no centro; aberta = recolhidas no vão.
+    const aClosed = isVertical ? { x: door.x, y: door.y - leafLen / 2 } : { x: door.x - leafLen / 2, y: door.y };
+    const bClosed = isVertical ? { x: door.x, y: door.y + leafLen / 2 } : { x: door.x + leafLen / 2, y: door.y };
+    const aOpen = isVertical ? { x: door.x, y: door.y - leafLen } : { x: door.x - leafLen, y: door.y };
+    const bOpen = isVertical ? { x: door.x, y: door.y + leafLen } : { x: door.x + leafLen, y: door.y };
+
+    const ta = door.open ? aOpen : aClosed;
+    const tb = door.open ? bOpen : bClosed;
+    const alpha = door.open ? 0 : 1;
+
+    const prev = this.doorOpenState.get(doorId);
+    this.doorOpenState.set(doorId, door.open);
+    const shouldAnimate = prev !== undefined && prev !== door.open;
+
+    if (shouldAnimate) {
+      this.tweens.add({ targets: a, x: ta.x, y: ta.y, alpha, duration: 280, ease: "Cubic.Out" });
+      this.tweens.add({ targets: b, x: tb.x, y: tb.y, alpha, duration: 280, ease: "Cubic.Out" });
+    } else {
+      // Primeira render (ou sem mudança real): aplica direto, sem animar.
+      this.tweens.killTweensOf(a);
+      this.tweens.killTweensOf(b);
+      a.setPosition(ta.x, ta.y); a.setAlpha(alpha);
+      b.setPosition(tb.x, tb.y); b.setAlpha(alpha);
+    }
+
+    // Colisão segue o estado lógico (instantâneo, independe da animação).
     this.refreshDynamicWalls();
   }
 

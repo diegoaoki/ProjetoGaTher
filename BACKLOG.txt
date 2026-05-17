@@ -110,9 +110,10 @@ Interacao:
   - [FEITO] menu de contexto right-click no avatar: "Pedir pra vir
     aqui" (summon -> toast + caminha ate voce, sem modal) + "Ir ate".
     Pan no vazio preservado.
-  - [pedido 2026-05-16] melhorar a abertura das portas - revisar
-    animacao/feedback/timing (hoje nao esta boa). Alinhar com o
-    user o que incomoda.
+  - [FEITO] melhorar a abertura das portas - antes "so sumia"
+    (setVisible/alpha instantaneo). Agora porta dupla: 2 folhas
+    deslizam pros lados + fade (tween 280ms) ao abrir/fechar; sem
+    animar na 1a render. Colisao segue estado logico. Client-only.
 
 Visual / mapa:
   - revisar visual da Recepcao - so sofas + mesa de centro; falta balcao
