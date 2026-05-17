@@ -1072,6 +1072,11 @@ export default function App() {
     return () => { if (timer) window.clearTimeout(timer); };
   }, [mapEditorOpen]);
 
+  // Edição limpa: silencia o áudio dos peers enquanto o editor está aberto
+  useEffect(() => {
+    spatialRef.current?.setEditorMute(mapEditorOpen);
+  }, [mapEditorOpen]);
+
   useEffect(() => {
     if (conn !== "connected" || !spatialRef.current || !localVideoRef.current) return;
     const tryAttach = () => {
@@ -1785,7 +1790,7 @@ export default function App() {
         background: "#000", zIndex: 10,
       }} />
 
-      {isMobile && !chatOpen && !sidebarOpen && !adminOpen && !editingAvatar && !confirmingLogout && !incomingInvite && !fullscreenStream && (
+      {isMobile && !mapEditorOpen && !chatOpen && !sidebarOpen && !adminOpen && !editingAvatar && !confirmingLogout && !incomingInvite && !fullscreenStream && (
         <MobileControls
           onMove={(x, y) => sceneRef.current?.setVirtualInput(x, y)}
           onAction={() => sceneRef.current?.triggerClaimAction()}

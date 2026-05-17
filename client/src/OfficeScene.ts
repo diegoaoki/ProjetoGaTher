@@ -345,19 +345,22 @@ export class OfficeScene extends Phaser.Scene {
     this.input.mouse?.disableContextMenu();
     this.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
       if (pointer.rightButtonDown()) {
-        // Right-click sobre um avatar → menu de contexto (não dá pan).
-        const over = this.input.hitTestPointer(pointer);
-        const hit = over.find((o: any) => o.getData && o.getData("rpSession"));
-        if (hit && this.onPeerContextMenu) {
-          const ev = pointer.event as MouseEvent;
-          this.onPeerContextMenu({
-            sessionId: (hit as any).getData("rpSession"),
-            userId: (hit as any).getData("rpUser") || "",
-            name: (hit as any).getData("rpName") || "",
-            clientX: ev?.clientX ?? pointer.x,
-            clientY: ev?.clientY ?? pointer.y,
-          });
-          return;
+        // No editor: sem menu de contexto de avatar (edição limpa) —
+        // right-click só dá pan pra navegar o mapa.
+        if (!this.editMode) {
+          const over = this.input.hitTestPointer(pointer);
+          const hit = over.find((o: any) => o.getData && o.getData("rpSession"));
+          if (hit && this.onPeerContextMenu) {
+            const ev = pointer.event as MouseEvent;
+            this.onPeerContextMenu({
+              sessionId: (hit as any).getData("rpSession"),
+              userId: (hit as any).getData("rpUser") || "",
+              name: (hit as any).getData("rpName") || "",
+              clientX: ev?.clientX ?? pointer.x,
+              clientY: ev?.clientY ?? pointer.y,
+            });
+            return;
+          }
         }
         this.startPan(pointer.x, pointer.y);
       }
@@ -776,6 +779,8 @@ export class OfficeScene extends Phaser.Scene {
     // Esconde os estáticos e desenha os editáveis
     this.furnitureObjs.forEach((o) => (o as any).setVisible?.(false));
     this.wallObjs.forEach((o) => (o as any).setVisible?.(false));
+    // Edição limpa: some com avatares, balões e o NPC (sem distração)
+    this.setActorsVisible(false);
     this.renderEditFurniture();
     this.renderEditWalls();
 
@@ -785,6 +790,14 @@ export class OfficeScene extends Phaser.Scene {
     this.input.on("pointerup", this.onEditPointerUp, this);
     window.addEventListener("keydown", this.onEditKey, true);
     this.notifyEditor();
+  }
+
+  /** Mostra/esconde avatares, balões e NPC (edição limpa do editor). */
+  private setActorsVisible(v: boolean) {
+    this.myContainer?.setVisible(v);
+    this.remotePlayers.forEach((rp) => rp.container.setVisible(v));
+    this.securityNpcs.forEach((c) => c.setVisible(v));
+    this.videoBalloons.forEach((b) => (b.dom as any)?.setVisible?.(v));
   }
 
   /** Delete/Backspace apaga o item selecionado (móvel OU parede). */
@@ -816,6 +829,7 @@ export class OfficeScene extends Phaser.Scene {
     this.editWallObjs = [];
     this.clearSel();
     this.editBrush = null;
+    this.setActorsVisible(true); // volta avatares/balões/NPC
     if (restore) {
       this.rebuildLayout(this.mapOverride);
     }
@@ -1001,9 +1015,9 @@ export class OfficeScene extends Phaser.Scene {
   private onEditPointerDown = (pointer: Phaser.Input.Pointer) => {
     if (!this.editMode) return;
     const over = this.input.hitTestPointer(pointer);
-    const onObj = over.some(
-      (o) => this.editSprites.includes(o as any) || this.editWallObjs.includes(o as any)
-    );
+    const onFurn = over.some((o) => this.editSprites.includes(o as any));
+    const onWall = over.some((o) => this.editWallObjs.includes(o as any));
+    const onObj = onFurn || onWall;
 
     // Modo "desenhar parede": arrasta um retângulo no vazio
     if (this.editBrush === "wall") {
@@ -1020,10 +1034,11 @@ export class OfficeScene extends Phaser.Scene {
       return;
     }
 
-    if (onObj) return; // clique em item → seleção tratada pelo próprio obj
-
-    // Pincel de móvel → adiciona; sem pincel → deseleciona
+    // Pincel de móvel → adiciona em QUALQUER lugar (inclusive dentro de
+    // salas / sobre paredes). Só não adiciona se clicou num móvel já
+    // existente — aí seleciona ele (o próprio obj trata).
     if (this.editBrush) {
+      if (onFurn) return;
       const x = Phaser.Math.Clamp(this.snap(pointer.worldX), 0, WORLD_W);
       const y = Phaser.Math.Clamp(this.snap(pointer.worldY), 0, WORLD_H);
       this.editFurniture.push({
@@ -1036,6 +1051,7 @@ export class OfficeScene extends Phaser.Scene {
       this.renderEditFurniture();
       this.selectFurn(this.editFurniture.length - 1);
     } else {
+      if (onObj) return; // clicou num item/parede → seleção é do próprio obj
       this.clearSel();
     }
   };

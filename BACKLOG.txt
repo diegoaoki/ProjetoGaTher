@@ -83,13 +83,14 @@ Auth / infra:
     modais com maxWidth/maxHeight/overflow. Base ja existia:
     useIsMobile, joystick+E, HUD compacto, sidebar fullscreen.
   - editor de mapas
-  - [pedido 2026-05-16] editor de mapa - modo "edicao limpa": ao
-    editar, esconder/desativar interacoes com avatares (click/menu),
-    audio espacial e sons, baloes de video/fala, joystick mobile.
-    Tela so de mover/adicionar/remover mobilia; sair restaura tudo.
-  - [pedido 2026-05-16] editor de mapa - adicionar itens DENTRO das
-    salas: hoje e bloqueado/nao funciona dentro das zonas. Permitir
-    posicionar mobilia nova em qualquer lugar, inclusive nas salas.
+  - [FEITO] editor "edicao limpa": setActorsVisible(false) some com
+    avatar/remotos/NPC/baloes; right-click sem menu de contexto (so
+    pan); SpatialAudio.setEditorMute zera peers; joystick mobile
+    escondido. Sair restaura tudo.
+  - [FEITO] editor: adicionar itens DENTRO das salas - causa era
+    if(onObj)return tratando parede=movel. Agora onFurn/onWall
+    separados; pincel so bloqueado por movel existente. Parede/
+    sala nao bloqueiam o add.
   - [pedido 2026-05-16] editor de mesa: definir/editar mesas
     reservaveis (posicao mesa+assento, deskId, lugares da
     mesa-conversa) no mapa, nao hardcoded em OfficeLayout.ts/

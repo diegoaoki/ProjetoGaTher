@@ -113,6 +113,14 @@ export class SpatialAudio {
   private audioCtx?: AudioContext;
   /** Multiplicador master da saída (peers). Persiste em localStorage. */
   private peerMasterGain = getPeerGain();
+  /** Editor de mapa aberto → silencia tudo (edição limpa). */
+  private editorMute = false;
+
+  /** Silencia/restaura todo o áudio de peers (modo editor de mapa). */
+  public setEditorMute(on: boolean) {
+    this.editorMute = on;
+    // updateVolumes roda por frame e relê isto → aplica sozinho.
+  }
 
   /** Cria/retoma o AudioContext (autoplay: precisa de gesto do usuário). */
   private ensureAudioCtx(): AudioContext | null {
@@ -131,7 +139,7 @@ export class SpatialAudio {
 
   /** Aplica volume num peer: GainNode (permite > 1) ou fallback no element. */
   private applyPeerVolume(peer: RemotePeer, vol: number) {
-    const per = getPeerVolume(userIdOf(peer.identity)); // multiplicador individual
+    const per = this.editorMute ? 0 : getPeerVolume(userIdOf(peer.identity));
     if (peer.gainNode) {
       peer.gainNode.gain.value = vol * this.peerMasterGain * per;
     } else if (peer.audioElement) {

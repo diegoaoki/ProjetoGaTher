@@ -43,8 +43,8 @@ _(nenhum bug aberto no momento)_
 - esqueci-a-senha (precisa SMTP)
 - 🟢 [FEITO] mobile responsivo — viewport anti-zoom + safe-area + `100dvh`; pinça pra zoom (`OfficeScene`); botão **G** no `MobileControls` (conversa de mesa, antes inacessível); cards de vídeo menores e reposicionados pra não cobrir os controles; LoginScreen fluido (`min(380px,100%)`); modais com `maxWidth/maxHeight/overflow` (cardStyle/modalStyle globais + AudioTestScreen). Base que já existia: `useIsMobile`, joystick+E, HUD compacto, sidebar fullscreen, `Scale.RESIZE`.
 - editor de mapas
-- ⚪ [pedido 2026-05-16] **editor de mapa — modo "edição limpa"**: ao editar, esconder/desativar interações com avatares (click/right-click/menu), áudio espacial e sons, balões de vídeo/fala, joystick mobile. Tela focada só em mover/adicionar/remover mobília; sair restaura tudo.
-- ⚪ [pedido 2026-05-16] **editor de mapa — adicionar itens DENTRO das salas**: hoje a adição é bloqueada/não funciona dentro das zonas (salas/copa). Permitir posicionar mobília nova em qualquer lugar, inclusive dentro das salas.
+- 🟢 [FEITO] **editor "edição limpa"**: `setActorsVisible(false)` (avatar/remotos/NPC/balões somem), sem menu de contexto de avatar (só pan), `SpatialAudio.setEditorMute` zera peers, joystick mobile escondido. Sair restaura.
+- 🟢 [FEITO] **editor: adicionar itens DENTRO das salas** — causa: `if (onObj) return` tratava parede = móvel. Agora `onFurn`/`onWall` separados; pincel só bloqueado por móvel existente. Parede/sala não bloqueiam o add.
 - ⚪ [pedido 2026-05-16] **editor de mesa**: ferramenta pra definir/editar mesas reserváveis (posição da mesa + assento, `deskId`, lugares da mesa-conversa) no mapa em vez de hardcoded em `OfficeLayout.ts`/`server/src/desks.ts`. Provável extensão do editor de mapa. Detalhar escopo antes.
 
 ### Interação
