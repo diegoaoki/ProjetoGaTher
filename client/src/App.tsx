@@ -168,6 +168,23 @@ export default function App() {
     const style = document.createElement("style");
     style.textContent = `
       @keyframes speakerPulse { 0%, 100% { opacity: 0.5; transform: scale(1); } 50% { opacity: 1; transform: scale(1.15); } }
+      .vo-bar button[title] { position: relative; }
+      .vo-bar button[title]:hover::after {
+        content: attr(title);
+        position: absolute;
+        bottom: calc(100% + 8px);
+        left: 50%;
+        transform: translateX(-50%);
+        background: #0f172af2;
+        color: #e2e8f0;
+        border: 1px solid #334155;
+        border-radius: 6px;
+        padding: 4px 8px;
+        font-size: 11px;
+        white-space: nowrap;
+        pointer-events: none;
+        z-index: 50;
+      }
     `;
     document.head.appendChild(style);
     return () => { style.remove(); };
@@ -1288,7 +1305,7 @@ export default function App() {
       )}
 
       {/* Barra de controles principais: rodapé central no desktop, topo central no mobile (pra não colidir com joystick/botão E) */}
-      <div style={isMobile ? { ...bottomBarStyle, top: 16, bottom: "auto" } : bottomBarStyle}>
+      <div className="vo-bar" style={isMobile ? { ...bottomBarStyle, top: 16, bottom: "auto" } : bottomBarStyle}>
         <button onClick={toggleMic} style={mediaBtnStyle(micOn, micOn ? "#22c55e" : "#7f1d1d")} title="Microfone">
           {micOn ? "🎤" : "🔇"}
         </button>
