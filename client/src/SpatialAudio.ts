@@ -6,6 +6,7 @@ import {
   LocalTrackPublication,
   Track,
   LocalParticipant,
+  LocalAudioTrack,
   createLocalTracks,
 } from "livekit-client";
 import {
@@ -15,6 +16,8 @@ import {
   setSpeakerDeviceId,
   getPeerGain,
   setPeerGain,
+  getMicGain,
+  setMicGain,
 } from "./audioPrefs";
 
 /** Volume de quem está numa bolha pra quem está fora dela (mesma sala). */
@@ -48,6 +51,55 @@ export class SpatialAudio {
   private peers = new Map<string, RemotePeer>();
   private nearRadius: number;
   private farRadius: number;
+  // === Pipeline próprio do microfone (Web Audio) p/ ganho > 1.0 ===
+  private micRawStream?: MediaStream;          // getUserMedia cru
+  private micSrcNode?: MediaStreamAudioSourceNode;
+  private micGainNode?: GainNode;
+  private micDest?: MediaStreamAudioDestinationNode;
+  private micTrack?: LocalAudioTrack;          // track publicada (processada)
+  private micMuted = true;                     // começa mudo
+
+  /**
+   * Monta a track de microfone passando por um GainNode (permite ganho
+   * > 1.0). Para o stream anterior se houver. Retorna a LocalAudioTrack
+   * pronta pra publicar, ou null se algo falhar (fallback no connect).
+   */
+  private async buildMicTrack(deviceId: string): Promise<LocalAudioTrack | null> {
+    try {
+      const ctx = this.ensureAudioCtx();
+      if (!ctx) return null;
+      // Para nodes/stream anteriores
+      try { this.micSrcNode?.disconnect(); } catch {}
+      try { this.micGainNode?.disconnect(); } catch {}
+      this.micRawStream?.getTracks().forEach((t) => t.stop());
+
+      const raw = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: deviceId ? { exact: deviceId } : undefined,
+          echoCancellation: true,
+          noiseSuppression: true,
+          // AGC desligado: senão o browser "briga" com o nosso ganho
+          autoGainControl: false,
+        },
+      });
+      this.micRawStream = raw;
+      const src = ctx.createMediaStreamSource(raw);
+      const gain = ctx.createGain();
+      gain.gain.value = getMicGain();
+      const dest = ctx.createMediaStreamDestination();
+      src.connect(gain);
+      gain.connect(dest);
+      this.micSrcNode = src;
+      this.micGainNode = gain;
+      this.micDest = dest;
+      const mst = dest.stream.getAudioTracks()[0];
+      if (!mst) return null;
+      return new LocalAudioTrack(mst);
+    } catch (e) {
+      console.warn("[spatial] buildMicTrack falhou:", e);
+      return null;
+    }
+  }
   private localParticipant?: LocalParticipant;
   /** Contexto Web Audio (lazy) pra ganho de peers > 1.0. */
   private audioCtx?: AudioContext;
@@ -117,20 +169,31 @@ export class SpatialAudio {
     this.localParticipant = this.room.localParticipant;
 
     try {
-      // Respeita o microfone escolhido pelo user (localStorage). "" = padrão.
+      // MICROFONE: pipeline próprio (Web Audio) p/ ganho > 1.0. Se falhar,
+      // cai pro createLocalTracks padrão do LiveKit (sem ganho).
       const micId = getMicDeviceId();
-      const tracks = await createLocalTracks({
-        audio: micId ? { deviceId: { exact: micId } } : true,
-        video: opts.enableVideo
-          ? { resolution: { width: 320, height: 240 }, facingMode: "user" }
-          : false,
-      });
-
-      for (const track of tracks) {
-        await this.localParticipant.publishTrack(track);
+      this.micTrack = (await this.buildMicTrack(micId)) || undefined;
+      if (this.micTrack) {
+        await this.localParticipant.publishTrack(this.micTrack);
+        await this.micTrack.mute(); // começa mudo
+        this.micMuted = true;
+      } else {
+        const fb = await createLocalTracks({
+          audio: micId ? { deviceId: { exact: micId } } : true,
+          video: false,
+        });
+        for (const t of fb) await this.localParticipant.publishTrack(t);
+        await this.localParticipant.setMicrophoneEnabled(false);
       }
-      // Inicia com mic e câmera DESLIGADOS — user liga manualmente nos botões do HUD
-      await this.localParticipant.setMicrophoneEnabled(false);
+
+      // CÂMERA: continua gerenciada pelo LiveKit (sem mudança no pipeline)
+      if (opts.enableVideo) {
+        const vts = await createLocalTracks({
+          audio: false,
+          video: { resolution: { width: 320, height: 240 }, facingMode: "user" },
+        });
+        for (const t of vts) await this.localParticipant.publishTrack(t);
+      }
       await this.localParticipant.setCameraEnabled(false);
 
       // Aplica saída de áudio escolhida (setSinkId via LiveKit, best-effort)
@@ -367,12 +430,49 @@ export class SpatialAudio {
 
   public async setMicEnabled(enabled: boolean) {
     if (!this.localParticipant) return;
+    if (this.micTrack) {
+      // Pipeline próprio: mute/unmute mantém o GainNode intacto
+      this.micMuted = !enabled;
+      try {
+        if (enabled) await this.micTrack.unmute();
+        else await this.micTrack.mute();
+      } catch (e) {
+        console.warn("[spatial] mic mute/unmute falhou:", e);
+      }
+      return;
+    }
     await this.localParticipant.setMicrophoneEnabled(enabled);
+  }
+
+  /** Ganho do microfone (entrada). 1 = normal; > 1 amplifica. Ao vivo. */
+  public setMicGain(v: number) {
+    const g = Number.isFinite(v) && v >= 0 ? v : 1;
+    setMicGain(g);
+    if (this.micGainNode) this.micGainNode.gain.value = g;
+  }
+  public getMicGainValue(): number {
+    return getMicGain();
   }
 
   /** Troca o microfone de entrada ao vivo + persiste a escolha. */
   public async setMicDevice(deviceId: string) {
     setMicDeviceId(deviceId);
+    if (this.micTrack && this.localParticipant) {
+      // Rebuild do pipeline com o novo device, preservando ganho e mute.
+      try {
+        const old = this.micTrack;
+        const next = await this.buildMicTrack(deviceId);
+        if (!next) return;
+        try { await this.localParticipant.unpublishTrack(old); } catch {}
+        try { old.stop(); } catch {}
+        this.micTrack = next;
+        await this.localParticipant.publishTrack(next);
+        if (this.micMuted) await next.mute();
+      } catch (e) {
+        console.warn("[spatial] troca de microfone (pipeline) falhou:", e);
+      }
+      return;
+    }
     try {
       await this.room.switchActiveDevice("audioinput", deviceId);
     } catch (e) {

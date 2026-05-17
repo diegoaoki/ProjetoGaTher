@@ -7,6 +7,8 @@ import {
   getSpeakerDeviceId,
   setSpeakerDeviceId,
   getPeerGain,
+  getMicGain,
+  setMicGain,
   setPeerGain,
   getMirrorSelf,
   setMirrorSelf,
@@ -44,6 +46,7 @@ export default function AudioTestScreen({ onClose, spatial, onMirrorChange }: Pr
   const [micId, setMicId] = useState(getMicDeviceId());
   const [spkId, setSpkId] = useState(getSpeakerDeviceId());
   const [peerGain, setPeerGainState] = useState(getPeerGain());
+  const [micGain, setMicGainState] = useState(getMicGain());
 
   async function refreshDevices() {
     try {
@@ -81,6 +84,11 @@ export default function AudioTestScreen({ onClose, spatial, onMirrorChange }: Pr
     setPeerGainState(v);
     if (spatial) spatial.setPeerGain(v);
     else setPeerGain(v); // pré-jogo: só persiste, aplica ao conectar
+  }
+  function changeMicGain(v: number) {
+    setMicGainState(v);
+    if (spatial) spatial.setMicGain(v);
+    else setMicGain(v); // pré-jogo: só persiste, aplica ao conectar
   }
 
   // Refs pra cleanup
@@ -215,6 +223,24 @@ export default function AudioTestScreen({ onClose, spatial, onMirrorChange }: Pr
           <p style={hintTextStyle}>
             {micActive ? "Fale algo — a barra deve subir." : "Clique em testar e fale algo."}
           </p>
+          <div style={{ marginTop: 8 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
+              <span>Ganho do microfone</span>
+              <strong>{Math.round(micGain * 100)}%</strong>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={3}
+              step={0.05}
+              value={micGain}
+              onChange={(e) => changeMicGain(parseFloat(e.target.value))}
+              style={{ width: "100%" }}
+            />
+            <p style={hintTextStyle}>
+              Acima de 100% amplifica sua voz (pra quando ficam te ouvindo baixo).
+            </p>
+          </div>
           {micError && <p style={errorTextStyle}>{micError}</p>}
         </div>
 

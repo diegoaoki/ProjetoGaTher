@@ -9,13 +9,13 @@ Legenda: [PRIORIDADE] [BUG] [FEITO] [NORMAL] [A CONFIRMAR]
 PRIORIDADES (audio ruim - reportado pelo user 2026-05-16)
 ------------------------------------------------------------------------------
 
-[PARCIAL] Controles de volume
-  (b) [FEITO] volume de saida/peers > 1.0 - per-peer GainNode (Web
-      Audio) no lugar de audioElement.volume; persiste em localStorage;
-      slider no painel de audio; SpatialAudio.setPeerGain ao vivo.
-  (a) [PENDENTE] ganho do microfone > 1.0 - rebuildar o pipeline de
-      publish conflita com setMicrophoneEnabled (toggle) e
-      switchActiveDevice (troca de device). Decidir abordagem antes.
+[FEITO] Controles de volume (prioridade de audio concluida)
+  (b) volume de saida/peers > 1.0 - per-peer GainNode no lugar de
+      audioElement.volume; persiste; slider no painel; ao vivo.
+  (a) ganho do microfone > 1.0 - pipeline proprio (getUserMedia
+      AGC off -> source -> GainNode -> MediaStreamDestination ->
+      LocalAudioTrack). Toggle = mute/unmute (mantem ganho); troca
+      device = rebuild+republish; ganho ao vivo; fallback se falhar.
 
 [FEITO] Selecao de microfone + saida de audio
   <select> no painel 🎧 (AudioTestScreen) com enumerateDevices;

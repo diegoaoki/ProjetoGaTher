@@ -7,6 +7,7 @@ const MIC_KEY = "vo-mic-device-v1";
 const SPK_KEY = "vo-spk-device-v1";
 const PEER_GAIN_KEY = "vo-peer-gain-v1";
 const MIRROR_KEY = "vo-mirror-self-v1";
+const MIC_GAIN_KEY = "vo-mic-gain-v1";
 
 function read(key: string): string {
   try {
@@ -44,6 +45,15 @@ export function getPeerGain(): number {
 }
 export function setPeerGain(v: number) {
   write(PEER_GAIN_KEY, String(v));
+}
+
+/** Ganho do microfone (entrada). 1 = normal; pode passar de 1. */
+export function getMicGain(): number {
+  const v = parseFloat(read(MIC_GAIN_KEY));
+  return Number.isFinite(v) && v >= 0 ? v : 1;
+}
+export function setMicGain(v: number) {
+  write(MIC_GAIN_KEY, String(v));
 }
 
 /** Espelhar (scaleX -1) o próprio vídeo. Default: true (mais natural). */

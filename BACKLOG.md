@@ -9,7 +9,7 @@ Legenda: 🔴 prioridade · 🐞 bug · 🟢 feito (mantido como referência) ·
 
 - **Controles de volume** (parcial):
   - (b) 🟢 [FEITO] volume de saída/peers > 1.0 — per-peer `GainNode` (Web Audio) no lugar de `audioElement.volume`; persiste em localStorage; slider no painel 🎧; `SpatialAudio.setPeerGain` ao vivo.
-  - (a) ⏳ ganho do **microfone** > 1.0 — pendente: rebuildar o pipeline de publish conflita com `setMicrophoneEnabled` (toggle de mic) e `switchActiveDevice` (troca de device). Decidir abordagem (TrackProcessor LiveKit vs. dono do pipeline) antes.
+  - (a) 🟢 [FEITO] ganho do **microfone** > 1.0 — pipeline próprio: getUserMedia(autoGainControl off) → MediaStreamSource → GainNode → MediaStreamDestination → `LocalAudioTrack` publicada. Mic toggle = mute/unmute da track (mantém o ganho); troca de device = rebuild do grafo + republish; ganho ao vivo via `setMicGain`. Fallback pro createLocalTracks se falhar. Slider no painel 🎧. **Áudio: prioridade concluída.**
 - 🟢 [FEITO] **Seleção de microfone + saída** — `<select>` no painel 🎧 com `enumerateDevices`; `audioPrefs.ts` persiste em localStorage; SpatialAudio aplica no `createLocalTracks` e troca ao vivo via `room.switchActiveDevice`. Saída por setSinkId (LiveKit) onde suportado.
 
 ---
