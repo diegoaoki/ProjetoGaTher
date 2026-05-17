@@ -8,6 +8,8 @@ interface Props {
   /** Clicar num ponto de alguém → vai até lá (navegação A*). */
   onLocate: (x: number, y: number) => void;
   onClose: () => void;
+  /** userId pra destacar (vindo do botão "localizar" da lista). */
+  highlightUserId?: string | null;
 }
 
 const PANEL_W = 240; // largura do canvas em px
@@ -17,10 +19,15 @@ const PANEL_W = 240; // largura do canvas em px
  * pessoa. O seu ponto fica verde. Clicar num ponto te leva até lá.
  * Atualiza ~4x/s lendo o state do Colyseus (sem re-render do React).
  */
-export default function MiniMap({ room, meSessionId, onLocate, onClose }: Props) {
+export default function MiniMap({ room, meSessionId, onLocate, onClose, highlightUserId }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  // dots atuais (px do canvas) → usado no clique pra achar a pessoa
-  const dotsRef = useRef<Array<{ cx: number; cy: number; x: number; y: number; me: boolean }>>([]);
+  // dots atuais (px do canvas) → usado no clique/hover pra achar a pessoa
+  const dotsRef = useRef<
+    Array<{ cx: number; cy: number; x: number; y: number; me: boolean; name: string; userId: string }>
+  >([]);
+  const hoverRef = useRef<{ cx: number; cy: number; name: string } | null>(null);
+  const highlightRef = useRef<string | null>(highlightUserId ?? null);
+  highlightRef.current = highlightUserId ?? null;
 
   const layout = getDefaultLayout();
   const scale = PANEL_W / layout.width;
@@ -53,11 +60,14 @@ export default function MiniMap({ room, meSessionId, onLocate, onClose }: Props)
       // pessoas
       const dots: typeof dotsRef.current = [];
       const state: any = room.state;
+      const hl = highlightRef.current;
+      const t = Date.now();
       state?.players?.forEach?.((p: any, sid: string) => {
         const cx = p.x * scale;
         const cy = p.y * scale;
         const me = sid === meSessionId;
-        dots.push({ cx, cy, x: p.x, y: p.y, me });
+        const uid = p.userId || "";
+        dots.push({ cx, cy, x: p.x, y: p.y, me, name: p.name || "?", userId: uid });
         ctx.beginPath();
         ctx.arc(cx, cy, me ? 5 : 4, 0, Math.PI * 2);
         ctx.fillStyle = me ? "#4ade80" : "#38bdf8";
@@ -72,8 +82,32 @@ export default function MiniMap({ room, meSessionId, onLocate, onClose }: Props)
           ctx.arc(cx, cy, 9, 0, Math.PI * 2);
           ctx.stroke();
         }
+        // Destaque (botão "localizar" da lista): anel pulsante laranja
+        if (hl && uid === hl) {
+          const pulse = 9 + Math.sin(t / 180) * 4;
+          ctx.strokeStyle = "#fb923c";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(cx, cy, pulse, 0, Math.PI * 2);
+          ctx.stroke();
+        }
       });
       dotsRef.current = dots;
+
+      // Tooltip de nome (hover)
+      const hov = hoverRef.current;
+      if (hov) {
+        ctx.font = "11px system-ui, -apple-system";
+        const tw = ctx.measureText(hov.name).width;
+        let bx = hov.cx + 8;
+        let by = hov.cy - 10;
+        if (bx + tw + 8 > cv.width) bx = hov.cx - tw - 16;
+        if (by < 2) by = hov.cy + 8;
+        ctx.fillStyle = "#000000cc";
+        ctx.fillRect(bx, by, tw + 8, 16);
+        ctx.fillStyle = "#ffffff";
+        ctx.fillText(hov.name, bx + 4, by + 12);
+      }
     };
     draw();
     const id = window.setInterval(draw, 250);
@@ -96,6 +130,22 @@ export default function MiniMap({ room, meSessionId, onLocate, onClose }: Props)
     if (best) onLocate(best.x, best.y);
   }
 
+  function handleMove(e: React.MouseEvent<HTMLCanvasElement>) {
+    const cv = canvasRef.current;
+    if (!cv) return;
+    const rect = cv.getBoundingClientRect();
+    const px = ((e.clientX - rect.left) / rect.width) * cv.width;
+    const py = ((e.clientY - rect.top) / rect.height) * cv.height;
+    let best: { cx: number; cy: number; name: string; d2: number } | null = null;
+    for (const d of dotsRef.current) {
+      const dd = (d.cx - px) ** 2 + (d.cy - py) ** 2;
+      if (dd < 16 * 16 && (!best || dd < best.d2)) {
+        best = { cx: d.cx, cy: d.cy, name: d.me ? `${d.name} (você)` : d.name, d2: dd };
+      }
+    }
+    hoverRef.current = best ? { cx: best.cx, cy: best.cy, name: best.name } : null;
+  }
+
   return (
     <div style={panelStyle}>
       <div style={headerStyle}>
@@ -107,6 +157,8 @@ export default function MiniMap({ room, meSessionId, onLocate, onClose }: Props)
         width={PANEL_W}
         height={panelH}
         onClick={handleClick}
+        onMouseMove={handleMove}
+        onMouseLeave={() => { hoverRef.current = null; }}
         style={{ display: "block", borderRadius: 6, cursor: "pointer", width: PANEL_W, height: panelH }}
       />
       <div style={{ fontSize: 10, opacity: 0.6, marginTop: 4 }}>

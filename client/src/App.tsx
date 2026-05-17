@@ -274,6 +274,7 @@ export default function App() {
   // === Sidebar de usuários online ===
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [miniMapOpen, setMiniMapOpen] = useState(false);
+  const [locateUserId, setLocateUserId] = useState<string | null>(null);
   interface OnlinePlayer {
     sessionId: string;
     userId: string;
@@ -1524,6 +1525,18 @@ export default function App() {
                       <button
                         onClick={() => {
                           // p.key == userId (vide construção das rows)
+                          setLocateUserId(p.key);
+                          setMiniMapOpen(true);
+                          setSidebarOpen(false);
+                        }}
+                        style={sidebarActionBtn}
+                        title={`Localizar ${p.name} no mini-mapa`}
+                      >
+                        🧭
+                      </button>
+                      <button
+                        onClick={() => {
+                          // p.key == userId (vide construção das rows)
                           setDmRequest({ userId: p.key, n: Date.now() });
                           setChatOpen(true);
                           setSidebarOpen(false);
@@ -1580,7 +1593,8 @@ export default function App() {
           room={roomRef.current}
           meSessionId={roomRef.current.sessionId}
           onLocate={(x, y) => sceneRef.current?.navigateTo(x, y)}
-          onClose={() => setMiniMapOpen(false)}
+          onClose={() => { setMiniMapOpen(false); setLocateUserId(null); }}
+          highlightUserId={locateUserId}
         />
       )}
 
