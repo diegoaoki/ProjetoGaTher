@@ -137,9 +137,11 @@ Visual / mapa:
   - [FEITO] porta da Seguranca nao abre + aviso ao insistir -
     tickDoors forca door-security_room sempre fechada e manda
     room:error ("Area restrita") com throttle 2s/player. Server-only.
-  - [pedido 2026-05-17] ao tentar entrar na Seguranca, mostrar na
-    tela um painel de fechadura (teclado de senha + digital) em vez
-    do toast; se o user digitar algo -> "ACESSO NEGADO". (proximo)
+  - [FEITO] ao tentar entrar na Seguranca: server manda
+    security:locked; cliente abre SecurityLockModal (painel de
+    fechadura: display + teclado numerico + leitor de digital);
+    qualquer tentativa (4+ digitos / Enter / digital) -> "ACESSO
+    NEGADO" com shake. Esc/X fecha.
   - redesign do mapa baseado em print de referencia do user (verificar
     Downloads/Erro.jpeg ou similar - nao localizado ainda) - possivelmente
     reorganizar departamentos, mobilia, cores

@@ -761,9 +761,9 @@ export class OfficeRoom extends Room<OfficeState> {
           if (now - last > BLOCKED_NOTIFY_THROTTLE_MS) {
             this.lastBlockedNotify.set(sid, now);
             const c = this.clients.find((cl) => cl.sessionId === sid);
-            c?.send("room:error", {
-              error: "🔒 Área restrita — só a Segurança tem acesso. A porta não abre.",
-            });
+            // Painel de fechadura (teclado+digital) no cliente, em vez de
+            // um toast simples. Ver SecurityLockModal.
+            c?.send("security:locked", {});
           }
         });
         return; // pula a lógica normal de abrir/fechar

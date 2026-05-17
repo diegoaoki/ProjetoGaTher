@@ -9,6 +9,7 @@ import AdminPanel from "./AdminPanel";
 import ChatPanel from "./ChatPanel";
 import MobileControls from "./MobileControls";
 import AudioTestScreen from "./AudioTestScreen";
+import SecurityLockModal from "./SecurityLockModal";
 import MiniMap from "./MiniMap";
 import { getMirrorSelf } from "./audioPrefs";
 import { ChatMessage, playNotificationBeep } from "./chat";
@@ -331,6 +332,7 @@ export default function App() {
 
   // === Convites ===
   const [incomingInvite, setIncomingInvite] = useState<{ fromSessionId: string; fromName: string } | null>(null);
+  const [securityLockOpen, setSecurityLockOpen] = useState(false);
   const [socialToast, setSocialToast] = useState<{ text: string; tone: "info" | "error" } | null>(null);
 
   // === Bolha de conversa privada ===
@@ -761,6 +763,10 @@ export default function App() {
       // Erros do fluxo de cadeado
       room.onMessage("room:error", (msg: { error: string }) => {
         setSocialToast({ text: msg?.error || "Falha no cadeado", tone: "error" });
+      });
+      // Tentou entrar na Sala de Segurança → painel de fechadura
+      room.onMessage("security:locked", () => {
+        setSecurityLockOpen((cur) => cur || true);
       });
 
       // Sincroniza lockedRooms do state pro HUD (botão 🔒/🔓 condicional)
@@ -1846,6 +1852,10 @@ export default function App() {
 
       {hudToast && (
         <div style={hudToastStyle}>{hudToast}</div>
+      )}
+
+      {securityLockOpen && (
+        <SecurityLockModal onClose={() => setSecurityLockOpen(false)} />
       )}
 
       {incomingInvite && (
