@@ -55,10 +55,11 @@ const NPC_SPEED = 130; // guarda anda um pouco mais devagar que o player
 // abaixo de 10000 (balões de vídeo DOM continuam por cima).
 const NPC_DEPTH_BASE = 4000;
 const SYNC_INTERVAL = 50;
-// Tamanho do mundo lido do layout (Fase A: 80×55 tiles = 2560×1760 px).
-// Default mantido caso layout falhe — não deve acontecer em produção.
+// Tamanho do mundo (80×85 tiles = 2560×2720 px): térreo y 0..55 +
+// gap + 2º andar y 60..84. Tem que bater com H_TILES do OfficeLayout
+// e worldHeight do schema do server.
 const WORLD_W = 2560;
-const WORLD_H = 1760;
+const WORLD_H = 2720;
 const PLAYER_HALF = 12;
 const DESK_CLAIM_RADIUS = 70;
 

@@ -98,5 +98,5 @@ export class OfficeState extends Schema {
   @type({ map: AccessRequest }) accessRequests = new MapSchema<AccessRequest>();
   @type({ map: SecurityNPC }) securityNPCs = new MapSchema<SecurityNPC>();
   @type("number") worldWidth: number = 2560;
-  @type("number") worldHeight: number = 1760;
+  @type("number") worldHeight: number = 2720; // 80×85 tiles (2º andar incluso)
 }

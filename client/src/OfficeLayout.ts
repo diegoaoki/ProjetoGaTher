@@ -26,6 +26,9 @@ export interface FurnitureItem {
   hitbox?: Hitbox;
   tag?: string;
   deskId?: string;
+  /** Estrutura fixa (escada rolante etc.) — o editor de mapa não
+   *  pode mover/deletar. Re-anexada em applyLayoutOverride. */
+  fixed?: boolean;
 }
 
 export interface Wall {
@@ -77,6 +80,8 @@ const HITBOXES: Record<string, Hitbox> = {
   security_console: { offsetX: -16, offsetY: -20, w: 32, h: 40 },
   server_rack:      { offsetX: -16, offsetY: -16, w: 32, h: 32 },
   security_camera:  { offsetX: -14, offsetY: -28, w: 28, h: 52 },
+  crate:            { offsetX: -12, offsetY: -12, w: 24, h: 24 },
+  // escalator: sem hitbox de propósito (pisa em cima pra ser teleportado)
 };
 
 /** Hitbox padrão de um tipo de móvel (usado pelo editor ao adicionar). */
@@ -94,10 +99,44 @@ export const EDITOR_FURNITURE_TYPES = [
   // Segurança
   "cctv_screen", "cctv_screen2", "cctv_screen3",
   "security_console", "server_rack", "security_camera",
+  // 2º andar
+  "crate",
 ];
 
 const TILE = 32;
 export const WALL_T = 12;
+
+// === 2º andar + escada rolante ===
+// Floor 1 ocupa y 0..55 tiles. Gap (55..60) inalcançável. Floor 2 abaixo.
+const FLOOR2_Y0_TILE = 60;
+/** y (px) a partir do qual estamos no 2º andar. */
+export const FLOOR2_Y0 = FLOOR2_Y0_TILE * TILE;
+/** Andar (1|2) a partir de uma coord Y de mundo. */
+export function floorOfY(y: number): number {
+  return y >= FLOOR2_Y0 ? 2 : 1;
+}
+/**
+ * Escadas rolantes (fixas, não-editáveis). Pisar no `pad` (raio) estando
+ * no andar `fromFloor` → teleporta pra `to` (x,y do andar destino).
+ */
+export const ESCALATORS: Array<{
+  fromFloor: number;
+  pad: { x: number; y: number; r: number };
+  to: { x: number; y: number; floor: number };
+}> = [
+  // Térreo: meio do salão (open space central) → sobe pro 2º andar
+  {
+    fromFloor: 1,
+    pad: { x: 40 * TILE, y: 27 * TILE, r: 26 },
+    to: { x: 40 * TILE, y: 65 * TILE, floor: 2 },
+  },
+  // 2º andar: escada de volta → desce pro térreo
+  {
+    fromFloor: 2,
+    pad: { x: 40 * TILE, y: 63 * TILE, r: 26 },
+    to: { x: 40 * TILE, y: 29 * TILE, floor: 1 },
+  },
+];
 
 // === Definições de zonas em TILES (depois convertidas pra px) ===
 type ZoneDef = {
@@ -147,6 +186,11 @@ const ZONES: ZoneDef[] = [
   //     space dos departamentos (x ≥ 14) pra não conflitar com a Segurança. ===
   { id: "lounge",         label: "Lounge",             x: 0,  y: 43, w: 58, h: 12,
     openings: [{ side: "top", pos: 36, width: 5.2 }] },
+
+  // === 2º andar (y ≥ 60) — sala grande FECHADA (só se chega via escada
+  //     rolante). Sem openings = perímetro todo com parede. Interior
+  //     editável pelo admin; começa quase vazia + caixas num canto. ===
+  { id: "floor2",         label: "2º Andar",           x: 10, y: 60, w: 60, h: 24 },
 ];
 
 /**
@@ -243,7 +287,7 @@ function addWorkstation(items: FurnitureItem[], desks: Array<{ id: string; x: nu
 
 export function getDefaultLayout(): OfficeLayoutData {
   const W_TILES = 80;
-  const H_TILES = 55;
+  const H_TILES = 85; // 55 (térreo) + gap + 2º andar (y 60..84)
   const items: FurnitureItem[] = [];
   const desks: Array<{ id: string; x: number; y: number }> = [];
 
@@ -412,6 +456,20 @@ export function getDefaultLayout(): OfficeLayoutData {
   // "TV grande" na parede sul
   items.push({ type: "tv", x: 30 * TILE, y: 44 * TILE, depth: 1, hitbox: HITBOXES.tv, tag: "tv_screen" });
 
+  // --- ESCADA ROLANTE (fixa, não-editável) — meio do salão sobe pro
+  //     2º andar; escada de volta no 2º andar. Sem hitbox: pisa em cima
+  //     (server detecta e teleporta). Posições espelham ESCALATORS. ---
+  items.push({ type: "escalator", x: 40 * TILE, y: 27 * TILE, depth: 1, fixed: true, tag: "escalator_up" });
+  items.push({ type: "escalator", x: 40 * TILE, y: 63 * TILE, depth: 1, fixed: true, tag: "escalator_down" });
+
+  // --- 2º ANDAR — começa quase vazio: só caixas num canto pro admin
+  //     editar como quiser (interior é editável; perímetro/escada não). ---
+  [
+    [13, 81], [15, 81], [17, 81], [13, 79], [15, 79],
+  ].forEach(([tx, ty]) => {
+    items.push({ type: "crate", x: tx * TILE, y: ty * TILE, depth: 1, hitbox: HITBOXES.crate });
+  });
+
   // Tints sutis pra distinguir os 4 departamentos no open space central
   const floorRegions: OfficeLayoutData["floorRegions"] = [
     { x: 20 * TILE, y: 0,         w: 40 * TILE, h: 11 * TILE, type: "dept", tint: 0xb8d4ff, label: "Desenvolvimento" }, // azul
@@ -510,12 +568,17 @@ export function applyLayoutOverride(
   override: { furniture?: FurnitureItem[]; walls?: Wall[] } | null | undefined
 ): OfficeLayoutData {
   if (!override) return base;
+  const fixed = base.furniture.filter((f) => f.fixed); // escada rolante etc.
+  const useOverrideFurn =
+    Array.isArray(override.furniture) && override.furniture.length > 0;
   return {
     ...base,
-    furniture:
-      Array.isArray(override.furniture) && override.furniture.length > 0
-        ? override.furniture
-        : base.furniture,
+    // Móveis: usa o override, mas SEMPRE re-anexa os fixos do código
+    // (e remove fixos que tenham vazado pro override) → escada rolante
+    // não pode ser movida/apagada nem some por override antigo.
+    furniture: useOverrideFurn
+      ? [...override.furniture!.filter((f) => !f.fixed), ...fixed]
+      : base.furniture,
     walls:
       Array.isArray(override.walls) && override.walls.length > 0
         ? override.walls

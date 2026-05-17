@@ -260,6 +260,8 @@ export function createFurnitureTextures(scene: Phaser.Scene) {
   createWhiteboard(scene);
   createBookshelf(scene);
   createTV(scene);
+  createEscalator(scene);
+  createCrate(scene);
 }
 
 function createDesk(scene: Phaser.Scene) {
@@ -445,6 +447,54 @@ function createBookshelf(scene: Phaser.Scene) {
   });
   rect(ctx, 1, H - 1, W - 2, 1, "#00000044", SCALE);
   scene.textures.addCanvas("bookshelf", canvas);
+}
+
+/** Escada rolante (sobe pro 2º andar). Visual procedural — sem asset. */
+function createEscalator(scene: Phaser.Scene) {
+  if (scene.textures.exists("escalator")) return;
+  const SCALE = 2, W = 48, H = 64;
+  const { canvas, ctx } = makeCanvas(W * SCALE, H * SCALE);
+  // corpo metálico
+  rect(ctx, 0, 0, W, H, "#1f2937", SCALE);
+  rect(ctx, 2, 2, W - 4, H - 4, "#374151", SCALE);
+  // corrimãos laterais
+  rect(ctx, 1, 1, 4, H - 2, "#0f172a", SCALE);
+  rect(ctx, W - 5, 1, 4, H - 2, "#0f172a", SCALE);
+  rect(ctx, 2, 1, 2, H - 2, "#64748b", SCALE);
+  rect(ctx, W - 4, 1, 2, H - 2, "#64748b", SCALE);
+  // degraus (linhas horizontais com sombra)
+  for (let y = 6; y < H - 4; y += 6) {
+    rect(ctx, 6, y, W - 12, 3, "#475569", SCALE);
+    rect(ctx, 6, y + 3, W - 12, 1, "#1e293b", SCALE);
+  }
+  // seta pra cima (ciano brilhante) indicando que sobe
+  const cx = W / 2;
+  rect(ctx, cx - 1, 14, 2, 26, "#22d3ee", SCALE);
+  for (let i = 0; i < 8; i++) {
+    rect(ctx, cx - 1 - i, 22 + i, 2, 2, "#22d3ee", SCALE);
+    rect(ctx, cx - 1 + i, 22 + i, 2, 2, "#22d3ee", SCALE);
+  }
+  scene.textures.addCanvas("escalator", canvas);
+}
+
+/** Caixa de madeira (decoração — canto do 2º andar vazio). */
+function createCrate(scene: Phaser.Scene) {
+  if (scene.textures.exists("crate")) return;
+  const SCALE = 2, W = 24, H = 24;
+  const { canvas, ctx } = makeCanvas(W * SCALE, H * SCALE);
+  rect(ctx, 0, 0, W, H, "#5c3f25", SCALE);
+  rect(ctx, 1, 1, W - 2, H - 2, "#7a5230", SCALE);
+  rect(ctx, 1, 1, W - 2, 2, "#8a6038", SCALE);
+  // moldura + X
+  rect(ctx, 1, 1, W - 2, 1, "#3d2817", SCALE);
+  rect(ctx, 1, H - 2, W - 2, 1, "#3d2817", SCALE);
+  rect(ctx, 1, 1, 1, H - 2, "#3d2817", SCALE);
+  rect(ctx, W - 2, 1, 1, H - 2, "#3d2817", SCALE);
+  for (let i = 2; i < W - 2; i++) {
+    rect(ctx, i, i, 1, 1, "#3d2817", SCALE);
+    rect(ctx, W - i, i, 1, 1, "#3d2817", SCALE);
+  }
+  scene.textures.addCanvas("crate", canvas);
 }
 
 /**
