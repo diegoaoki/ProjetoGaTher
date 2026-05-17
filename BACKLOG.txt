@@ -83,6 +83,18 @@ Auth / infra:
     modais com maxWidth/maxHeight/overflow. Base ja existia:
     useIsMobile, joystick+E, HUD compacto, sidebar fullscreen.
   - editor de mapas
+  - [pedido 2026-05-16] editor de mapa - modo "edicao limpa": ao
+    editar, esconder/desativar interacoes com avatares (click/menu),
+    audio espacial e sons, baloes de video/fala, joystick mobile.
+    Tela so de mover/adicionar/remover mobilia; sair restaura tudo.
+  - [pedido 2026-05-16] editor de mapa - adicionar itens DENTRO das
+    salas: hoje e bloqueado/nao funciona dentro das zonas. Permitir
+    posicionar mobilia nova em qualquer lugar, inclusive nas salas.
+  - [pedido 2026-05-16] editor de mesa: definir/editar mesas
+    reservaveis (posicao mesa+assento, deskId, lugares da
+    mesa-conversa) no mapa, nao hardcoded em OfficeLayout.ts/
+    server/src/desks.ts. Provavel extensao do editor de mapa.
+    Detalhar escopo antes.
 
 Interacao:
   - [FEITO] menu de contexto right-click no avatar: "Pedir pra vir
