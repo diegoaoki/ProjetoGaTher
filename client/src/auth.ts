@@ -198,6 +198,15 @@ export async function saveMapLayout(
   if (!resp.ok) throw new Error(await parseError(resp));
 }
 
+/** Apaga o override salvo → volta pro layout padrão do código. Admin-only. */
+export async function resetMapLayout(httpUrl: string, token: string): Promise<void> {
+  const resp = await fetch(httpUrl + "/map", {
+    method: "DELETE",
+    headers: { Authorization: "Bearer " + token },
+  });
+  if (!resp.ok) throw new Error(await parseError(resp));
+}
+
 // ============ Admin ============
 
 export async function listUsers(httpUrl: string, token: string): Promise<AdminUser[]> {

@@ -25,6 +25,7 @@ import {
   DirectoryUser,
   fetchMapLayout,
   saveMapLayout,
+  resetMapLayout,
   createVisitorCode,
 } from "./auth";
 import { EDITOR_FURNITURE_TYPES } from "./OfficeLayout";
@@ -2255,6 +2256,39 @@ export default function App() {
           <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 8 }}>
             {editorInfo.count} itens no mapa (móveis + paredes)
           </div>
+          <button
+            disabled={editorSaving}
+            onClick={async () => {
+              if (!window.confirm(
+                "Restaurar o layout PADRÃO do código (inclui a Copa nova) e " +
+                "apagar o mapa salvo? Suas edições do editor serão perdidas."
+              )) return;
+              const scene = sceneRef.current;
+              if (!scene) return;
+              setEditorSaving(true);
+              try {
+                await resetMapLayout(HTTP_URL, session.token);
+              } catch (e: any) {
+                setSocialToast({ text: e?.message || "Falha ao restaurar", tone: "error" });
+                setEditorSaving(false);
+                return;
+              }
+              try {
+                mapOverrideRef.current = null;
+                scene.exitMapEditor(false);
+                scene.rebuildLayout(null); // null → layout padrão (Copa nova)
+                roomRef.current?.send("map:reload");
+              } catch (err) {
+                console.warn("[editor] pós-reset:", err);
+              }
+              setMapEditorOpen(false);
+              setSocialToast({ text: "Layout padrão restaurado", tone: "info" });
+              setEditorSaving(false);
+            }}
+            style={{ ...editorBtn, background: "#7c3aed", width: "100%", marginBottom: 6 }}
+          >
+            ↺ Restaurar layout padrão (Copa nova)
+          </button>
           <div style={{ display: "flex", gap: 6 }}>
             <button
               onClick={() => {

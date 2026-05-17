@@ -311,6 +311,19 @@ export function createAuthRouter() {
     }
   });
 
+  // Apaga o override do editor → volta pro layout padrão do código
+  // (inclui mudanças novas de default, ex: Copa nova). Admin-only.
+  router.delete("/map", authReadLimiter, requireAuth, requireAdmin, async (_req: Request, res: Response) => {
+    try {
+      const pool = getPool();
+      await pool.query(`DELETE FROM app_meta WHERE key = $1`, [MAP_META_KEY]);
+      return res.json({ ok: true });
+    } catch (err: any) {
+      console.error("[/map DELETE] erro:", err);
+      return res.status(500).json({ error: "Falha ao restaurar o mapa" });
+    }
+  });
+
   // Diretório de TODOS os usuários cadastrados (autenticado, não-admin).
   // Usado pela sidebar pra mostrar online + offline. Não expõe email.
   router.get("/users", authReadLimiter, requireAuth, async (_req: Request, res: Response) => {
