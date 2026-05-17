@@ -73,6 +73,14 @@ export function preloadLimezuAssets(scene: Phaser.Scene) {
   for (const k of KITCHEN_SPRITES) {
     scene.load.image(k, `/assets/interiors/kitchen/${k}.png`);
   }
+
+  // Sala de Segurança — sprites LimeZu (tema TV/Film Studio): parede de
+  // monitores CCTV, console de controle, rack e câmera. Mesmo esquema
+  // (key == type). cctv_screen* 64×64, security_console 32×48,
+  // server_rack 32×32, security_camera 32×64.
+  for (const k of SECURITY_SPRITES) {
+    scene.load.image(k, `/assets/interiors/security/${k}.png`);
+  }
 }
 
 /** Móveis de cozinha carregados como texturas próprias (key == type). */
@@ -85,6 +93,16 @@ export const KITCHEN_SPRITES = [
   "counter_sink",
   "kitchen_table",
   "range_hood",
+] as const;
+
+/** Móveis da sala de Segurança (key == type). */
+export const SECURITY_SPRITES = [
+  "cctv_screen",
+  "cctv_screen2",
+  "cctv_screen3",
+  "security_console",
+  "server_rack",
+  "security_camera",
 ] as const;
 
 /**

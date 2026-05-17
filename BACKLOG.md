@@ -54,7 +54,7 @@ Legenda: 🔴 prioridade · 🐞 bug · 🟢 feito (mantido como referência) ·
 ### Visual / mapa
 - revisar visual da **Recepção** — só sofás + mesa de centro; falta balcão de atendimento, plantas, totem/quadro de boas-vindas, cadeiras de espera
 - 🟢 [FEITO] **visual da Copa (cozinha real)** — sprites LimeZu pago (Kitchen Singles) em `client/public/assets/interiors/kitchen/`; `AssetLoader` carrega cada PNG key=type (`KITCHEN_SPRITES`); `OfficeLayout` Copa reescrita: bancada (geladeira+fogão+coifa+pia+balcão+cafeteira+microondas) + mesa+4 cadeiras+planta; HITBOXES por tipo; tipos no `EDITOR_FURNITURE_TYPES`. Pipeline de asset piloto validado → replicável pra Recepção/Segurança. (Se houver override de mapa no Postgres, re-salvar pra ver.)
-- visual da **sala de Segurança** — só desk + 2 monitores + cadeira (placeholder). Falta painel de câmeras (wall mount), rack, walkie-talkie/telefone, armário. Usar moderninteriors-win se houver CCTV
+- 🟢 [FEITO] **visual da sala de Segurança** — sprites LimeZu pago (TV/Film Studio) em `client/public/assets/interiors/security/` (`cctv_screen/2/3`, `security_console`, `server_rack`, `security_camera`); `SECURITY_SPRITES` no `AssetLoader`; layout: parede de 4 monitores CCTV + 2 consoles+cadeiras + rack + câmera + planta. **Verificado**: sala segue no-entry pra todos (blocker de `layout.rooms` no `refreshDynamicWalls`) e o editor não consegue removê-la (`rooms` é do código, não vai no override).
 - **redesign do mapa** baseado em print de referência do user (verificar `Downloads/Erro.jpeg` ou similar — não localizado ainda) — possivelmente reorganizar departamentos, mobília, cores
 
 ### NPC

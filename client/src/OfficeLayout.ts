@@ -72,6 +72,11 @@ const HITBOXES: Record<string, Hitbox> = {
   microwave:     { offsetX: -14, offsetY: -10, w: 28, h: 22 },
   kitchen_table: { offsetX: -30, offsetY: -16, w: 60, h: 40 },
   // range_hood é decoração de parede (sem colisão) — não tem hitbox
+  // Segurança (sala no-entry; hitboxes só pro editor/consistência)
+  cctv_screen:      { offsetX: -30, offsetY: -28, w: 60, h: 52 },
+  security_console: { offsetX: -16, offsetY: -20, w: 32, h: 40 },
+  server_rack:      { offsetX: -16, offsetY: -16, w: 32, h: 32 },
+  security_camera:  { offsetX: -14, offsetY: -28, w: 28, h: 52 },
 };
 
 /** Hitbox padrão de um tipo de móvel (usado pelo editor ao adicionar). */
@@ -86,6 +91,9 @@ export const EDITOR_FURNITURE_TYPES = [
   // Cozinha (Copa)
   "fridge", "stove", "counter", "counter_sink",
   "coffee_machine", "microwave", "kitchen_table", "range_hood",
+  // Segurança
+  "cctv_screen", "cctv_screen2", "cctv_screen3",
+  "security_console", "server_rack", "security_camera",
 ];
 
 const TILE = 32;
@@ -339,11 +347,23 @@ export function getDefaultLayout(): OfficeLayoutData {
   items.push({ type: "chair", x: tx, y: ty + 56, depth: 0, hitbox: HITBOXES.chair });
   items.push({ type: "plant", x: 12 * TILE, y: 37 * TILE, depth: 1, hitbox: HITBOXES.plant });
 
-  // --- SEGURANÇA — mesa com monitor de câmera ---
-  items.push({ type: "desk", x: 5 * TILE, y: 41 * TILE, depth: 1, hitbox: HITBOXES.desk });
-  items.push({ type: "monitor", x: 5 * TILE, y: 41 * TILE - 18, depth: 2 });
-  items.push({ type: "monitor", x: 8 * TILE, y: 41 * TILE - 18, depth: 2 });
-  items.push({ type: "chair", x: 5 * TILE, y: 42 * TILE, depth: 0, hitbox: HITBOXES.chair });
+  // --- SEGURANÇA — sala de monitoramento (sprites LimeZu TV Studio).
+  // Sala no-entry (ninguém entra) — vista de fora pelo corredor. Parede
+  // de monitores CCTV em cima, consoles + cadeiras, rack e câmera.
+  // Parede de monitores (64×64) encostada no topo da sala (y=38 tiles)
+  items.push({ type: "cctv_screen",  x: 3 * TILE,  y: 39 * TILE, depth: 1, hitbox: HITBOXES.cctv_screen });
+  items.push({ type: "cctv_screen2", x: 6 * TILE,  y: 39 * TILE, depth: 1, hitbox: HITBOXES.cctv_screen });
+  items.push({ type: "cctv_screen3", x: 9 * TILE,  y: 39 * TILE, depth: 1, hitbox: HITBOXES.cctv_screen });
+  items.push({ type: "cctv_screen",  x: 12 * TILE, y: 39 * TILE, depth: 1, hitbox: HITBOXES.cctv_screen });
+  // Consoles de controle + cadeiras do operador
+  items.push({ type: "security_console", x: 4 * TILE, y: 41 * TILE, depth: 1, hitbox: HITBOXES.security_console });
+  items.push({ type: "chair", x: 4 * TILE, y: 42 * TILE, depth: 0, hitbox: HITBOXES.chair });
+  items.push({ type: "security_console", x: 8 * TILE, y: 41 * TILE, depth: 1, hitbox: HITBOXES.security_console });
+  items.push({ type: "chair", x: 8 * TILE, y: 42 * TILE, depth: 0, hitbox: HITBOXES.chair });
+  // Rack de equipamentos + câmera nos cantos
+  items.push({ type: "server_rack",     x: 12 * TILE, y: 41 * TILE, depth: 1, hitbox: HITBOXES.server_rack });
+  items.push({ type: "security_camera", x: 1 * TILE,  y: 41 * TILE, depth: 1, hitbox: HITBOXES.security_camera });
+  items.push({ type: "plant", x: 13 * TILE, y: 42 * TILE, depth: 1, hitbox: HITBOXES.plant });
 
   // --- TODAS AS SALAS DE REUNIÃO — mesa retangular grande no centro + cadeiras ao redor ---
   // Helper: mesa de reunião 5×2 tiles + 3 cadeiras em cima/baixo + 1 em cada extremidade

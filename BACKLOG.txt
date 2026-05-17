@@ -127,10 +127,13 @@ Visual / mapa:
     por tipo; tipos no EDITOR_FURNITURE_TYPES. Pipeline de asset
     piloto validado -> replicavel p/ Recepcao/Seguranca. (Se houver
     override de mapa no Postgres, re-salvar pra ver.)
-  - visual da sala de Seguranca - so desk + 2 monitores + cadeira
-    (placeholder). Falta painel de cameras (wall mount), rack,
-    walkie-talkie/telefone, armario. Usar moderninteriors-win se houver
-    CCTV
+  - [FEITO] visual da sala de Seguranca - sprites LimeZu pago (TV/
+    Film Studio) em client/public/assets/interiors/security/
+    (cctv_screen/2/3, security_console, server_rack, security_camera);
+    SECURITY_SPRITES no AssetLoader; layout: parede de 4 monitores
+    CCTV + 2 consoles+cadeiras + rack + camera + planta. Verificado:
+    sala segue no-entry pra todos (blocker de layout.rooms no
+    refreshDynamicWalls) e o editor nao remove (rooms e do codigo).
   - redesign do mapa baseado em print de referencia do user (verificar
     Downloads/Erro.jpeg ou similar - nao localizado ainda) - possivelmente
     reorganizar departamentos, mobilia, cores
