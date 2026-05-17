@@ -613,6 +613,18 @@ export class OfficeScene extends Phaser.Scene {
         this.tvX = item.x;
         this.tvY = item.y;
       }
+
+      // Mesa-conversa: marca discreta no piso dos 3 lugares (sentado +
+      // esquerda + direita). Bem sutil — só pra orientar.
+      if (item.type === "desk" && item.deskId) {
+        const sy = item.y + 34;
+        for (const sx of [item.x, item.x - 46, item.x + 46]) {
+          const mark = this.add.circle(sx, sy, 9, 0xffffff, 0.06);
+          mark.setStrokeStyle(1, 0xffffff, 0.16);
+          mark.setDepth(-3); // acima do piso, abaixo de tudo
+          this.furnitureObjs.push(mark);
+        }
+      }
     });
   }
 
@@ -1599,8 +1611,9 @@ export class OfficeScene extends Phaser.Scene {
    *   - Caso contrário, comportamento normal: testa destino, slide nos eixos.
    */
   private tryMove(curX: number, curY: number, dx: number, dy: number): { x: number; y: number } {
-    // Modo fantasma: atravessa móveis/paredes/pessoas livremente.
-    if (this.ghostMode) return { x: curX + dx, y: curY + dy };
+    // Modo fantasma NÃO atravessa móveis/paredes (só "passa por avatares",
+    // que já não têm colisão). O encaixe no slot é feito por snap direto
+    // no desk:sat, então não precisa furar móvel pra entrar na mesa.
 
     const stuck = checkCollision(curX, curY, PLAYER_HALF, this.layout, this.dynamicWalls);
 
