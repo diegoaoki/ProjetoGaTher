@@ -1820,6 +1820,7 @@ export default function App() {
           onLocate={(x, y) => sceneRef.current?.navigateTo(x, y)}
           onClose={() => { setMiniMapOpen(false); setLocateUserId(null); }}
           highlightUserId={locateUserId}
+          myFloor={myFloor}
         />
       )}
 

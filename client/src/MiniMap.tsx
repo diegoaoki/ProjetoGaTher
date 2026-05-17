@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { Room } from "colyseus.js";
-import { getDefaultLayout } from "./OfficeLayout";
+import { getDefaultLayout, FLOOR2_Y0 } from "./OfficeLayout";
 
 interface Props {
   room: Room;
@@ -10,6 +10,8 @@ interface Props {
   onClose: () => void;
   /** userId pra destacar (vindo do botão "localizar" da lista). */
   highlightUserId?: string | null;
+  /** Andar atual — o mini-mapa só mostra o andar onde você está. */
+  myFloor?: number;
 }
 
 const PANEL_W = 240; // largura do canvas em px
@@ -19,7 +21,7 @@ const PANEL_W = 240; // largura do canvas em px
  * pessoa. O seu ponto fica verde. Clicar num ponto te leva até lá.
  * Atualiza ~4x/s lendo o state do Colyseus (sem re-render do React).
  */
-export default function MiniMap({ room, meSessionId, onLocate, onClose, highlightUserId }: Props) {
+export default function MiniMap({ room, meSessionId, onLocate, onClose, highlightUserId, myFloor = 1 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // dots atuais (px do canvas) → usado no clique/hover pra achar a pessoa
   const dotsRef = useRef<
@@ -30,8 +32,13 @@ export default function MiniMap({ room, meSessionId, onLocate, onClose, highligh
   highlightRef.current = highlightUserId ?? null;
 
   const layout = getDefaultLayout();
-  const scale = PANEL_W / layout.width;
-  const panelH = Math.round(layout.height * scale);
+  // Só o andar atual (outra "dimensão" — não revela o outro andar).
+  const region =
+    myFloor === 2
+      ? { x: 0, y: FLOOR2_Y0, w: layout.width, h: layout.height - FLOOR2_Y0 }
+      : { x: 0, y: 0, w: layout.width, h: 55 * 32 };
+  const scale = PANEL_W / region.w;
+  const panelH = Math.round(region.h * scale);
 
   useEffect(() => {
     const draw = () => {
@@ -49,8 +56,10 @@ export default function MiniMap({ room, meSessionId, onLocate, onClose, highligh
       ctx.fillStyle = "#1e293b";
       ctx.lineWidth = 1;
       for (const r of layout.rooms) {
-        const x = r.x * scale;
-        const y = r.y * scale;
+        const rFloor = r.y >= FLOOR2_Y0 ? 2 : 1;
+        if (rFloor !== myFloor) continue; // só o andar atual
+        const x = (r.x - region.x) * scale;
+        const y = (r.y - region.y) * scale;
         const w = r.w * scale;
         const h = r.h * scale;
         ctx.fillRect(x, y, w, h);
@@ -63,8 +72,9 @@ export default function MiniMap({ room, meSessionId, onLocate, onClose, highligh
       const hl = highlightRef.current;
       const t = Date.now();
       state?.players?.forEach?.((p: any, sid: string) => {
-        const cx = p.x * scale;
-        const cy = p.y * scale;
+        if ((p.floor ?? 1) !== myFloor) return; // só quem está no meu andar
+        const cx = (p.x - region.x) * scale;
+        const cy = (p.y - region.y) * scale;
         const me = sid === meSessionId;
         const uid = p.userId || "";
         dots.push({ cx, cy, x: p.x, y: p.y, me, name: p.name || "?", userId: uid });
@@ -112,7 +122,7 @@ export default function MiniMap({ room, meSessionId, onLocate, onClose, highligh
     draw();
     const id = window.setInterval(draw, 250);
     return () => window.clearInterval(id);
-  }, [room, meSessionId, scale]);
+  }, [room, meSessionId, scale, myFloor]);
 
   function handleClick(e: React.MouseEvent<HTMLCanvasElement>) {
     const cv = canvasRef.current;
