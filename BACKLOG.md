@@ -58,6 +58,7 @@ Legenda: 🔴 prioridade · 🐞 bug · 🟢 feito (mantido como referência) ·
 - 🟢 [FEITO] **porta da Segurança não abre + aviso ao insistir** — `tickDoors` força `door-security_room` sempre fechada; manda `security:locked` (throttle 2s/player) quando a pessoa insiste na frente.
 - 🟢 [FEITO] **painel de fechadura da Segurança** — `SecurityLockModal`: display + teclado numérico + leitor de digital; qualquer tentativa (4+ dígitos / Enter / digital) → "ACESSO NEGADO" com shake; Esc/X fecha. Server manda `security:locked`.
 - **redesign do mapa** baseado em print de referência do user (verificar `Downloads/Erro.jpeg` ou similar — não localizado ainda) — possivelmente reorganizar departamentos, mobília, cores
+- ⚪ [pedido 2026-05-17] **área verde ao redor do mapa (sem acesso)** — moldura externa decorativa em volta do prédio (gramado), opcionalmente com ruas e árvores. Só estética; sem colisão a favor (já tem borda do mundo) — área inalcançável pelo avatar.
 
 ### NPC
 - NPC segurança com **pathfinding real** (A* entre móveis/paredes) — substituir o "teletransporte + fade" atual. Precisa grid de navegação evitando furniture hitboxes e walls dinâmicas (portas fechadas)

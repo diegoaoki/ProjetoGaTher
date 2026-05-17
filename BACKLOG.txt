@@ -145,6 +145,9 @@ Visual / mapa:
   - redesign do mapa baseado em print de referencia do user (verificar
     Downloads/Erro.jpeg ou similar - nao localizado ainda) - possivelmente
     reorganizar departamentos, mobilia, cores
+  - [pedido 2026-05-17] area verde ao redor do mapa (sem acesso) -
+    moldura externa decorativa (gramado), opcional ruas+arvores. So
+    estetica; area inalcancavel pelo avatar.
 
 NPC:
   - NPC seguranca com pathfinding real (A* entre moveis/paredes) -

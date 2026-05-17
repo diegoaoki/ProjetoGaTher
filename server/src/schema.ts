@@ -24,6 +24,9 @@ export class Player extends Schema {
   // mesa forma zona de áudio isolada (só eles se ouvem).
   @type("string") deskSeat: string = "";
   @type("number") deskSlot: number = -1;
+  // Andar do prédio: 1 = térreo (mapa original), 2 = segundo andar.
+  // Áudio e visibilidade são isolados entre andares diferentes.
+  @type("number") floor: number = 1;
 }
 
 export class Desk extends Schema {
