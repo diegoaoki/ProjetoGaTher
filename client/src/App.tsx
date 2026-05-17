@@ -1000,7 +1000,30 @@ export default function App() {
 
         const lbl = document.createElement("div");
         lbl.textContent = displayName;
-        lbl.style.cssText = "position:absolute;bottom:0;left:0;right:0;background:#000a;color:#fff;font-size:11px;padding:2px 6px;";
+        lbl.style.cssText = "position:absolute;bottom:0;left:0;right:0;background:#000a;color:#fff;font-size:11px;padding:2px 6px;display:flex;align-items:center;gap:6px;";
+
+        // Slider de volume individual desta pessoa (multiplicador, persiste).
+        const cur = spatialRef.current?.getPeerVolumeFor(card.identity) ?? 1;
+        const vol = document.createElement("input");
+        vol.type = "range";
+        vol.min = "0";
+        vol.max = "2";
+        vol.step = "0.05";
+        vol.value = String(cur);
+        vol.title = `Volume de ${displayName}: ${Math.round(cur * 100)}%`;
+        vol.style.cssText = "flex:1;min-width:44px;height:12px;cursor:pointer;accent-color:#38bdf8;";
+        vol.onpointerdown = (e) => e.stopPropagation(); // não arrasta a câmera
+        vol.oninput = () => {
+          const v = parseFloat(vol.value);
+          spatialRef.current?.setPeerVolumeFor(card.identity, v);
+          vol.title = `Volume de ${displayName}: ${Math.round(v * 100)}%`;
+        };
+        const nameSpan = document.createElement("span");
+        nameSpan.textContent = displayName;
+        nameSpan.style.cssText = "overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:50%;";
+        lbl.textContent = "";
+        lbl.append("🔊", vol, nameSpan);
+
         wrap.appendChild(card.element);
         wrap.appendChild(lbl);
         target.appendChild(wrap);

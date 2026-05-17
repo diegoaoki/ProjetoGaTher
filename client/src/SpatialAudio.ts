@@ -18,7 +18,15 @@ import {
   setPeerGain,
   getMicGain,
   setMicGain,
+  getPeerVolume,
+  setPeerVolume,
 } from "./audioPrefs";
+
+/** userId estável a partir da identity do LiveKit (`userId__timestamp`). */
+function userIdOf(identity: string): string {
+  const i = identity.indexOf("__");
+  return i >= 0 ? identity.slice(0, i) : identity;
+}
 
 /** Volume de quem está numa bolha pra quem está fora dela (mesma sala). */
 const BUBBLE_OUTSIDE_VOL = 0.15;
@@ -123,11 +131,23 @@ export class SpatialAudio {
 
   /** Aplica volume num peer: GainNode (permite > 1) ou fallback no element. */
   private applyPeerVolume(peer: RemotePeer, vol: number) {
+    const per = getPeerVolume(userIdOf(peer.identity)); // multiplicador individual
     if (peer.gainNode) {
-      peer.gainNode.gain.value = vol * this.peerMasterGain;
+      peer.gainNode.gain.value = vol * this.peerMasterGain * per;
     } else if (peer.audioElement) {
-      peer.audioElement.volume = Math.min(1, vol); // fallback: trava em 1
+      peer.audioElement.volume = Math.min(1, vol * per); // fallback: trava em 1
     }
+  }
+
+  /** Volume individual da pessoa (multiplicador). Persiste por userId. */
+  public setPeerVolumeFor(identity: string, v: number) {
+    const g = Number.isFinite(v) && v >= 0 ? v : 1;
+    setPeerVolume(userIdOf(identity), g);
+    this.ensureAudioCtx();
+    // updateVolumes roda a cada frame e relê getPeerVolume → aplica sozinho.
+  }
+  public getPeerVolumeFor(identity: string): number {
+    return getPeerVolume(userIdOf(identity));
   }
 
   public onPeerSpeaking?: (identity: string, speaking: boolean) => void;

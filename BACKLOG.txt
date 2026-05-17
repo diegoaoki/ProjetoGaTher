@@ -115,8 +115,11 @@ Audio / camera:
     num grid maior centralizado; no open space, coluninha lateral
   - [FEITO] camera "espelhar" video local - toggle no painel 🎧
     (audioPrefs, default ligado)
-  - volume: aumentar limite maximo do ganho do peer (LiveKit limita a
-    1.0; subir ate 2.0 via Web Audio) + slider individual por peer
+  - [FEITO] volume: ganho do peer ja passa de 1.0 (Web Audio) + slider
+    individual por peer - audioPrefs guarda mapa userId->multiplicador
+    (persiste, 0-2); SpatialAudio.setPeerVolumeFor/getPeerVolumeFor
+    (chaveado por userId, estavel entre sessoes); slider no rodape de
+    cada card de video, multiplica sobre o ganho master.
   - [FEITO 4657878] mesa = zona de audio (mesa-conversa): tecla G
     (fantasma) ocupa 1 de 3 slots; mesma mesa = audio isolado total.
     Coexiste com reserva (E).

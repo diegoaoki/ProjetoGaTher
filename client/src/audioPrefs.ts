@@ -56,6 +56,41 @@ export function setMicGain(v: number) {
   write(MIC_GAIN_KEY, String(v));
 }
 
+/**
+ * Volume individual por pessoa, multiplicador sobre o ganho master.
+ * Chaveado por userId (estável entre sessões, ao contrário da identity
+ * do LiveKit que carrega timestamp). 1 = normal; 0 = mudo; até 2.
+ */
+const PEER_VOL_KEY = "vo-peer-vol-v1";
+
+function readPeerVolMap(): Record<string, number> {
+  try {
+    const raw = read(PEER_VOL_KEY);
+    if (!raw) return {};
+    const obj = JSON.parse(raw);
+    return obj && typeof obj === "object" ? obj : {};
+  } catch {
+    return {};
+  }
+}
+export function getPeerVolume(userId: string): number {
+  const v = readPeerVolMap()[userId];
+  return Number.isFinite(v) && v >= 0 ? v : 1;
+}
+export function setPeerVolume(userId: string, v: number) {
+  if (!userId) return;
+  const map = readPeerVolMap();
+  if (v === 1) delete map[userId]; // default não ocupa espaço
+  else map[userId] = v;
+  try {
+    const keys = Object.keys(map);
+    if (keys.length) localStorage.setItem(PEER_VOL_KEY, JSON.stringify(map));
+    else localStorage.removeItem(PEER_VOL_KEY);
+  } catch {
+    /* localStorage indisponível — ignora */
+  }
+}
+
 /** Espelhar (scaleX -1) o próprio vídeo. Default: true (mais natural). */
 export function getMirrorSelf(): boolean {
   return read(MIRROR_KEY) !== "0";

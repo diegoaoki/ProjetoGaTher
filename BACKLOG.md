@@ -60,7 +60,7 @@ _(nenhum bug aberto no momento)_
 - áudio/microfone: relatos de microfone abafado — UI pra (a) escolher dispositivo de entrada, (b) ajustar ganho do mic, (c) ajustar volume de saída/peers *(coberto pelas prioridades acima)*
 - 🟢 [FEITO] câmera "primeiro plano em sala": fora do open space, peers num grid maior centralizado; no open space, coluninha lateral
 - 🟢 [FEITO] câmera "espelhar" o vídeo local — toggle no painel 🎧 (audioPrefs, default ligado)
-- volume: aumentar limite máximo do ganho do peer (LiveKit limita a 1.0; subir até 2.0 via Web Audio) + slider individual por peer
+- 🟢 [FEITO] volume: limite do ganho do peer já passa de 1.0 (Web Audio) + **slider individual por peer** — `audioPrefs` guarda mapa userId→multiplicador (persiste, 0–2); `SpatialAudio.setPeerVolumeFor/getPeerVolumeFor` (chaveado por userId, estável entre sessões); slider 🔊 no rodapé de cada card de vídeo, multiplica sobre o ganho master.
 - 🟢 [FEITO `4657878`] mesa = zona de áudio (mesa-conversa): tecla G (fantasma) → ocupa 1 de 3 slots numa mesa; mesma mesa = áudio isolado total. Coexiste com reserva (E).
 
 ### Sidebar
