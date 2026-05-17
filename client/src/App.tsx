@@ -9,6 +9,7 @@ import AdminPanel from "./AdminPanel";
 import ChatPanel from "./ChatPanel";
 import MobileControls from "./MobileControls";
 import AudioTestScreen from "./AudioTestScreen";
+import MiniMap from "./MiniMap";
 import { getMirrorSelf } from "./audioPrefs";
 import { ChatMessage, playNotificationBeep } from "./chat";
 import { useIsMobile } from "./useIsMobile";
@@ -272,6 +273,7 @@ export default function App() {
 
   // === Sidebar de usuários online ===
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [miniMapOpen, setMiniMapOpen] = useState(false);
   interface OnlinePlayer {
     sessionId: string;
     userId: string;
@@ -1239,9 +1241,9 @@ export default function App() {
     <div style={{ width: "100vw", height: "100vh", position: "relative", overflow: "hidden" }}>
       <div ref={containerRef} style={{ position: "absolute", top: 0, left: 0, width: "100vw", height: "100vh", background: "#0f172a" }} />
 
-      {/* HUD esquerdo: info do user. Some quando a lista de usuários está
-          aberta (os dois juntos ficavam estranhos). Compactado em mobile. */}
-      {!sidebarOpen && (
+      {/* HUD esquerdo: info do user. Some quando a lista de usuários ou
+          o mini-mapa estão abertos (top-left compartilhado). */}
+      {!sidebarOpen && !miniMapOpen && (
       <div style={isMobile ? { ...hudStyle, padding: "6px 10px", fontSize: 12 } : hudStyle}>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <strong>{session.profile.displayName}</strong>
@@ -1333,6 +1335,13 @@ export default function App() {
           title="Usuários (online / offline)"
         >
           👥
+        </button>
+        <button
+          onClick={() => setMiniMapOpen((v) => !v)}
+          style={mediaBtnStyle(miniMapOpen, miniMapOpen ? "#2563eb" : "#1e293b")}
+          title="Mini-mapa (localizar alguém)"
+        >
+          🧭
         </button>
         <button
           onClick={() => setChatOpen((v) => !v)}
@@ -1565,6 +1574,15 @@ export default function App() {
         </div>
         );
       })()}
+
+      {miniMapOpen && conn === "connected" && roomRef.current && (
+        <MiniMap
+          room={roomRef.current}
+          meSessionId={roomRef.current.sessionId}
+          onLocate={(x, y) => sceneRef.current?.navigateTo(x, y)}
+          onClose={() => setMiniMapOpen(false)}
+        />
+      )}
 
       <div ref={localVideoRef} style={{
         position: "absolute",
