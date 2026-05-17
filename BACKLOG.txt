@@ -76,7 +76,12 @@ BACKLOG GERAL
 
 Auth / infra:
   - esqueci-a-senha (precisa SMTP)
-  - mobile responsivo
+  - [FEITO] mobile responsivo - viewport anti-zoom + safe-area +
+    100dvh; pinca pra zoom (OfficeScene); botao G no MobileControls
+    (conversa de mesa, antes inacessivel); cards de video menores e
+    reposicionados pra nao cobrir controles; LoginScreen fluido;
+    modais com maxWidth/maxHeight/overflow. Base ja existia:
+    useIsMobile, joystick+E, HUD compacto, sidebar fullscreen.
   - editor de mapas
 
 Interacao:

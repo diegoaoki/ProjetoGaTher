@@ -232,19 +232,21 @@ export default function LoginScreen({ httpUrl, onAuthed }: Props) {
 
 const overlayStyle: React.CSSProperties = {
   width: "100vw",
-  height: "100vh",
+  height: "100dvh",
   display: "flex",
   alignItems: "center",
   justifyContent: "center",
   background: "linear-gradient(135deg, #0f172a, #1e293b)",
   overflowY: "auto",
+  padding: 16,
 };
 const cardStyle: React.CSSProperties = {
   background: "#1e293b",
   border: "1px solid #334155",
   borderRadius: 12,
   padding: 28,
-  width: 380,
+  // Fluido: nunca estoura em telas estreitas
+  width: "min(380px, 100%)",
   boxShadow: "0 20px 50px rgba(0,0,0,0.4)",
 };
 const tabsStyle: React.CSSProperties = {

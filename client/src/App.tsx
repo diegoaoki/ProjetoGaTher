@@ -992,8 +992,9 @@ export default function App() {
     const inRoom = !!currentZoneId && currentZoneId !== "open";
     const target = inRoom ? room : side;
     if (!target) return;
-    const W = inRoom ? 220 : 120;
-    const H = inRoom ? 165 : 80;
+    // Mobile: cards menores pra não engolir a tela / cobrir controles
+    const W = isMobile ? (inRoom ? 132 : 84) : inRoom ? 220 : 120;
+    const H = isMobile ? (inRoom ? 99 : 56) : inRoom ? 165 : 80;
 
     peerCards
       .filter((card) => visiblePeerIds.has(card.identity))
@@ -1040,7 +1041,7 @@ export default function App() {
         target.appendChild(wrap);
         safePlay(card.element);
       });
-  }, [peerCards, visiblePeerIds, onlinePlayers, conn, currentZoneId]);
+  }, [peerCards, visiblePeerIds, onlinePlayers, conn, currentZoneId, isMobile]);
 
   useEffect(() => {
     if (conn !== "connected" || !spatialRef.current || !localVideoRef.current) return;
@@ -1729,9 +1730,11 @@ export default function App() {
 
       <div ref={localVideoRef} style={{
         position: "absolute",
-        // Em mobile, sobe pra não colidir com o joystick
-        bottom: isMobile ? 120 : 16,
-        right: 16,
+        // Mobile: canto superior direito (abaixo da barra), longe do
+        // joystick e dos botões E/G que ficam no rodapé.
+        ...(isMobile
+          ? { top: 58, right: 8 }
+          : { bottom: 16, right: 16 }),
         border: "2px solid #4ade80", borderRadius: 8, overflow: "hidden",
         background: "#000", zIndex: 10,
       }} />
@@ -1740,11 +1743,17 @@ export default function App() {
         <MobileControls
           onMove={(x, y) => sceneRef.current?.setVirtualInput(x, y)}
           onAction={() => sceneRef.current?.triggerClaimAction()}
+          onGhost={() => sceneRef.current?.triggerGhostAction()}
         />
       )}
 
       <div ref={cardsContainerRef} style={{
-        position: "absolute", top: 16, right: 16,
+        position: "absolute",
+        // Mobile: coluna à esquerda abaixo da barra (não colide com o
+        // self-view à direita nem com os controles no rodapé) e rolável.
+        ...(isMobile
+          ? { top: 58, left: 8, maxHeight: "calc(100dvh - 220px)", overflowY: "auto" as const }
+          : { top: 16, right: 16 }),
         display: visiblePeerIds.size > 0 && currentZoneId === "open" ? "flex" : "none",
         flexDirection: "column", gap: 4, zIndex: 10,
       }} />
@@ -1755,7 +1764,10 @@ export default function App() {
         transform: "translateX(-50%)",
         display: visiblePeerIds.size > 0 && !!currentZoneId && currentZoneId !== "open" ? "flex" : "none",
         flexWrap: "wrap", justifyContent: "center", gap: 8,
-        maxWidth: "80vw", zIndex: 9,
+        maxWidth: isMobile ? "94vw" : "80vw",
+        // Mobile: limita a altura e rola, pra nunca cobrir os controles
+        ...(isMobile ? { maxHeight: "55dvh", overflowY: "auto" as const } : {}),
+        zIndex: 9,
       }} />
 
 
@@ -2521,6 +2533,11 @@ const overlayStyle: React.CSSProperties = {
 const cardStyle: React.CSSProperties = {
   background: "#1e293b", border: "1px solid #334155",
   borderRadius: 12, padding: 28, width: 380,
+  // Nunca estoura a viewport (mesmo quando algum modal sobrescreve width
+  // com px fixo via {...cardStyle, width: N}); rola se for muito alto.
+  maxWidth: "calc(100vw - 24px)",
+  maxHeight: "calc(100dvh - 24px)",
+  overflowY: "auto",
   boxShadow: "0 20px 50px rgba(0,0,0,0.4)",
 };
 const labelStyle: React.CSSProperties = { display: "block", fontSize: 13, marginBottom: 6, marginTop: 12, opacity: 0.8 };
@@ -2570,6 +2587,9 @@ const modalStyle: React.CSSProperties = {
   background: "#000c", zIndex: 100,
   display: "flex", alignItems: "center", justifyContent: "center",
   cursor: "pointer",
+  // Mobile/telas baixas: permite rolar e dá respiro nas bordas
+  padding: 12,
+  overflowY: "auto",
 };
 const saveStatusStyle = (status: "saving" | "saved" | "error"): React.CSSProperties => ({
   marginLeft: 8,

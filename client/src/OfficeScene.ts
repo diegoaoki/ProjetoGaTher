@@ -123,6 +123,16 @@ export class OfficeScene extends Phaser.Scene {
   private panStartScreenY = 0;
   private panStartScrollX = 0;
   private panStartScrollY = 0;
+  // === Pinça pra zoom (mobile, dois dedos) ===
+  private readonly ZOOM_MIN = 0.4;
+  private readonly ZOOM_MAX = 1.8;
+  private pinchPrevDist = 0;
+
+  /** Aplica zoom com clamp comum (roda do mouse, teclas + - e pinça). */
+  private applyZoomClamped(next: number) {
+    const z = Math.min(this.ZOOM_MAX, Math.max(this.ZOOM_MIN, next));
+    this.cameras.main.setZoom(z);
+  }
 
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys;
   private wasd!: { W: Phaser.Input.Keyboard.Key; A: Phaser.Input.Keyboard.Key; S: Phaser.Input.Keyboard.Key; D: Phaser.Input.Keyboard.Key };
@@ -352,7 +362,23 @@ export class OfficeScene extends Phaser.Scene {
         this.startPan(pointer.x, pointer.y);
       }
     });
+    // Habilita um 2º ponteiro de toque pra detectar pinça (mobile).
+    this.input.addPointer(1);
     this.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+      // Pinça: dois dedos na tela → ajusta zoom pela variação da distância.
+      const p1 = this.input.pointer1;
+      const p2 = this.input.pointer2;
+      if (p1?.isDown && p2?.isDown) {
+        const dist = Phaser.Math.Distance.Between(p1.x, p1.y, p2.x, p2.y);
+        if (this.pinchPrevDist > 0) {
+          const ratio = dist / this.pinchPrevDist;
+          this.applyZoomClamped(this.cameras.main.zoom * ratio);
+        }
+        this.pinchPrevDist = dist;
+        this.isPanning = false; // pinça não é pan
+        return;
+      }
+      this.pinchPrevDist = 0;
       if (this.isPanning && pointer.rightButtonDown()) {
         this.updatePan(pointer.x, pointer.y);
       } else if (this.isPanning && !pointer.rightButtonDown()) {
@@ -362,6 +388,7 @@ export class OfficeScene extends Phaser.Scene {
     });
     this.input.on("pointerup", () => {
       this.isPanning = false;
+      this.pinchPrevDist = 0;
     });
 
     // Erros vindos do server (mesa já reservada, mesa inválida, etc)
@@ -372,13 +399,8 @@ export class OfficeScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor("#1a1a2e");
     this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
 
-    // Zoom in/out via roda do mouse e teclas + / -
-    const ZOOM_MIN = 0.4;
-    const ZOOM_MAX = 1.8;
-    const applyZoom = (next: number) => {
-      const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, next));
-      this.cameras.main.setZoom(clamped);
-    };
+    // Zoom in/out via roda do mouse, teclas + / - e pinça (mobile)
+    const applyZoom = (next: number) => this.applyZoomClamped(next);
     this.input.on("wheel", (_p: unknown, _o: unknown, _dx: number, dy: number) => {
       applyZoom(this.cameras.main.zoom - dy * 0.0015);
     });
@@ -431,6 +453,11 @@ export class OfficeScene extends Phaser.Scene {
   /** Versão pública de handleClaimKey pra o botão E mobile chamar. */
   public triggerClaimAction() {
     this.handleClaimKey();
+  }
+
+  /** Versão pública do toggle de fantasma/conversa-de-mesa pro botão G mobile. */
+  public triggerGhostAction() {
+    this.toggleGhost();
   }
 
   public setMySpeaking(speaking: boolean) {

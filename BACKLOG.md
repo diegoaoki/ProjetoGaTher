@@ -41,7 +41,7 @@ _(nenhum bug aberto no momento)_
 
 ### Auth / infra
 - esqueci-a-senha (precisa SMTP)
-- mobile responsivo
+- 🟢 [FEITO] mobile responsivo — viewport anti-zoom + safe-area + `100dvh`; pinça pra zoom (`OfficeScene`); botão **G** no `MobileControls` (conversa de mesa, antes inacessível); cards de vídeo menores e reposicionados pra não cobrir os controles; LoginScreen fluido (`min(380px,100%)`); modais com `maxWidth/maxHeight/overflow` (cardStyle/modalStyle globais + AudioTestScreen). Base que já existia: `useIsMobile`, joystick+E, HUD compacto, sidebar fullscreen, `Scale.RESIZE`.
 - editor de mapas
 
 ### Interação

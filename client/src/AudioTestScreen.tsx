@@ -341,7 +341,7 @@ export default function AudioTestScreen({ onClose, spatial, onMirrorChange }: Pr
 
 const overlayStyle: React.CSSProperties = {
   position: "fixed", inset: 0,
-  width: "100vw", height: "100vh",
+  width: "100vw", height: "100dvh",
   display: "flex", alignItems: "center", justifyContent: "center",
   background: "#0f172af2",
   overflowY: "auto", padding: 16,
@@ -351,6 +351,7 @@ const overlayStyle: React.CSSProperties = {
 const cardStyle: React.CSSProperties = {
   background: "#1e293b", border: "1px solid #334155",
   borderRadius: 12, padding: 24, width: 420, maxWidth: "100%",
+  maxHeight: "calc(100dvh - 32px)", overflowY: "auto",
   boxShadow: "0 20px 50px rgba(0,0,0,0.4)",
 };
 const sectionStyle: React.CSSProperties = {

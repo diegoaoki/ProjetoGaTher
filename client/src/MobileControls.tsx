@@ -5,6 +5,8 @@ interface Props {
   onMove: (x: number, y: number) => void;
   /** Chamado quando o usuário toca no botão E (reservar/liberar mesa). */
   onAction: () => void;
+  /** Chamado quando o usuário toca no botão G (conversa de mesa / fantasma). */
+  onGhost: () => void;
 }
 
 const STICK_RADIUS = 60;     // raio do círculo externo
@@ -19,7 +21,7 @@ const STICK_MARGIN = 24;     // distância da borda
  * Joystick captura touchstart/move/end e emite x/y normalizado (-1..1).
  * Outros toques fora dos controles passam pelo Phaser normalmente.
  */
-export default function MobileControls({ onMove, onAction }: Props) {
+export default function MobileControls({ onMove, onAction, onGhost }: Props) {
   const stickRef = useRef<HTMLDivElement>(null);
   const [knobOffset, setKnobOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
   const activeTouchId = useRef<number | null>(null);
@@ -92,8 +94,8 @@ export default function MobileControls({ onMove, onAction }: Props) {
         ref={stickRef}
         style={{
           position: "fixed",
-          left: STICK_MARGIN,
-          bottom: STICK_MARGIN,
+          left: `calc(${STICK_MARGIN}px + env(safe-area-inset-left, 0px))`,
+          bottom: `calc(${STICK_MARGIN}px + env(safe-area-inset-bottom, 0px))`,
           width: STICK_RADIUS * 2,
           height: STICK_RADIUS * 2,
           borderRadius: "50%",
@@ -120,6 +122,35 @@ export default function MobileControls({ onMove, onAction }: Props) {
         />
       </div>
 
+      {/* Botão G — conversa de mesa / fantasma (acima do E) */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onGhost();
+        }}
+        style={{
+          position: "fixed",
+          right: `calc(${STICK_MARGIN}px + env(safe-area-inset-right, 0px))`,
+          bottom: `calc(${STICK_MARGIN + 72 + 14}px + env(safe-area-inset-bottom, 0px))`,
+          width: 60,
+          height: 60,
+          borderRadius: "50%",
+          background: "#7c3aed",
+          border: "3px solid #4c1d95",
+          color: "#fff",
+          fontSize: 24,
+          fontWeight: 700,
+          cursor: "pointer",
+          zIndex: 50,
+          touchAction: "manipulation",
+          userSelect: "none",
+          boxShadow: "0 4px 12px rgba(0,0,0,0.4)",
+        }}
+        title="Entrar/sair da conversa de mesa (fantasma)"
+      >
+        G
+      </button>
+
       {/* Botão E à direita inferior */}
       <button
         onClick={(e) => {
@@ -128,8 +159,8 @@ export default function MobileControls({ onMove, onAction }: Props) {
         }}
         style={{
           position: "fixed",
-          right: STICK_MARGIN,
-          bottom: STICK_MARGIN,
+          right: `calc(${STICK_MARGIN}px + env(safe-area-inset-right, 0px))`,
+          bottom: `calc(${STICK_MARGIN}px + env(safe-area-inset-bottom, 0px))`,
           width: 72,
           height: 72,
           borderRadius: "50%",
