@@ -1909,7 +1909,14 @@ export class OfficeScene extends Phaser.Scene {
     }
     const FLOOR1_MAX = 55 * 32; // térreo: y 0..1760 (sem o gap)
     if (this.myFloor === 2) {
-      cam.setBounds(0, FLOOR2_Y0, WORLD_W, WORLD_H - FLOOR2_Y0);
+      // Limites = retângulo da SALA do 2º andar (não o mundo todo,
+      // senão sobra margem vazia em volta). +1 tile de respiro.
+      const f2 = this.layout.rooms.find((r) => r.id === "floor2");
+      if (f2) {
+        cam.setBounds(f2.x - 32, f2.y - 32, f2.w + 64, f2.h + 64);
+      } else {
+        cam.setBounds(0, FLOOR2_Y0, WORLD_W, WORLD_H - FLOOR2_Y0);
+      }
     } else {
       cam.setBounds(0, 0, WORLD_W, FLOOR1_MAX);
     }

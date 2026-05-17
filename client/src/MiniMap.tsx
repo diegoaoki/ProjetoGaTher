@@ -33,9 +33,11 @@ export default function MiniMap({ room, meSessionId, onLocate, onClose, highligh
 
   const layout = getDefaultLayout();
   // Só o andar atual (outra "dimensão" — não revela o outro andar).
+  // 2º andar = retângulo da própria sala (sem margem vazia em volta).
+  const f2 = layout.rooms.find((r) => r.id === "floor2");
   const region =
-    myFloor === 2
-      ? { x: 0, y: FLOOR2_Y0, w: layout.width, h: layout.height - FLOOR2_Y0 }
+    myFloor === 2 && f2
+      ? { x: f2.x - 32, y: f2.y - 32, w: f2.w + 64, h: f2.h + 64 }
       : { x: 0, y: 0, w: layout.width, h: 55 * 32 };
   const scale = PANEL_W / region.w;
   const panelH = Math.round(region.h * scale);
