@@ -1523,6 +1523,24 @@ export default function App() {
         const onlineByUser = new Map(
           onlinePlayers.filter((o) => o.userId).map((o) => [o.userId, o] as const)
         );
+        // userId → deskId de quem tem mesa reservada. Vem do state.desks
+        // (hidratado do Postgres no boot do server), então funciona mesmo
+        // com o dono offline.
+        const deskOfUser = new Map<string, string>();
+        const dstate: any = (roomRef.current as any)?.state;
+        dstate?.desks?.forEach?.((d: any) => {
+          if (d?.ownerId && d?.deskId) deskOfUser.set(d.ownerId, d.deskId);
+        });
+        const goToUserDesk = (userId: string, name: string) => {
+          const deskId = deskOfUser.get(userId);
+          const desk = deskId ? getDeskCatalog().find((d) => d.id === deskId) : null;
+          if (desk && sceneRef.current) {
+            sceneRef.current.navigateTo(desk.x, desk.y + 28);
+            setSidebarOpen(false);
+          } else {
+            setSocialToast({ text: `${name} não tem mesa reservada`, tone: "error" });
+          }
+        };
         const rows: DirRow[] = [];
         const seen = new Set<string>();
         for (const d of directory) {
@@ -1631,6 +1649,15 @@ export default function App() {
                       >
                         📍
                       </button>
+                      {deskOfUser.has(p.key) && (
+                        <button
+                          onClick={() => goToUserDesk(p.key, p.name)}
+                          style={sidebarActionBtn}
+                          title={`Ir até a mesa de ${p.name}`}
+                        >
+                          🪑
+                        </button>
+                      )}
                       <button
                         onClick={() => {
                           roomRef.current?.send("invite", { targetSessionId: p.sessionId });
@@ -1650,6 +1677,25 @@ export default function App() {
                         title={`Abrir bolha de conversa com ${p.name}`}
                       >
                         🫧
+                      </button>
+                    </div>
+                  )}
+                  {!p.isMe && !p.online && (
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <button
+                        onClick={() => goToUserDesk(p.key, p.name)}
+                        disabled={!deskOfUser.has(p.key)}
+                        style={{
+                          ...sidebarActionBtn,
+                          ...(deskOfUser.has(p.key) ? {} : { opacity: 0.35, cursor: "not-allowed" }),
+                        }}
+                        title={
+                          deskOfUser.has(p.key)
+                            ? `Ir até a mesa de ${p.name}`
+                            : `${p.name} não tem mesa reservada`
+                        }
+                      >
+                        🪑
                       </button>
                     </div>
                   )}
