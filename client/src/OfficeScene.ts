@@ -11,6 +11,7 @@ import {
   applyLayoutOverride,
   hitboxFor,
   WALL_T,
+  FLOOR2_Y0,
   FurnitureItem,
   Wall,
 } from "./OfficeLayout";
@@ -763,6 +764,7 @@ export class OfficeScene extends Phaser.Scene {
       .map((f) => ({ id: f.deskId!, x: f.x, y: f.y }));
 
     this.refreshDynamicWalls();
+    this.applyFloorView(); // objetos recriados → reaplica a dimensão do andar
   }
 
   // ============================================================
@@ -786,6 +788,7 @@ export class OfficeScene extends Phaser.Scene {
     this.wallObjs.forEach((o) => (o as any).setVisible?.(false));
     // Edição limpa: some com avatares, balões e o NPC (sem distração)
     this.setActorsVisible(false);
+    this.applyFloorView(); // editor: libera os 2 andares (câmera full)
     this.renderEditFurniture();
     this.renderEditWalls();
 
@@ -835,6 +838,7 @@ export class OfficeScene extends Phaser.Scene {
     this.clearSel();
     this.editBrush = null;
     this.setActorsVisible(true); // volta avatares/balões/NPC
+    this.applyFloorView(); // sai do editor → volta pra dimensão do andar
     if (restore) {
       this.rebuildLayout(this.mapOverride);
     }
@@ -1667,6 +1671,8 @@ export class OfficeScene extends Phaser.Scene {
 
     this.cameras.main.startFollow(this.myContainer, true, 0.1, 0.1);
     this.cameras.main.setZoom(1.3);
+    this.myFloor = player.floor ?? 1;
+    this.applyFloorView(); // dimensão do andar atual (esconde o outro)
 
     // Tocar idle inicial — animation key: `${charId}_${dir}_idle`
     this.mySprite.play(`${this.myTextureKey}_down_idle`);
@@ -1885,6 +1891,32 @@ export class OfficeScene extends Phaser.Scene {
   /** Define o andar do meu avatar (chamado no `floor:moved`). */
   public setMyFloor(floor: number) {
     this.myFloor = floor;
+    this.applyFloorView();
+  }
+
+  /**
+   * "Outra dimensão": prende a câmera ao andar atual e esconde toda a
+   * mobília/paredes/labels do outro andar. Quem está no térreo não vê
+   * o 2º andar e vice-versa. No editor mostra tudo (admin edita os 2).
+   */
+  private applyFloorView() {
+    const cam = this.cameras.main;
+    if (this.editMode) {
+      // No editor o admin precisa navegar/editar os 2 andares; a
+      // visibilidade de estáticos x editáveis é do enter/exitMapEditor.
+      cam.setBounds(0, 0, WORLD_W, WORLD_H);
+      return;
+    }
+    const FLOOR1_MAX = 55 * 32; // térreo: y 0..1760 (sem o gap)
+    if (this.myFloor === 2) {
+      cam.setBounds(0, FLOOR2_Y0, WORLD_W, WORLD_H - FLOOR2_Y0);
+    } else {
+      cam.setBounds(0, 0, WORLD_W, FLOOR1_MAX);
+    }
+    const floorOf = (o: any) => ((o?.y ?? 0) >= FLOOR2_Y0 ? 2 : 1);
+    this.furnitureObjs.forEach((o: any) => o.setVisible?.(floorOf(o) === this.myFloor));
+    this.wallObjs.forEach((o: any) => o.setVisible?.(floorOf(o) === this.myFloor));
+    this.roomLabelObjs.forEach((o: any) => o.setVisible?.(floorOf(o) === this.myFloor));
   }
 
   /** Teleporte server-autoritativo-light: move e sincroniza imediatamente. */

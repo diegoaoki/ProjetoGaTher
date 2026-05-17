@@ -649,8 +649,10 @@ export default function App() {
       // Escada rolante → server trocou meu andar. forceTeleport (evita
       // o race do authoritative-light) + atualiza meu andar.
       room.onMessage("floor:moved", (msg: { x: number; y: number; floor: number }) => {
-        sceneRef.current?.forceTeleport(msg.x, msg.y);
+        // setMyFloor primeiro (ajusta câmera/dimensão do andar) e só
+        // depois forceTeleport (move pra dentro dos novos limites).
         sceneRef.current?.setMyFloor(msg.floor);
+        sceneRef.current?.forceTeleport(msg.x, msg.y);
         setMyFloor(msg.floor);
         setSocialToast({
           text: msg.floor === 2 ? "🛗 Você subiu pro 2º andar" : "🛗 Você desceu pro térreo",
