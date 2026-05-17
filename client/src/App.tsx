@@ -1663,15 +1663,11 @@ export default function App() {
 
 
 
-      {nearbyDesk && (
+      {/* Só mostra de quem é a mesa (sem prompt de ação — o clique na
+          mesa já abre o modal de reservar/liberar). */}
+      {nearbyDesk && !nearbyDesk.isMine && nearbyDesk.ownerName && (
         <div style={deskHintStyle}>
-          {nearbyDesk.isMine ? (
-            <>Clique na mesa pra liberar (ou <kbd style={kbdStyle}>E</kbd>)</>
-          ) : nearbyDesk.ownerName ? (
-            <>Mesa de <strong>{nearbyDesk.ownerName}</strong></>
-          ) : (
-            <>Clique na mesa pra reservar (ou <kbd style={kbdStyle}>E</kbd>)</>
-          )}
+          Mesa de <strong>{nearbyDesk.ownerName}</strong>
         </div>
       )}
 
@@ -2450,16 +2446,6 @@ const cameraHintStyle: React.CSSProperties = {
   background: "#1e293bee", border: "1px solid #60a5fa",
   borderRadius: 8, padding: "6px 12px",
   fontSize: 12, zIndex: 12, maxWidth: 280,
-};
-const kbdStyle: React.CSSProperties = {
-  display: "inline-block",
-  padding: "1px 6px",
-  margin: "0 4px",
-  background: "#334155",
-  border: "1px solid #475569",
-  borderRadius: 4,
-  fontFamily: "monospace",
-  fontSize: 11,
 };
 const deskToastStyle: React.CSSProperties = {
   position: "absolute", top: "20%", left: "50%",
