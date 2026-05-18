@@ -117,10 +117,10 @@ export const TABLES_SPRITES = [
 
 /** Desks por departamento (texturas via FurnitureItem.tex). */
 export const DESK_SPRITES = [
-  "desk_dev",
-  "desk_dados",
-  "desk_infra",
-  "desk_fin",
+  "deskpc_dev",
+  "deskpc_dados",
+  "deskpc_infra",
+  "deskpc_fin",
 ] as const;
 
 /** Móveis da sala de Segurança (key == type). */

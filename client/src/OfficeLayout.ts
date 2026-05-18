@@ -287,9 +287,9 @@ function addWorkstation(items: FurnitureItem[], desks: Array<{ id: string; x: nu
   // Desk por departamento (sprite com PC embutido). `type` continua
   // "desk" pra não quebrar reserva/overlay/spawn — só a textura muda.
   const tex =
-    tileY < 11 ? "desk_dev" :
-    tileY < 21 ? "desk_dados" :
-    tileY < 31 ? "desk_infra" : "desk_fin";
+    tileY < 11 ? "deskpc_dev" :
+    tileY < 21 ? "deskpc_dados" :
+    tileY < 31 ? "deskpc_infra" : "deskpc_fin";
   items.push({ type: "desk", x, y, depth: 1, hitbox: HITBOXES.desk_pc, deskId: id, tex });
   items.push({ type: "chair", x, y: y + 36, depth: 0, hitbox: HITBOXES.chair });
 }
