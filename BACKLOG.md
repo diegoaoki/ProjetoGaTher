@@ -55,7 +55,7 @@ Legenda: 🔴 prioridade · 🐞 bug · 🟢 feito (mantido como referência) ·
 - 🟢 [FEITO] **não mostrar "mesa reservada" no join** — `deskToastSinceRef` (join+5s); só toasta reserva ATIVA pós-join.
 - 🟢 [FEITO] **bolha sem convite** — `handleBubbleInvite` cria/junta a bolha direto; removidos modal/handlers de convite; 🫧 = "Bolha aberta com X".
 - 🟢 [FEITO] **assets de mesa no editor** — `EDITOR_FURNITURE_TYPES` += desk/monitor/deskpc_* (HITBOXES deskpc_*); admin arrasta os desks LimeZu no editor (decorativo, não reservável). Pra escolher o desk que gostar.
-- 🟢 [FEITO] **sentar na cadeira ao chegar** — anim `${id}_${dir}_sit`; `chairSpots`+`onChair(26px)`; parado em cadeira → `sit`; volta walk/idle ao mover (meu avatar + remotos). **Refino**: `chairSpots` guarda `dir` calculado pela mesa mais próxima → senta de frente pra mesa (cadeiras laterais de reunião viram certo).
+- 🟢 [FEITO] **sentar na cadeira ao chegar** — anim `${id}_${dir}_sit`; `chairSpots`+`onChair(26px)`; parado em cadeira → `sit`; volta walk/idle ao mover (meu avatar + remotos). **Refino**: `chairSpots` guarda `dir` calculado pela mesa mais próxima → senta de frente pra mesa. **Fix:** `checkCollision` ignora `type:"chair"` (cadeira atravessável) senão não dá pra ficar em cima.
 - 🟢 [FEITO] menu de contexto right-click no avatar: "📢 Pedir pra vir aqui" (`summon` → toast + caminha até você, sem modal) + "📍 Ir até". Pan no vazio preservado.
 - 🟢 [FEITO] **melhorar a abertura das portas** — antes "só sumia" (setVisible/alpha instantâneo). Agora porta dupla: 2 folhas deslizam pros lados + fade (tween 280ms) ao abrir/fechar; sem animar na 1ª render. Colisão segue o estado lógico. Client-only.
 

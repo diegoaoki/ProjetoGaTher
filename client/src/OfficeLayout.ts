@@ -551,6 +551,7 @@ export function checkCollision(
 
   for (const item of layout.furniture) {
     if (!item.hitbox) continue;
+    if (item.type === "chair") continue; // cadeira é atravessável (pra sentar)
     const hb = item.hitbox;
     const hLeft = item.x + hb.offsetX;
     const hRight = hLeft + hb.w;
