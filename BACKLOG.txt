@@ -112,15 +112,15 @@ Auth / infra:
     Detalhar escopo antes.
 
 Interacao:
-  - [pedido 2026-05-17] nao mostrar "voce tem uma mesa reservada"
-    ao entrar - remover o toast/aviso de mesa reservada no join.
-  - [pedido 2026-05-17] bolha sem convite - tirar o fluxo de
-    convite de bolha; clicar pra abrir bolha cria direto com a
-    pessoa (sem pedir aceite).
-  - [pedido 2026-05-17] sentar na cadeira ao chegar - verificar
-    viabilidade: ao chegar na cadeira tocar anim/pose de sentado
-    (spritesheets *_sit do LimeZu ja carregados); detectar chegada
-    na cadeira + orientar + trocar anim, e levantar ao mover.
+  - [FEITO] nao mostrar "mesa reservada" no join - deskToastSinceRef
+    (join+5s); so toasta reserva ATIVA pos-join.
+  - [FEITO] bolha sem convite - handleBubbleInvite cria/junta a
+    bolha direto; removidos modal/handlers de convite; bolha =
+    "Bolha aberta com X".
+  - [FEITO] sentar na cadeira ao chegar - anim ${id}_${dir}_sit;
+    chairSpots+onChair(26px); parado em cadeira -> sit virado "up"
+    (meu avatar + remotos, local sem schema); volta walk/idle ao
+    mover. MVP sempre "up".
   - [FEITO] menu de contexto right-click no avatar: "Pedir pra vir
     aqui" (summon -> toast + caminha ate voce, sem modal) + "Ir ate".
     Pan no vazio preservado.

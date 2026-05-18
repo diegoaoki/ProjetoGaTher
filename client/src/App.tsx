@@ -95,6 +95,9 @@ function safePlay(video: HTMLVideoElement) {
 
 export default function App() {
   const isMobile = useIsMobile();
+  // Suprime o toast "mesa reservada pra você" no sync inicial (join):
+  // só mostra reservas feitas ATIVAMENTE depois desse instante.
+  const deskToastSinceRef = useRef(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const localVideoRef = useRef<HTMLDivElement>(null);
   const cardsContainerRef = useRef<HTMLDivElement>(null);
@@ -339,7 +342,6 @@ export default function App() {
   const [socialToast, setSocialToast] = useState<{ text: string; tone: "info" | "error" } | null>(null);
 
   // === Bolha de conversa privada ===
-  const [incomingBubble, setIncomingBubble] = useState<{ fromSessionId: string; fromName: string } | null>(null);
 
   // === Modo visitante ===
   const isVisitor = session?.user?.role === "visitor";
@@ -508,11 +510,16 @@ export default function App() {
 
         // Mesas: hint de proximidade + toasts de claim/release/erro
         scene.onNearbyDeskChange = (info) => setNearbyDesk(info);
+        deskToastSinceRef.current = Date.now() + 5000; // janela do join
         scene.onMyDeskChange = (deskId) => {
           setMyDeskId((prev) => {
             // Toast só na transição: virou minha OU deixou de ser minha
             if (deskId && deskId !== prev) {
-              setDeskToast({ text: `Mesa ${labelOf(deskId)} reservada pra você`, tone: "info" });
+              // No join a reserva já existe; não precisa avisar. Só
+              // toasta quando o usuário reserva ATIVAMENTE (depois do join).
+              if (Date.now() >= deskToastSinceRef.current) {
+                setDeskToast({ text: `Mesa ${labelOf(deskId)} reservada pra você`, tone: "info" });
+              }
             } else if (!deskId && prev) {
               setDeskToast({ text: `Mesa ${labelOf(prev)} liberada`, tone: "info" });
             }
@@ -667,24 +674,7 @@ export default function App() {
         setSocialToast({ text: msg?.error || "Falha no teleporte", tone: "error" });
       });
 
-      // === Bolha de conversa privada ===
-      room.onMessage("bubble:invite-received", (msg: { fromSessionId: string; fromName: string }) => {
-        setIncomingBubble((prev) => {
-          if (prev) setSocialToast({ text: `Novo convite de bolha de ${msg.fromName}`, tone: "info" });
-          return msg;
-        });
-        showNotificationIfHidden({
-          title: "🫧 Convite pra bolha",
-          body: `${msg.fromName} quer abrir uma conversa privada`,
-          tag: "bubble",
-        });
-      });
-      room.onMessage("bubble:response", (msg: { fromName: string; accepted: boolean }) => {
-        setSocialToast({
-          text: msg.accepted ? `${msg.fromName} entrou na bolha` : `${msg.fromName} recusou a bolha`,
-          tone: msg.accepted ? "info" : "error",
-        });
-      });
+      // === Bolha de conversa privada (sem convite — criada direto) ===
       room.onMessage("bubble:started", (msg: { joinedName: string }) => {
         setInBubble(true);
         setSocialToast({ text: `Bolha de conversa ativa (${msg.joinedName} entrou)`, tone: "info" });
@@ -1778,7 +1768,7 @@ export default function App() {
                       <button
                         onClick={() => {
                           roomRef.current?.send("bubble:invite", { targetSessionId: p.sessionId });
-                          setSocialToast({ text: `Convite de bolha enviado pra ${p.name}`, tone: "info" });
+                          setSocialToast({ text: `Bolha aberta com ${p.name}`, tone: "info" });
                         }}
                         style={sidebarActionBtn}
                         title={`Abrir bolha de conversa com ${p.name}`}
@@ -2172,45 +2162,6 @@ export default function App() {
                 </div>
               </>
             )}
-          </div>
-        </div>
-      )}
-
-      {incomingBubble && (
-        <div style={modalStyle} onClick={(e) => e.stopPropagation()}>
-          <div style={{ ...cardStyle, width: 360 }} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ margin: "0 0 8px", fontSize: 20 }}>🫧 Bolha de conversa</h2>
-            <p style={{ margin: "0 0 18px", fontSize: 14 }}>
-              <strong>{incomingBubble.fromName}</strong> quer abrir uma bolha de
-              conversa privada com você. Dentro da bolha vocês se ouvem normal;
-              quem está fora ouve baixinho.
-            </p>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                onClick={() => {
-                  roomRef.current?.send("bubble:respond", {
-                    fromSessionId: incomingBubble.fromSessionId,
-                    accepted: false,
-                  });
-                  setIncomingBubble(null);
-                }}
-                style={{ ...buttonStyle, background: "#334155", color: "#e2e8f0" }}
-              >
-                Recusar
-              </button>
-              <button
-                onClick={() => {
-                  roomRef.current?.send("bubble:respond", {
-                    fromSessionId: incomingBubble.fromSessionId,
-                    accepted: true,
-                  });
-                  setIncomingBubble(null);
-                }}
-                style={buttonStyle}
-              >
-                Aceitar
-              </button>
-            </div>
           </div>
         </div>
       )}

@@ -77,6 +77,7 @@ export class OfficeScene extends Phaser.Scene {
   private myNameText!: Phaser.GameObjects.Text;
   private myTextureKey!: string;
   private myDirection = "down";
+  private myAnimKey = "";
 
   private remotePlayers = new Map<string, RemotePlayer>();
   /** Andar do meu avatar (1|2). Atualizado via setMyFloor (floor:moved). */
@@ -156,6 +157,16 @@ export class OfficeScene extends Phaser.Scene {
   /** Override do editor (mobília + paredes) vindo do server. */
   private mapOverride: { furniture?: FurnitureItem[]; walls?: Wall[] } | null = null;
   /** GameObjects de mobília/parede/labels — pra poder limpar no rebuild. */
+  /** Posições das cadeiras — pra "sentar" ao chegar perto. */
+  private chairSpots: Array<{ x: number; y: number }> = [];
+  /** Se está perto o suficiente de uma cadeira pra sentar (raio²). */
+  private onChair(x: number, y: number): boolean {
+    for (const c of this.chairSpots) {
+      const dx = x - c.x, dy = y - c.y;
+      if (dx * dx + dy * dy <= 26 * 26) return true;
+    }
+    return false;
+  }
   private floorSprite?: Phaser.GameObjects.TileSprite;
   private worldBorder?: Phaser.GameObjects.Graphics;
   private furnitureObjs: Phaser.GameObjects.GameObject[] = [];
@@ -672,6 +683,9 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   private drawFurniture() {
+    this.chairSpots = this.layout.furniture
+      .filter((f) => f.type === "chair")
+      .map((f) => ({ x: f.x, y: f.y }));
     this.layout.furniture.forEach((item) => {
       const sprite = this.add.image(item.x, item.y, item.tex || item.type);
       sprite.setOrigin(0.5, 0.5);
@@ -2092,11 +2106,18 @@ export class OfficeScene extends Phaser.Scene {
       }
     }
 
-    if (newDir !== this.myDirection || this.isMoving !== wasMoving) {
-      this.myDirection = newDir;
-      const anim = this.isMoving ? "walk" : "idle";
-      const key = `${this.myTextureKey}_${this.myDirection}_${anim}`;
-      if (this.anims.exists(key)) this.mySprite.play(key, true);
+    this.myDirection = newDir;
+    // Parado em cima de uma cadeira → senta (de frente pra mesa = "up").
+    let myAnim = this.isMoving ? "walk" : "idle";
+    let myAnimDir = this.myDirection;
+    if (!this.isMoving && this.onChair(this.myContainer.x, this.myContainer.y)) {
+      myAnim = "sit";
+      myAnimDir = "up";
+    }
+    const myKey = `${this.myTextureKey}_${myAnimDir}_${myAnim}`;
+    if (myKey !== this.myAnimKey && this.anims.exists(myKey)) {
+      this.myAnimKey = myKey;
+      this.mySprite.play(myKey, true);
     }
 
     if (time - this.lastSync > SYNC_INTERVAL) {
@@ -2132,8 +2153,13 @@ export class OfficeScene extends Phaser.Scene {
       rp.container.setDepth(rp.container.y);
 
       const moved = Math.abs(rp.container.x - prevX) > 0.5 || Math.abs(rp.container.y - prevY) > 0.5;
-      const anim = moved ? "walk" : "idle";
-      const key = `${rp.textureKey}_${rp.direction}_${anim}`;
+      let anim = moved ? "walk" : "idle";
+      let aDir = rp.direction;
+      if (!moved && this.onChair(rp.container.x, rp.container.y)) {
+        anim = "sit";
+        aDir = "up";
+      }
+      const key = `${rp.textureKey}_${aDir}_${anim}`;
       if (this.anims.exists(key) && rp.sprite.anims.currentAnim?.key !== key) {
         rp.sprite.play(key, true);
       }

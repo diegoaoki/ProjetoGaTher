@@ -1226,15 +1226,23 @@ export class OfficeRoom extends Room<OfficeState> {
         client.send("bubble:error", { error: "Usuário não está mais online" });
         return;
       }
-      if (target.bubbleId) {
+      // Sem convite: cria/junta a bolha DIRETO. Se o alvo já está numa
+      // bolha diferente, recusa (não rouba de outra conversa).
+      if (target.bubbleId && target.bubbleId !== me.bubbleId) {
         client.send("bubble:error", { error: "Essa pessoa já está numa bolha" });
         return;
       }
-      targetClient.send("bubble:invite-received", {
-        fromSessionId: client.sessionId,
-        fromName: me.name,
+      let bubbleId = me.bubbleId;
+      if (!bubbleId) {
+        bubbleId = `b_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+        me.bubbleId = bubbleId;
+      }
+      target.bubbleId = bubbleId;
+      this.bubbleMembers(bubbleId).forEach(({ sessionId }) => {
+        const c = this.clients.find((cc) => cc.sessionId === sessionId);
+        if (c) c.send("bubble:started", { joinedName: target.name });
       });
-      console.log(`[bubble:invite] ${me.name} -> ${target.name}`);
+      console.log(`[bubble:invite] ${me.name} abriu bolha ${bubbleId} com ${target.name}`);
     } catch (err) {
       console.error("[bubble:invite] EXCEPTION:", err);
     }

@@ -184,6 +184,17 @@ export function createCharacterAnimations(scene: Phaser.Scene) {
           repeat: -1,
         });
       }
+
+      // Sit (pose estática — 1º frame da direção no spritesheet _sit)
+      const sitKey = `${id}_${dir}_sit`;
+      if (!scene.anims.exists(sitKey)) {
+        scene.anims.create({
+          key: sitKey,
+          frames: [{ key: `${id}_sit`, frame: start }],
+          frameRate: 1,
+          repeat: 0,
+        });
+      }
     });
   }
 }
