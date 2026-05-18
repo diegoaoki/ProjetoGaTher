@@ -48,6 +48,8 @@ Legenda: 🔴 prioridade · 🐞 bug · 🟢 feito (mantido como referência) ·
 - ⚪ [pedido 2026-05-16] **editor de mesa**: ferramenta pra definir/editar mesas reserváveis (posição da mesa + assento, `deskId`, lugares da mesa-conversa) no mapa em vez de hardcoded em `OfficeLayout.ts`/`server/src/desks.ts`. Provável extensão do editor de mapa. Detalhar escopo antes.
 
 ### Interação
+- ⚪ [pedido 2026-05-17] **não mostrar "você tem uma mesa reservada" ao entrar** — remover o toast/aviso de mesa reservada no join (poluição; a pessoa já sabe / não precisa).
+- ⚪ [pedido 2026-05-17] **bolha sem convite** — tirar o fluxo de convite de bolha (🫫 invite/aceitar). Clicar pra abrir bolha já cria a bolha direto com a pessoa (sem pedir aceite).
 - 🟢 [FEITO] menu de contexto right-click no avatar: "📢 Pedir pra vir aqui" (`summon` → toast + caminha até você, sem modal) + "📍 Ir até". Pan no vazio preservado.
 - 🟢 [FEITO] **melhorar a abertura das portas** — antes "só sumia" (setVisible/alpha instantâneo). Agora porta dupla: 2 folhas deslizam pros lados + fade (tween 280ms) ao abrir/fechar; sem animar na 1ª render. Colisão segue o estado lógico. Client-only.
 
