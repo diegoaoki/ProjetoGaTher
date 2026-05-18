@@ -54,6 +54,45 @@ function resolveHttpUrl(): string {
 const SERVER_URL = resolveServerUrl();
 const HTTP_URL = resolveHttpUrl();
 
+// Categorias + rótulos PT pra paleta do editor de mapa (busca/filtro).
+const FURN_CAT: Record<string, string> = {
+  plant: "Geral", sofa: "Geral", bookshelf: "Geral", whiteboard: "Geral",
+  tv: "Geral", chair: "Geral", coffeeTable: "Geral",
+  meetingTable: "Mesas", kitchen_table: "Mesas", desk: "Mesas",
+  monitor: "Mesas", desk_long: "Mesas", desk_office: "Mesas", desk_plain: "Mesas",
+  desk_wide: "Mesas", desk_pc1: "Mesas", desk_pc2: "Mesas",
+  desk_screen1: "Mesas", desk_screen2: "Mesas", printer: "Mesas",
+  deskpc_dev: "Mesas", deskpc_dados: "Mesas", deskpc_infra: "Mesas",
+  deskpc_fin: "Mesas",
+  fridge: "Cozinha", stove: "Cozinha", counter: "Cozinha",
+  counter_sink: "Cozinha", coffee_machine: "Cozinha",
+  microwave: "Cozinha", range_hood: "Cozinha",
+  cctv_screen: "Segurança", cctv_screen2: "Segurança",
+  cctv_screen3: "Segurança", security_console: "Segurança",
+  server_rack: "Segurança", security_camera: "Segurança",
+  crate: "2º andar",
+};
+const FURN_LABEL: Record<string, string> = {
+  plant: "Planta", sofa: "Sofá", bookshelf: "Estante",
+  whiteboard: "Quadro", tv: "TV", chair: "Cadeira",
+  coffeeTable: "Mesa de centro", meetingTable: "Mesa de reunião",
+  kitchen_table: "Mesa (copa)", desk: "Mesa (padrão)", monitor: "Monitor",
+  desk_long: "Bancada larga", desk_office: "Mesa escritório", desk_plain: "Mesa lisa",
+  desk_wide: "Mesa larga", desk_pc1: "Mesa+PC (madeira)",
+  desk_pc2: "Mesa+PC (cinza)", desk_screen1: "Mesa+tela (madeira)",
+  desk_screen2: "Mesa+tela (cinza)", printer: "Impressora",
+  deskpc_dev: "Mesa Dev", deskpc_dados: "Mesa Dados",
+  deskpc_infra: "Mesa Infra", deskpc_fin: "Mesa Financeiro",
+  fridge: "Geladeira", stove: "Fogão", counter: "Balcão",
+  counter_sink: "Pia", coffee_machine: "Cafeteira",
+  microwave: "Microondas", range_hood: "Coifa",
+  cctv_screen: "Monitor CCTV", cctv_screen2: "Monitor CCTV 2",
+  cctv_screen3: "Monitor CCTV 3", security_console: "Console",
+  server_rack: "Rack", security_camera: "Câmera",
+  crate: "Caixa",
+};
+const FURN_CATEGORIES = ["Todos", "Mesas", "Cozinha", "Segurança", "Geral", "2º andar"];
+
 const SHIRT_COLORS = [
   "#4ade80", "#60a5fa", "#f472b6", "#fbbf24",
   "#a78bfa", "#34d399", "#fb7185", "#22d3ee",
@@ -108,6 +147,8 @@ export default function App() {
   const mapOverrideRef = useRef<{ furniture?: any[]; walls?: any[] } | null>(null);
   const [mapEditorOpen, setMapEditorOpen] = useState(false);
   const [editorBrush, setEditorBrush] = useState<string | null>(null);
+  const [editorCat, setEditorCat] = useState("Todos");
+  const [editorSearch, setEditorSearch] = useState("");
   const [editorInfo, setEditorInfo] = useState<{ count: number; selected: boolean }>({ count: 0, selected: false });
   const [editorSaving, setEditorSaving] = useState(false);
   // Miniaturas (dataURL) por tipo de móvel, geradas da textura Phaser
@@ -2287,6 +2328,32 @@ export default function App() {
               🧱 Parede
             </button>
           </div>
+          {/* Busca + categorias da paleta */}
+          <input
+            value={editorSearch}
+            onChange={(e) => setEditorSearch(e.target.value)}
+            placeholder="🔎 buscar móvel…"
+            style={{
+              width: "100%", padding: "5px 8px", marginBottom: 6,
+              borderRadius: 6, border: "1px solid #334155",
+              background: "#0f172a", color: "#e2e8f0", fontSize: 12,
+              outline: "none", boxSizing: "border-box",
+            }}
+          />
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 8 }}>
+            {FURN_CATEGORIES.map((c) => (
+              <button
+                key={c}
+                onClick={() => setEditorCat(c)}
+                style={{
+                  ...editorChip(editorCat === c),
+                  fontSize: 11, padding: "3px 8px",
+                }}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
           <div
             style={{
               display: "grid",
@@ -2297,12 +2364,20 @@ export default function App() {
               overflowY: "auto",
             }}
           >
-            {EDITOR_FURNITURE_TYPES.map((t) => {
+            {EDITOR_FURNITURE_TYPES.filter((t) => {
+              if (editorCat !== "Todos" && (FURN_CAT[t] || "Geral") !== editorCat) return false;
+              const q = editorSearch.trim().toLowerCase();
+              if (!q) return true;
+              return (
+                t.toLowerCase().includes(q) ||
+                (FURN_LABEL[t] || "").toLowerCase().includes(q)
+              );
+            }).map((t) => {
               const sel = editorBrush === t;
               return (
                 <div
                   key={t}
-                  title={t}
+                  title={FURN_LABEL[t] || t}
                   draggable
                   onDragStart={(e) => {
                     e.dataTransfer.setData("text/vo-furn", t);
@@ -2337,7 +2412,7 @@ export default function App() {
                     <div style={{ fontSize: 16 }}>📦</div>
                   )}
                   <span style={{ fontSize: 9, opacity: 0.8, maxWidth: "100%", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {t}
+                    {FURN_LABEL[t] || t}
                   </span>
                 </div>
               );
