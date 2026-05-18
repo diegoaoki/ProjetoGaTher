@@ -262,6 +262,47 @@ export function createFurnitureTextures(scene: Phaser.Scene) {
   createTV(scene);
   createEscalator(scene);
   createCrate(scene);
+  createTree(scene);
+  createBush(scene);
+}
+
+/** Árvore (decoração externa). ~32×44, copa redonda + tronco. */
+function createTree(scene: Phaser.Scene) {
+  if (scene.textures.exists("tree")) return;
+  const SCALE = 2, W = 32, H = 44;
+  const { canvas, ctx } = makeCanvas(W * SCALE, H * SCALE);
+  // tronco
+  rect(ctx, 14, 30, 4, 12, "#5b3a1e", SCALE);
+  rect(ctx, 14, 30, 2, 12, "#6e4a28", SCALE);
+  // copa (3 círculos sobrepostos via blocos)
+  const blob = (cx: number, cy: number, r: number, col: string) => {
+    for (let yy = -r; yy <= r; yy++) {
+      const span = Math.floor(Math.sqrt(r * r - yy * yy));
+      rect(ctx, cx - span, cy + yy, span * 2, 1, col, SCALE);
+    }
+  };
+  blob(16, 16, 13, "#2f6b30");
+  blob(11, 18, 8, "#37803a");
+  blob(21, 14, 8, "#37803a");
+  blob(16, 13, 7, "#46994a");
+  scene.textures.addCanvas("tree", canvas);
+}
+
+/** Arbusto (decoração externa). ~22×16, mound verde. */
+function createBush(scene: Phaser.Scene) {
+  if (scene.textures.exists("bush")) return;
+  const SCALE = 2, W = 22, H = 16;
+  const { canvas, ctx } = makeCanvas(W * SCALE, H * SCALE);
+  const blob = (cx: number, cy: number, rx: number, ry: number, col: string) => {
+    for (let yy = -ry; yy <= ry; yy++) {
+      const span = Math.floor(rx * Math.sqrt(Math.max(0, 1 - (yy * yy) / (ry * ry))));
+      rect(ctx, cx - span, cy + yy, span * 2, 1, col, SCALE);
+    }
+  };
+  blob(11, 10, 10, 6, "#2f6b30");
+  blob(8, 9, 6, 4, "#3c8540");
+  blob(15, 8, 5, 4, "#46994a");
+  scene.textures.addCanvas("bush", canvas);
 }
 
 function createDesk(scene: Phaser.Scene) {
@@ -543,6 +584,24 @@ function createTV(scene: Phaser.Scene) {
 export function createFloorTextures(scene: Phaser.Scene) {
   createWoodFloorTile(scene);
   createCarpetTile(scene);
+  createGrassTile(scene);
+}
+
+/** Grama (área verde decorativa ao redor do prédio). Tileável. */
+function createGrassTile(scene: Phaser.Scene) {
+  if (scene.textures.exists("grass")) return;
+  const SCALE = 2, SIZE = 32;
+  const { canvas, ctx } = makeCanvas(SIZE * SCALE, SIZE * SCALE);
+  rect(ctx, 0, 0, SIZE, SIZE, "#5a8a3c", SCALE);
+  // tufos/variação pra não ficar chapado
+  for (let i = 0; i < 60; i++) {
+    const x = (i * 7 + (i % 5) * 3) % SIZE;
+    const y = (i * 11 + (i % 3) * 5) % SIZE;
+    const c = i % 3 === 0 ? "#4d7a33" : i % 3 === 1 ? "#6b9c47" : "#54823a";
+    px(ctx, x, y, c, SCALE);
+    if (i % 4 === 0) rect(ctx, x, y, 1, 2, "#3f6b2b", SCALE);
+  }
+  scene.textures.addCanvas("grass", canvas);
 }
 
 function createWoodFloorTile(scene: Phaser.Scene) {

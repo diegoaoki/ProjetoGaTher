@@ -61,6 +61,10 @@ const SYNC_INTERVAL = 50;
 // e worldHeight do schema do server.
 const WORLD_W = 2560;
 const WORLD_H = 2720;
+// Moldura verde decorativa em volta do prédio (térreo). O avatar
+// nunca chega lá (clamp do mundo); é só pra deixar bonito.
+const OUTER_MARGIN = 160; // 5 tiles
+const FLOOR1_H = 55 * 32; // altura do térreo (sem o gap/2º andar)
 const PLAYER_HALF = 12;
 const DESK_CLAIM_RADIUS = 70;
 
@@ -78,6 +82,12 @@ export class OfficeScene extends Phaser.Scene {
   private myTextureKey!: string;
   private myDirection = "down";
   private myAnimKey = "";
+  /** Limite Y do avatar por andar: térreo não passa do prédio
+   *  (não entra na grama/gap); 2º andar = mundo (paredes da sala
+   *  fechada já contêm). */
+  private get maxY(): number {
+    return (this.myFloor === 2 ? WORLD_H : FLOOR1_H) - PLAYER_HALF;
+  }
 
   private remotePlayers = new Map<string, RemotePlayer>();
   /** Andar do meu avatar (1|2). Atualizado via setMyFloor (floor:moved). */
@@ -276,6 +286,7 @@ export class OfficeScene extends Phaser.Scene {
     createCharacterAnimations(this);
     // Substitui o piso procedural por uma textura tileable do LimeZu (parquet)
     registerLimezuFloor(this);
+    this.drawOutsideDecor(); // grama + árvores (atrás do prédio)
     this.drawFloor();
     this.drawWalls();
     this.drawFurniture();
@@ -645,6 +656,37 @@ export class OfficeScene extends Phaser.Scene {
       this.tweens.killTweensOf(this.tvScreen);
       this.tvScreen.destroy();
       this.tvScreen = undefined;
+    }
+  }
+
+  /**
+   * Moldura verde decorativa em volta do prédio (térreo): grama +
+   * árvores/arbustos. Atrás de tudo (depth -200). O avatar nunca
+   * chega (clamp do mundo); a câmera do térreo abre +OUTER_MARGIN
+   * pra mostrar (ver applyFloorView).
+   */
+  private drawOutsideDecor() {
+    const m = OUTER_MARGIN;
+    const grass = this.add
+      .tileSprite(-m, -m, WORLD_W + m * 2, FLOOR1_H + m * 2, "grass")
+      .setOrigin(0, 0);
+    grass.setDepth(-200);
+
+    const place = (x: number, y: number, key: string) => {
+      const o = this.add.image(x, y, key);
+      o.setOrigin(0.5, 1);
+      o.setDepth(-150); // sempre atrás do prédio (decoração externa)
+    };
+    const step = 116;
+    // Topo e base (faixa de grama acima/abaixo do prédio)
+    for (let x = -m + 30; x < WORLD_W + m; x += step) {
+      place(x, -m / 2 + 8, x % 232 < step ? "tree" : "bush");
+      place(x, FLOOR1_H + m - 6, x % 200 < step ? "tree" : "bush");
+    }
+    // Laterais esquerda/direita
+    for (let y = 10; y < FLOOR1_H; y += step) {
+      place(-m / 2, y, y % 232 < step ? "tree" : "bush");
+      place(WORLD_W + m / 2, y, y % 200 < step ? "tree" : "bush");
     }
   }
 
@@ -1728,7 +1770,7 @@ export class OfficeScene extends Phaser.Scene {
       ];
       for (const [dx, dy] of directions) {
         const nx = Phaser.Math.Clamp(sx + dx, PLAYER_HALF, WORLD_W - PLAYER_HALF);
-        const ny = Phaser.Math.Clamp(sy + dy, PLAYER_HALF, WORLD_H - PLAYER_HALF);
+        const ny = Phaser.Math.Clamp(sy + dy, PLAYER_HALF, this.maxY);
         if (!checkCollision(nx, ny, PLAYER_HALF, this.layout, this.dynamicWalls)) {
           return { x: nx, y: ny };
         }
@@ -1880,7 +1922,7 @@ export class OfficeScene extends Phaser.Scene {
   public navigateTo(tx: number, ty: number) {
     if (!this.myContainer) return;
     const gx = Phaser.Math.Clamp(tx, PLAYER_HALF, WORLD_W - PLAYER_HALF);
-    const gy = Phaser.Math.Clamp(ty, PLAYER_HALF, WORLD_H - PLAYER_HALF);
+    const gy = Phaser.Math.Clamp(ty, PLAYER_HALF, this.maxY);
     this.navGoal = { x: gx, y: gy };
     this.navStuckMs = 0;
 
@@ -1932,10 +1974,17 @@ export class OfficeScene extends Phaser.Scene {
     // Define os limites/região visível. O piso (tileSprite) e a borda
     // são REDIMENSIONADOS pra essa região — senão, com zoom-out, o
     // piso continua aparecendo no gap/2º andar como "espaço vazio".
-    const setRegion = (x: number, y: number, w: number, h: number) => {
+    // setRegion: bounds da câmera + piso/borda numa região. floorB
+    // (opcional) = retângulo do PISO de madeira; se diferente do bounds,
+    // a câmera mostra além (ex.: moldura de grama do térreo).
+    const setRegion = (
+      x: number, y: number, w: number, h: number,
+      floorB?: { x: number; y: number; w: number; h: number }
+    ) => {
       cam.setBounds(x, y, w, h);
-      this.floorSprite?.setPosition(x, y).setSize(w, h);
-      this.redrawWorldBorder(x, y, w, h);
+      const fb = floorB ?? { x, y, w, h };
+      this.floorSprite?.setPosition(fb.x, fb.y).setSize(fb.w, fb.h);
+      this.redrawWorldBorder(fb.x, fb.y, fb.w, fb.h);
     };
     if (this.editMode) {
       // No editor o admin precisa navegar/editar os 2 andares; a
@@ -1943,7 +1992,6 @@ export class OfficeScene extends Phaser.Scene {
       setRegion(0, 0, WORLD_W, WORLD_H);
       return;
     }
-    const FLOOR1_MAX = 55 * 32; // térreo: y 0..1760 (sem o gap)
     if (this.myFloor === 2) {
       // Região = retângulo da SALA do 2º andar (não o mundo todo,
       // senão sobra margem vazia em volta). +1 tile de respiro.
@@ -1951,7 +1999,13 @@ export class OfficeScene extends Phaser.Scene {
       if (f2) setRegion(f2.x - 32, f2.y - 32, f2.w + 64, f2.h + 64);
       else setRegion(0, FLOOR2_Y0, WORLD_W, WORLD_H - FLOOR2_Y0);
     } else {
-      setRegion(0, 0, WORLD_W, FLOOR1_MAX);
+      // Térreo: câmera abre +OUTER_MARGIN (mostra a moldura de grama),
+      // mas o piso de madeira fica só no prédio (0..FLOOR1_H).
+      const m = OUTER_MARGIN;
+      setRegion(
+        -m, -m, WORLD_W + m * 2, FLOOR1_H + m * 2,
+        { x: 0, y: 0, w: WORLD_W, h: FLOOR1_H }
+      );
     }
     const floorOf = (o: any) => ((o?.y ?? 0) >= FLOOR2_Y0 ? 2 : 1);
     this.furnitureObjs.forEach((o: any) => o.setVisible?.(floorOf(o) === this.myFloor));
@@ -1963,7 +2017,7 @@ export class OfficeScene extends Phaser.Scene {
   private teleportTo(x: number, y: number) {
     if (!this.myContainer) return;
     this.myContainer.x = Phaser.Math.Clamp(x, PLAYER_HALF, WORLD_W - PLAYER_HALF);
-    this.myContainer.y = Phaser.Math.Clamp(y, PLAYER_HALF, WORLD_H - PLAYER_HALF);
+    this.myContainer.y = Phaser.Math.Clamp(y, PLAYER_HALF, this.maxY);
     this.myContainer.setDepth(this.myContainer.y);
     this.room.send("move", {
       x: this.myContainer.x,
@@ -2084,7 +2138,7 @@ export class OfficeScene extends Phaser.Scene {
       const dy = vy * SPEED * speedMul * dt;
       const moved = this.tryMove(this.myContainer.x, this.myContainer.y, dx, dy);
       this.myContainer.x = Phaser.Math.Clamp(moved.x, PLAYER_HALF, WORLD_W - PLAYER_HALF);
-      this.myContainer.y = Phaser.Math.Clamp(moved.y, PLAYER_HALF, WORLD_H - PLAYER_HALF);
+      this.myContainer.y = Phaser.Math.Clamp(moved.y, PLAYER_HALF, this.maxY);
       this.myContainer.setDepth(this.myContainer.y);
     }
 
