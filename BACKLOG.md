@@ -16,7 +16,7 @@ Legenda: 🔴 prioridade · 🐞 bug · 🟢 feito (mantido como referência) ·
 
 ## 🐞 Bugs
 
-- 🐞 **Recusar pedido de acesso a sala trancada não expulsa o convidado** (diagnosticado, fix não aplicado) — `handleAccessRespond` (accepted=false) chama `ejectFromRoom()` que seta `player.x/y` no server, mas o jogo é *authoritative-light*: o cliente é dono da posição e sobrescreve no próximo `move` → a pessoa continua dentro. O cliente recebe `access:response{accepted:false}` mas só mostra toast, não reposiciona. **Fix:** mandar as coords do eject no `access:response` e o cliente fazer `forceTeleport(x,y)` quando `accepted===false` (mesma solução do bug do visitante). ~2 arquivos, sem schema. (O fluxo de convite 👋 está correto — só este do cadeado.)
+- 🟢 [FEITO 2026-05-18] **Recusar acesso a sala trancada não expulsava** — `handleAccessRespond` (accepted=false) agora manda `x,y` do eject no `access:response`; o client faz `sceneRef.forceTeleport(x,y)` (authoritative-light sobrescreveria senão). Mesma solução do bug do visitante. (Convite 👋 sempre esteve OK.)
 
 ### Resolvidos
 - 🟢 [FEITO `549beb1`] **NPC segurança fica do lado de fora da porta** — `handleRoomLock` usa a heurística `doorOnLeftWall` (porta esquerda → oeste; direita/diretorias → leste) + `direction` coerente. O guarda também caminha (rota A*) até o posto.

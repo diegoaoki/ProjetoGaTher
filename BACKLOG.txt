@@ -28,14 +28,10 @@ PRIORIDADES (audio ruim - reportado pelo user 2026-05-16)
 BUGS
 ------------------------------------------------------------------------------
 
-[BUG] Recusar pedido de acesso a sala trancada nao expulsa
-  handleAccessRespond(accepted=false) chama ejectFromRoom() que seta
-  player.x/y no server, mas authoritative-light: o cliente sobrescreve
-  no proximo move -> a pessoa continua dentro. Cliente recebe
-  access:response{accepted:false} mas so mostra toast, nao reposiciona.
-  FIX: mandar coords do eject no access:response + cliente forceTeleport
-  quando accepted===false (igual fix do visitante). ~2 arquivos, sem
-  schema. Convite 👋 esta OK - so o do cadeado.
+[FEITO 2026-05-18] Recusar acesso a sala trancada nao expulsava
+  handleAccessRespond(accepted=false) agora manda x,y do eject no
+  access:response; cliente faz forceTeleport (authoritative-light
+  sobrescreveria senao). Igual fix do visitante. Convite OK.
 
 [FEITO 549beb1] NPC seguranca fica do lado de fora da porta
   handleRoomLock usa a heuristica doorOnLeftWall (porta esquerda -> oeste;

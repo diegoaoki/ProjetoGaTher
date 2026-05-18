@@ -1562,12 +1562,18 @@ export class OfficeRoom extends Room<OfficeState> {
         }
       } else if (requesterClient) {
         // Recusado: move o avatar pra FORA da sala (lado de fora da porta).
+        // Manda x,y no response → o client faz forceTeleport (senão o
+        // authoritative-light sobrescreve e a pessoa fica dentro).
         const requesterPlayer = this.state.players.get(requesterClient.sessionId);
+        let ejX: number | undefined;
+        let ejY: number | undefined;
         if (requesterPlayer) {
           this.ejectFromRoom(requesterPlayer, roomId);
+          ejX = requesterPlayer.x;
+          ejY = requesterPlayer.y;
         }
         this.pendingModalSent.delete(requesterClient.sessionId);
-        requesterClient.send("access:response", { roomId, accepted: false });
+        requesterClient.send("access:response", { roomId, accepted: false, x: ejX, y: ejY });
       }
 
       this.state.accessRequests.delete(key);

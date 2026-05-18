@@ -759,14 +759,22 @@ export default function App() {
         });
       });
       // Requester recebe resposta
-      room.onMessage("access:response", (msg: { roomId: string; accepted: boolean }) => {
-        setSocialToast({
-          text: msg.accepted ? "Entrada autorizada — áudio liberado" : "Pedido recusado — você saiu da sala",
-          tone: msg.accepted ? "info" : "error",
-        });
-        // Fecha o modal obrigatório se ainda estiver aberto pra essa sala
-        setAccessRequestModal((cur) => (cur && cur.roomId === msg.roomId ? null : cur));
-      });
+      room.onMessage(
+        "access:response",
+        (msg: { roomId: string; accepted: boolean; x?: number; y?: number }) => {
+          setSocialToast({
+            text: msg.accepted ? "Entrada autorizada — áudio liberado" : "Pedido recusado — você saiu da sala",
+            tone: msg.accepted ? "info" : "error",
+          });
+          // Recusado: server expulsou pra fora da porta. forceTeleport
+          // pq authoritative-light sobrescreveria a posição do server.
+          if (!msg.accepted && typeof msg.x === "number" && typeof msg.y === "number") {
+            sceneRef.current?.forceTeleport(msg.x, msg.y);
+          }
+          // Fecha o modal obrigatório se ainda estiver aberto pra essa sala
+          setAccessRequestModal((cur) => (cur && cur.roomId === msg.roomId ? null : cur));
+        }
+      );
       // Erros do fluxo de cadeado
       room.onMessage("room:error", (msg: { error: string }) => {
         setSocialToast({ text: msg?.error || "Falha no cadeado", tone: "error" });
