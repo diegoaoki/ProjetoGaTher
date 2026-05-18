@@ -2175,10 +2175,12 @@ export class OfficeScene extends Phaser.Scene {
     }
     const heldMs = this.movingSince > 0 ? time - this.movingSince : 0;
     const speedMul = Math.min(3, 1 + Math.floor(heldMs / 3000) * 0.5);
+    // Sprint: segurar Shift enquanto anda dobra a velocidade.
+    const sprint = this.cursors.shift?.isDown ? 2 : 1;
 
     if (this.isMoving) {
-      const dx = vx * SPEED * speedMul * dt;
-      const dy = vy * SPEED * speedMul * dt;
+      const dx = vx * SPEED * speedMul * sprint * dt;
+      const dy = vy * SPEED * speedMul * sprint * dt;
       const moved = this.tryMove(this.myContainer.x, this.myContainer.y, dx, dy);
       this.myContainer.x = Phaser.Math.Clamp(moved.x, PLAYER_HALF, WORLD_W - PLAYER_HALF);
       this.myContainer.y = Phaser.Math.Clamp(moved.y, PLAYER_HALF, this.maxY);

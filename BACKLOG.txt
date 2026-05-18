@@ -127,9 +127,9 @@ Auth / infra:
     pras editor-desks tb.
 
 Interacao:
-  - [pedido 2026-05-18] sprint com Shift - andando (WASD) +
-    segurar Shift dobra a velocidade. Cuidar do MAX_DELTA
-    anti-cheat no server e do boost por tempo ja existente.
+  - [FEITO] sprint com Shift - cursors.shift?.isDown ? 2 : 1
+    multiplica dx/dy; pior caso ~54px/sync < MAX_DELTA(100),
+    sem rubberband.
   - [FEITO] nao mostrar "mesa reservada" no join - deskToastSinceRef
     (join+5s); so toasta reserva ATIVA pos-join.
   - [FEITO] bolha sem convite - handleBubbleInvite cria/junta a
