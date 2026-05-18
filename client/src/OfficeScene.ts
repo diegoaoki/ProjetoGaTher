@@ -1602,6 +1602,18 @@ export class OfficeScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * Navega (rota A*) até uma mesa pelo deskId, usando o layout VIVO
+   * (`allDesks` = padrão + criadas no editor). Retorna false se a
+   * mesa não existe no mapa atual.
+   */
+  public goToDesk(deskId: string): boolean {
+    const d = this.allDesks.find((x) => x.id === deskId);
+    if (!d) return false;
+    this.navigateTo(d.x, d.y + 28);
+    return true;
+  }
+
   /** Posição do slot da mesa: 0=sentado(frente), 1=esquerda, 2=direita. */
   private deskSlotPos(deskId: string, slot: number): { x: number; y: number } | null {
     const d = this.allDesks.find((dd) => dd.id === deskId);

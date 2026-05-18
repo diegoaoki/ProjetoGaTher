@@ -105,9 +105,9 @@ Auth / infra:
     reservavel. makeEditItem gera deskId unico + tex desk_pc1;
     server resolve via deskById (fixas OU override map_layout) em
     claim/spawn/seat/etc; pruneOrphanReservations (boot +
-    map:reload) -> mesa apagada perde reserva (state+DB). Limite:
-    getDeskCatalog client estatico nao lista editor-desks
-    (navegacao "ir ate mesa" nao pega; reserva/E/spawn OK).
+    map:reload) -> mesa apagada perde reserva (state+DB).
+    goToDesk usa layout vivo -> "ir ate minha mesa/de X" navega
+    pras editor-desks tb.
 
 Interacao:
   - [FEITO] nao mostrar "mesa reservada" no join - deskToastSinceRef

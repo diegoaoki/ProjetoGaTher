@@ -46,7 +46,7 @@ Legenda: 🔴 prioridade · 🐞 bug · 🟢 feito (mantido como referência) ·
 - editor de mapas
 - 🟢 [FEITO] **editor "edição limpa"**: `setActorsVisible(false)` (avatar/remotos/NPC/balões somem), sem menu de contexto de avatar (só pan), `SpatialAudio.setEditorMute` zera peers, joystick mobile escondido. Sair restaura.
 - 🟢 [FEITO] **editor: adicionar itens DENTRO das salas** — causa: `if (onObj) return` tratava parede = móvel. Agora `onFurn`/`onWall` separados; pincel só bloqueado por móvel existente. Parede/sala não bloqueiam o add.
-- 🟢 [FEITO] **editor de mesa** — toda `desk` colocada no editor vira reservável: `makeEditItem` gera `deskId` único + `tex:"desk_pc1"`; server resolve via `deskById` (fixas OU override) em claim/spawn/seat/etc; `pruneOrphanReservations` (boot + map:reload) → mesa apagada perde a reserva (state+DB). Limitação: `getDeskCatalog` client estático não lista editor-desks (navegação "ir até mesa" não pega; reserva/E/spawn OK).
+- 🟢 [FEITO] **editor de mesa** — toda `desk` colocada no editor vira reservável: `makeEditItem` gera `deskId` único + `tex:"desk_pc1"`; server resolve via `deskById` (fixas OU override) em claim/spawn/seat/etc; `pruneOrphanReservations` (boot + map:reload) → mesa apagada perde a reserva (state+DB). `OfficeScene.goToDesk` usa o layout vivo → "ir até minha mesa/de X" navega pras editor-desks tb.
 
 ### Interação
 - 🟢 [FEITO] **não mostrar "mesa reservada" no join** — `deskToastSinceRef` (join+5s); só toasta reserva ATIVA pós-join.

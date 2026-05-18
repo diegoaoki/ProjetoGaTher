@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import Phaser from "phaser";
 import { Client, Room } from "colyseus.js";
 import { OfficeScene } from "./OfficeScene";
-import { getDeskCatalog } from "./OfficeLayout";
 import { SpatialAudio } from "./SpatialAudio";
 import LoginScreen from "./LoginScreen";
 import AdminPanel from "./AdminPanel";
@@ -1580,8 +1579,10 @@ export default function App() {
               {myDeskId && (
                 <button
                   onClick={() => {
-                    const desk = getDeskCatalog().find((d) => d.id === myDeskId);
-                    if (desk && sceneRef.current) sceneRef.current.navigateTo(desk.x, desk.y + 28);
+                    // Usa o layout vivo (inclui mesas criadas no editor)
+                    if (!sceneRef.current?.goToDesk(myDeskId)) {
+                      setSocialToast({ text: "Não achei sua mesa no mapa", tone: "error" });
+                    }
                   }}
                   style={menuItemStyle}
                 >
@@ -1628,9 +1629,7 @@ export default function App() {
         });
         const goToUserDesk = (userId: string, name: string) => {
           const deskId = deskOfUser.get(userId);
-          const desk = deskId ? getDeskCatalog().find((d) => d.id === deskId) : null;
-          if (desk && sceneRef.current) {
-            sceneRef.current.navigateTo(desk.x, desk.y + 28);
+          if (deskId && sceneRef.current?.goToDesk(deskId)) {
             setSidebarOpen(false);
           } else {
             setSocialToast({ text: `${name} não tem mesa reservada`, tone: "error" });
