@@ -28,6 +28,16 @@ PRIORIDADES (audio ruim - reportado pelo user 2026-05-16)
 BUGS
 ------------------------------------------------------------------------------
 
+[PARADO 2026-05-18 - user "deixa pra depois"] visual da mesa de
+  trabalho nao agrada. Atual = desk_work (Conference #1+#2+#1 128x80)
+  + monitor + cadeira. Tentativas que NAO agradaram (nao repetir):
+  slab+monitor esticado; deskpc_* tint (tela vira bloco); #30/
+  desk_pc1 e #45/desk_office (segmentos -> cortado/estreito);
+  desk_long 192x80 (bancada, "nao parece mesa de trabalho").
+  LimeZu nao tem computer-desk pronto inteiro (modular). Retomar:
+  achar fonte dos desks do print original (Image #3, nao achada)
+  OU alinhar composicao especifica com o user. Nao mexer sem input.
+
 [FEITO 2026-05-18] Recusar acesso a sala trancada nao expulsava
   handleAccessRespond(accepted=false) agora manda x,y do eject no
   access:response; cliente faz forceTeleport (authoritative-light
