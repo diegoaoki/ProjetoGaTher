@@ -46,7 +46,7 @@ Legenda: 🔴 prioridade · 🐞 bug · 🟢 feito (mantido como referência) ·
 - editor de mapas
 - 🟢 [FEITO] **editor "edição limpa"**: `setActorsVisible(false)` (avatar/remotos/NPC/balões somem), sem menu de contexto de avatar (só pan), `SpatialAudio.setEditorMute` zera peers, joystick mobile escondido. Sair restaura.
 - 🟢 [FEITO] **editor: adicionar itens DENTRO das salas** — causa: `if (onObj) return` tratava parede = móvel. Agora `onFurn`/`onWall` separados; pincel só bloqueado por móvel existente. Parede/sala não bloqueiam o add.
-- ⚪ [pedido 2026-05-16] **editor de mesa**: ferramenta pra definir/editar mesas reserváveis (posição da mesa + assento, `deskId`, lugares da mesa-conversa) no mapa em vez de hardcoded em `OfficeLayout.ts`/`server/src/desks.ts`. Provável extensão do editor de mapa. Detalhar escopo antes.
+- 🟢 [FEITO] **editor de mesa** — toda `desk` colocada no editor vira reservável: `makeEditItem` gera `deskId` único + `tex:"desk_pc1"`; server resolve via `deskById` (fixas OU override) em claim/spawn/seat/etc; `pruneOrphanReservations` (boot + map:reload) → mesa apagada perde a reserva (state+DB). Limitação: `getDeskCatalog` client estático não lista editor-desks (navegação "ir até mesa" não pega; reserva/E/spawn OK).
 
 ### Interação
 - 🟢 [FEITO] **não mostrar "mesa reservada" no join** — `deskToastSinceRef` (join+5s); só toasta reserva ATIVA pós-join.

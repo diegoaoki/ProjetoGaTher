@@ -228,6 +228,52 @@ export class OfficeRoom extends Room<OfficeState> {
     return getSeatPosition(desk as any);
   }
 
+  /**
+   * Resolve uma mesa por id: catálogo fixo (desks.ts) OU mesa criada
+   * no editor de mapa (item type "desk" com deskId no override salvo).
+   * Toda mesa colocada pelo editor é reservável.
+   */
+  private deskById(id: string): { id: string; x: number; y: number; adminOnly?: boolean } | undefined {
+    const fixed = getDeskById(id);
+    if (fixed) return fixed;
+    const f = this.mapFurniture.find(
+      (m) => m.deskId === id && m.type === "desk" &&
+        typeof m.x === "number" && typeof m.y === "number"
+    );
+    return f ? { id, x: f.x, y: f.y } : undefined;
+  }
+
+  /** Todos os deskIds válidos agora (fixos + criados no editor). */
+  private validDeskIds(): Set<string> {
+    const s = new Set<string>(DESKS.map((d) => d.id));
+    for (const m of this.mapFurniture) {
+      if (m.deskId && m.type === "desk") s.add(m.deskId);
+    }
+    return s;
+  }
+
+  /**
+   * Apaga reservas de mesas que não existem mais (ex.: admin deletou
+   * a mesa no editor). A pessoa perde a reserva e tem que reservar
+   * outra. Roda no boot e após `map:reload`.
+   */
+  private async pruneOrphanReservations() {
+    const valid = this.validDeskIds();
+    const drop: string[] = [];
+    this.state.desks.forEach((desk, deskId) => {
+      if (!valid.has(deskId)) drop.push(deskId);
+    });
+    for (const deskId of drop) {
+      this.state.desks.delete(deskId);
+      try {
+        await getPool().query(`DELETE FROM desk_reservations WHERE desk_id = $1`, [deskId]);
+      } catch (e) {
+        console.warn(`[OfficeRoom] prune reserva ${deskId} falhou:`, e);
+      }
+      console.log(`[OfficeRoom] reserva órfã removida (mesa apagada): ${deskId}`);
+    }
+  }
+
   /** Timestamp (ms) da última vez que cada porta teve player próximo. */
   private doorLastActivity = new Map<string, number>();
   /** Cooldown (ms epoch) por sessionId pra não quicar na escada rolante. */
@@ -260,9 +306,13 @@ export class OfficeRoom extends Room<OfficeState> {
     try {
       const rows = await getDb().select().from(deskReservations);
       for (const r of rows) {
-        // Sanity: ignora reservas pra mesas que não existem mais no layout
-        if (!getDeskById(r.deskId)) {
-          console.warn(`[OfficeRoom] reserva ignorada — desk ${r.deskId} não existe no layout`);
+        // Reserva de mesa que não existe mais (fixa nem do editor) =
+        // mesa apagada → limpa do DB e ignora (user reserva outra).
+        if (!this.deskById(r.deskId)) {
+          console.warn(`[OfficeRoom] desk ${r.deskId} não existe — reserva apagada`);
+          try {
+            await getPool().query(`DELETE FROM desk_reservations WHERE desk_id = $1`, [r.deskId]);
+          } catch {}
           continue;
         }
         const desk = new Desk();
@@ -276,6 +326,7 @@ export class OfficeRoom extends Room<OfficeState> {
     } catch (err) {
       console.error("[OfficeRoom] falha ao hidratar desks:", err);
     }
+    await this.pruneOrphanReservations(); // limpa reservas de mesas apagadas
 
     this.onMessage<MoveMessage>("move", (client, message) => this.handleMove(client, message));
 
@@ -393,7 +444,7 @@ export class OfficeRoom extends Room<OfficeState> {
       const player = this.state.players.get(client.sessionId);
       if (!player) return;
       const deskId = String(msg?.deskId || "");
-      if (!getDeskById(deskId)) return;
+      if (!this.deskById(deskId)) return;
       if (player.deskSeat === deskId) return; // já está nessa
       // Sai de qualquer mesa anterior
       this.leaveDeskConversation(client.sessionId, player);
@@ -482,7 +533,8 @@ export class OfficeRoom extends Room<OfficeState> {
     this.onMessage("map:reload", async (client) => {
       const auth = client.userData as AuthData | undefined;
       if (auth?.email && isAdminEmail(auth.email)) {
-        await this.loadMapOverride(); // atualiza cache (mesas movidas)
+        await this.loadMapOverride(); // atualiza cache (mesas movidas/criadas)
+        await this.pruneOrphanReservations(); // mesa apagada → reserva cai
         this.broadcast("map:updated", {});
       }
     });
@@ -900,7 +952,7 @@ export class OfficeRoom extends Room<OfficeState> {
   private findReservedDeskFor(userId: string) {
     for (const desk of this.state.desks.values()) {
       if (desk.ownerId === userId) {
-        return getDeskById(desk.deskId);
+        return this.deskById(desk.deskId);
       }
     }
     return undefined;
@@ -930,7 +982,7 @@ export class OfficeRoom extends Room<OfficeState> {
     }
 
     const deskId = String(msg?.deskId || "");
-    const deskInfo = getDeskById(deskId);
+    const deskInfo = this.deskById(deskId);
     if (!deskInfo) {
       client.send("desk:error", { error: "Mesa inválida" });
       return;
@@ -1062,7 +1114,7 @@ export class OfficeRoom extends Room<OfficeState> {
       if (!auth || !me) return;
 
       const deskId = String(msg?.deskId || "");
-      const deskInfo = getDeskById(deskId);
+      const deskInfo = this.deskById(deskId);
       if (!deskInfo) {
         client.send("teleport:error", { error: "Mesa inválida" });
         return;

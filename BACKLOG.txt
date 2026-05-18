@@ -101,11 +101,13 @@ Auth / infra:
     if(onObj)return tratando parede=movel. Agora onFurn/onWall
     separados; pincel so bloqueado por movel existente. Parede/
     sala nao bloqueiam o add.
-  - [pedido 2026-05-16] editor de mesa: definir/editar mesas
-    reservaveis (posicao mesa+assento, deskId, lugares da
-    mesa-conversa) no mapa, nao hardcoded em OfficeLayout.ts/
-    server/src/desks.ts. Provavel extensao do editor de mapa.
-    Detalhar escopo antes.
+  - [FEITO] editor de mesa: toda desk colocada no editor vira
+    reservavel. makeEditItem gera deskId unico + tex desk_pc1;
+    server resolve via deskById (fixas OU override map_layout) em
+    claim/spawn/seat/etc; pruneOrphanReservations (boot +
+    map:reload) -> mesa apagada perde reserva (state+DB). Limite:
+    getDeskCatalog client estatico nao lista editor-desks
+    (navegacao "ir ate mesa" nao pega; reserva/E/spawn OK).
 
 Interacao:
   - [FEITO] nao mostrar "mesa reservada" no join - deskToastSinceRef

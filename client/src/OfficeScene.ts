@@ -954,6 +954,23 @@ export class OfficeScene extends Phaser.Scene {
     }
   }
 
+  /**
+   * Monta o FurnitureItem do editor. `desk` colocado pelo editor vira
+   * RESERVÁVEL: ganha deskId único (desk-ed-...) + textura boa
+   * (desk_pc1). O server reconhece via deskById (override do mapa).
+   */
+  private makeEditItem(type: string, x: number, y: number): FurnitureItem {
+    const item: FurnitureItem = { type, x, y, depth: 1, hitbox: hitboxFor(type) };
+    if (type === "desk") {
+      item.deskId =
+        "desk-ed-" +
+        Date.now().toString(36) +
+        Math.floor(Math.random() * 1296).toString(36);
+      item.tex = "desk_pc1"; // visual bom (madeira + monitor)
+    }
+    return item;
+  }
+
   /** Adiciona um móvel na posição de TELA (drop do painel no canvas). */
   public addFurnitureAtScreen(type: string, clientX: number, clientY: number) {
     if (!this.editMode || !type) return;
@@ -961,7 +978,7 @@ export class OfficeScene extends Phaser.Scene {
     const wp = this.cameras.main.getWorldPoint(clientX - rect.left, clientY - rect.top);
     const x = Phaser.Math.Clamp(this.snap(wp.x), 0, WORLD_W);
     const y = Phaser.Math.Clamp(this.snap(wp.y), 0, WORLD_H);
-    this.editFurniture.push({ type, x, y, depth: 1, hitbox: hitboxFor(type) });
+    this.editFurniture.push(this.makeEditItem(type, x, y));
     this.renderEditFurniture();
     this.selectFurn(this.editFurniture.length - 1);
   }
@@ -1123,13 +1140,7 @@ export class OfficeScene extends Phaser.Scene {
       if (onFurn) return;
       const x = Phaser.Math.Clamp(this.snap(pointer.worldX), 0, WORLD_W);
       const y = Phaser.Math.Clamp(this.snap(pointer.worldY), 0, WORLD_H);
-      this.editFurniture.push({
-        type: this.editBrush,
-        x,
-        y,
-        depth: 1,
-        hitbox: hitboxFor(this.editBrush),
-      });
+      this.editFurniture.push(this.makeEditItem(this.editBrush, x, y));
       this.renderEditFurniture();
       this.selectFurn(this.editFurniture.length - 1);
     } else {
