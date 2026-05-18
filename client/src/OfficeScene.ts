@@ -1504,12 +1504,15 @@ export class OfficeScene extends Phaser.Scene {
       return;
     }
 
-    const outline = this.add.rectangle(info.x, info.y, 100, 36);
-    outline.setStrokeStyle(3, color, 1);
-    outline.setFillStyle(0, 0);
+    // Moldura cobrindo a MESA (sprite ~64×64, centro em info.y) + o
+    // ASSENTO em frente (cadeira ~info.y+34). Caixa: 80×96 deslocada
+    // pra baixo pra abraçar mesa + lugar de quem senta.
+    const outline = this.add.rectangle(info.x, info.y + 14, 80, 96);
+    outline.setStrokeStyle(2, color, 0.9);
+    outline.setFillStyle(color, 0.07);
     outline.setDepth(info.y - 1);
 
-    const label = this.add.text(info.x, info.y - 30, desk.ownerName, {
+    const label = this.add.text(info.x, info.y - 38, desk.ownerName, {
       fontFamily: "system-ui, -apple-system",
       fontSize: "11px",
       color: "#ffffff",
