@@ -309,7 +309,7 @@ function addWorkstation(items: FurnitureItem[], desks: Array<{ id: string; x: nu
   // `type` continua "desk" (reserva/overlay/spawn) — só o `tex` muda.
   // (a tint por departamento `deskpc_*` ficou ruim; mantida só na
   // paleta do editor pra quem quiser.)
-  items.push({ type: "desk", x, y, depth: 1, hitbox: HITBOXES.desk_long, deskId: id, tex: "desk_long" });
+  items.push({ type: "desk", x, y, depth: 1, hitbox: HITBOXES.desk_office, deskId: id, tex: "desk_office" });
   items.push({ type: "chair", x, y: y + 36, depth: 0, hitbox: HITBOXES.chair });
 }
 
