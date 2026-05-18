@@ -93,6 +93,13 @@ Auth / infra:
     modais com maxWidth/maxHeight/overflow. Base ja existia:
     useIsMobile, joystick+E, HUD compacto, sidebar fullscreen.
   - editor de mapas
+  - [pedido 2026-05-18] cor nas paredes + editar no map editor -
+    Wall ganha color? (default atual 0x3d4a5e); drawWalls/
+    renderEditWalls usam a cor; no editor seletor de cor por
+    parede (e/ou cor do pincel). Persiste no map_layout (walls).
+  - [pedido 2026-05-18] categorias + busca na paleta do editor -
+    paleta muito grande; agrupar por categoria (Base, Cozinha,
+    Seguranca, Mesas, 2o andar...) + campo de busca.
   - [FEITO] editor "edicao limpa": setActorsVisible(false) some com
     avatar/remotos/NPC/baloes; right-click sem menu de contexto (so
     pan); SpatialAudio.setEditorMute zera peers; joystick mobile
