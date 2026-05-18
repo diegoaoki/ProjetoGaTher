@@ -39,7 +39,13 @@ export interface Wall {
   y: number;
   w: number;
   h: number;
+  /** Cor da parede (hex 0xRRGGBB). Default `WALL_COLOR`. Editável
+   *  pelo editor de mapa; persiste no override. */
+  color?: number;
 }
+
+/** Cor padrão das paredes (cinza-azulado). */
+export const WALL_COLOR = 0x3d4a5e;
 
 export interface Room {
   id: string;

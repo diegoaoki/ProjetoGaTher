@@ -149,7 +149,12 @@ export default function App() {
   const [editorBrush, setEditorBrush] = useState<string | null>(null);
   const [editorCat, setEditorCat] = useState("Todos");
   const [editorSearch, setEditorSearch] = useState("");
-  const [editorInfo, setEditorInfo] = useState<{ count: number; selected: boolean }>({ count: 0, selected: false });
+  const [editorInfo, setEditorInfo] = useState<{
+    count: number;
+    selected: boolean;
+    selKind?: "furn" | "wall" | null;
+    wallColor?: number | null;
+  }>({ count: 0, selected: false });
   const [editorSaving, setEditorSaving] = useState(false);
   // Miniaturas (dataURL) por tipo de móvel, geradas da textura Phaser
   const [editorThumbs, setEditorThumbs] = useState<Record<string, string>>({});
@@ -2421,7 +2426,28 @@ export default function App() {
           {editorBrush === "wall" && (
             <div style={{ fontSize: 11, opacity: 0.75, marginBottom: 8 }}>
               Arraste no mapa pra desenhar uma parede. "✋ Mover/selecionar"
-              pra mover/deletar paredes existentes (clique nelas).
+              pra mover/deletar/recolorir paredes existentes (clique nelas).
+            </div>
+          )}
+          {(editorBrush === "wall" || editorInfo.selKind === "wall") && (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8, fontSize: 12 }}>
+              <span>🎨 Cor da parede{editorInfo.selKind === "wall" ? " (selecionada)" : " (nova)"}:</span>
+              <input
+                type="color"
+                value={
+                  "#" +
+                  (editorInfo.selKind === "wall" && editorInfo.wallColor != null
+                    ? editorInfo.wallColor
+                    : 0x3d4a5e
+                  )
+                    .toString(16)
+                    .padStart(6, "0")
+                }
+                onChange={(e) =>
+                  sceneRef.current?.setWallColor(parseInt(e.target.value.slice(1), 16))
+                }
+                style={{ width: 40, height: 26, padding: 0, border: "1px solid #334155", borderRadius: 4, background: "#0f172a", cursor: "pointer" }}
+              />
             </div>
           )}
           <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>

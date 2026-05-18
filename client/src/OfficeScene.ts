@@ -11,6 +11,7 @@ import {
   applyLayoutOverride,
   hitboxFor,
   WALL_T,
+  WALL_COLOR,
   FLOOR2_Y0,
   FurnitureItem,
   Wall,
@@ -56,6 +57,14 @@ const NPC_SPEED = 130; // guarda anda um pouco mais devagar que o player
 // abaixo de 10000 (balões de vídeo DOM continuam por cima).
 const NPC_DEPTH_BASE = 4000;
 const SYNC_INTERVAL = 50;
+
+/** Escurece/clareia uma cor 0xRRGGBB por um fator (clamp 0..255). */
+function shadeNum(c: number, f: number): number {
+  const r = Math.max(0, Math.min(255, Math.round(((c >> 16) & 255) * f)));
+  const g = Math.max(0, Math.min(255, Math.round(((c >> 8) & 255) * f)));
+  const b = Math.max(0, Math.min(255, Math.round((c & 255) * f)));
+  return (r << 16) | (g << 8) | b;
+}
 // Tamanho do mundo (80×85 tiles = 2560×2720 px): térreo y 0..55 +
 // gap + 2º andar y 60..84. Tem que bater com H_TILES do OfficeLayout
 // e worldHeight do schema do server.
@@ -200,7 +209,14 @@ export class OfficeScene extends Phaser.Scene {
   /** Estado do desenho de parede (arrastar retângulo). */
   private wallDrawStart: { x: number; y: number } | null = null;
   private wallPreview?: Phaser.GameObjects.Rectangle;
-  public onEditorChange?: (info: { count: number; selected: boolean }) => void;
+  public onEditorChange?: (info: {
+    count: number;
+    selected: boolean;
+    selKind: "furn" | "wall" | null;
+    wallColor: number | null;
+  }) => void;
+  /** Cor do "pincel parede" — paredes novas nascem com ela. */
+  private wallBrushColor = WALL_COLOR;
 
   private tvSprite?: Phaser.GameObjects.Image;
   private tvScreen?: Phaser.GameObjects.Rectangle;
@@ -793,19 +809,21 @@ export class OfficeScene extends Phaser.Scene {
     this.layout.walls.forEach((w) => {
       const cx = w.x + w.w / 2;
       const cy = w.y + w.h / 2;
-      // base escura
-      const wall = this.add.rectangle(cx, cy, w.w, w.h, 0x3d4a5e);
-      wall.setStrokeStyle(2, 0x1e2533);
+      const base = w.color ?? WALL_COLOR;
+      // base + contorno escuro + brilho claro, derivados da cor
+      const wall = this.add.rectangle(cx, cy, w.w, w.h, base);
+      wall.setStrokeStyle(2, shadeNum(base, 0.5));
       wall.setDepth(w.y + w.h - 1);
       this.wallObjs.push(wall);
       // brilho no topo (efeito 3d simples)
+      const hlColor = shadeNum(base, 1.4);
       const isHorizontal = w.h === WALL_T;
       if (isHorizontal) {
-        const hl = this.add.rectangle(cx, w.y + 2, w.w - 4, 2, 0x6b7d96, 0.6);
+        const hl = this.add.rectangle(cx, w.y + 2, w.w - 4, 2, hlColor, 0.6);
         hl.setDepth(w.y + w.h - 1);
         this.wallObjs.push(hl);
       } else {
-        const hl = this.add.rectangle(w.x + 2, cy, 2, w.h - 4, 0x6b7d96, 0.6);
+        const hl = this.add.rectangle(w.x + 2, cy, 2, w.h - 4, hlColor, 0.6);
         hl.setDepth(w.y + w.h - 1);
         this.wallObjs.push(hl);
       }
@@ -1009,10 +1027,27 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   private notifyEditor() {
+    const selWall =
+      this.editSelKind === "wall" && this.editSelIdx >= 0
+        ? this.editWalls[this.editSelIdx]
+        : null;
     this.onEditorChange?.({
       count: this.editFurniture.length + this.editWalls.length,
       selected: this.editSelKind !== null,
+      selKind: this.editSelKind,
+      wallColor: selWall ? selWall.color ?? WALL_COLOR : null,
     });
+  }
+
+  /** Cor da parede selecionada (ou do pincel se nada selecionado). */
+  public setWallColor(hex: number) {
+    if (this.editSelKind === "wall" && this.editSelIdx >= 0 && this.editWalls[this.editSelIdx]) {
+      this.editWalls[this.editSelIdx].color = hex;
+      this.renderEditWalls();
+      this.applySelHighlight();
+    }
+    this.wallBrushColor = hex; // novas paredes também usam essa cor
+    this.notifyEditor();
   }
 
   private snap(v: number) {
@@ -1047,8 +1082,10 @@ export class OfficeScene extends Phaser.Scene {
     });
     this.editWallObjs.forEach((r, idx) => {
       const sel = this.editSelKind === "wall" && idx === this.editSelIdx;
-      r.setStrokeStyle(2, sel ? 0x4ade80 : 0x93c5fd, 1);
-      r.setFillStyle(0x3b82f6, sel ? 0.55 : 0.35);
+      // Mantém a cor real da parede; só o contorno indica seleção.
+      const c = this.editWalls[idx]?.color ?? WALL_COLOR;
+      r.setStrokeStyle(sel ? 3 : 2, sel ? 0x4ade80 : 0x93c5fd, 1);
+      r.setFillStyle(c, sel ? 1 : 0.85);
     });
   }
 
@@ -1084,7 +1121,9 @@ export class OfficeScene extends Phaser.Scene {
     this.editWalls.forEach((w, i) => {
       const cx = w.x + w.w / 2;
       const cy = w.y + w.h / 2;
-      const rect = this.add.rectangle(cx, cy, w.w, w.h, 0x3b82f6, 0.35);
+      // Mostra a COR real da parede (pra editar cor) + contorno azul
+      // (seleção/edição). applySelHighlight ajusta o contorno.
+      const rect = this.add.rectangle(cx, cy, w.w, w.h, w.color ?? WALL_COLOR, 0.85);
       rect.setStrokeStyle(2, 0x93c5fd, 1);
       rect.setDepth(90000); // editor: paredes por cima pra editar fácil
       rect.setInteractive({ draggable: true, useHandCursor: true });
@@ -1194,7 +1233,7 @@ export class OfficeScene extends Phaser.Scene {
     this.wallPreview = undefined;
     // Ignora paredes minúsculas (clique sem arrastar)
     if (w < this.editGrid || h < this.editGrid) return;
-    this.editWalls.push({ x, y, w, h });
+    this.editWalls.push({ x, y, w, h, color: this.wallBrushColor });
     this.renderEditWalls();
     this.selectWall(this.editWalls.length - 1);
   };
