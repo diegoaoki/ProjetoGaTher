@@ -88,6 +88,13 @@ export function preloadLimezuAssets(scene: Phaser.Scene) {
   for (const k of TABLES_SPRITES) {
     scene.load.image(k, `/assets/interiors/tables/${k}.png`);
   }
+
+  // Workstations por departamento (mesa de madeira + 2 monitores na
+  // cor do setor). `type` segue "desk" (reserva intacta); só a textura
+  // muda via FurnitureItem.tex. desk_dev/dados/infra/fin 64×64.
+  for (const k of DESK_SPRITES) {
+    scene.load.image(k, `/assets/interiors/desks/${k}.png`);
+  }
 }
 
 /** Móveis de cozinha carregados como texturas próprias (key == type). */
@@ -106,6 +113,14 @@ export const TABLES_SPRITES = [
   "meetingTable",
   "kitchen_table",
   "coffeeTable",
+] as const;
+
+/** Desks por departamento (texturas via FurnitureItem.tex). */
+export const DESK_SPRITES = [
+  "desk_dev",
+  "desk_dados",
+  "desk_infra",
+  "desk_fin",
 ] as const;
 
 /** Móveis da sala de Segurança (key == type). */

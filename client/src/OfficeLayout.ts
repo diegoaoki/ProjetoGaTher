@@ -29,6 +29,9 @@ export interface FurnitureItem {
   /** Estrutura fixa (escada rolante etc.) — o editor de mapa não
    *  pode mover/deletar. Re-anexada em applyLayoutOverride. */
   fixed?: boolean;
+  /** Override de textura (mantém `type` p/ lógica; só muda o sprite).
+   *  Ex.: desks por departamento (`desk_dev`...). */
+  tex?: string;
 }
 
 export interface Wall {
@@ -280,8 +283,13 @@ function addWorkstation(items: FurnitureItem[], desks: Array<{ id: string; x: nu
   const x = tileX * TILE;
   const y = tileY * TILE;
   desks.push({ id, x, y });
-  items.push({ type: "desk", x, y, depth: 1, hitbox: HITBOXES.desk, deskId: id });
-  items.push({ type: "monitor", x, y: y - 18, depth: 2 });
+  // Desk por departamento (sprite com PC embutido). `type` continua
+  // "desk" pra não quebrar reserva/overlay/spawn — só a textura muda.
+  const tex =
+    tileY < 11 ? "desk_dev" :
+    tileY < 21 ? "desk_dados" :
+    tileY < 31 ? "desk_infra" : "desk_fin";
+  items.push({ type: "desk", x, y, depth: 1, hitbox: HITBOXES.desk, deskId: id, tex });
   items.push({ type: "chair", x, y: y + 36, depth: 0, hitbox: HITBOXES.chair });
 }
 

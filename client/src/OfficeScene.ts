@@ -673,7 +673,7 @@ export class OfficeScene extends Phaser.Scene {
 
   private drawFurniture() {
     this.layout.furniture.forEach((item) => {
-      const sprite = this.add.image(item.x, item.y, item.type);
+      const sprite = this.add.image(item.x, item.y, item.tex || item.type);
       sprite.setOrigin(0.5, 0.5);
       sprite.setDepth(item.y);
       this.furnitureObjs.push(sprite);
@@ -963,7 +963,7 @@ export class OfficeScene extends Phaser.Scene {
     this.editSprites.forEach((s) => s.destroy());
     this.editSprites = [];
     this.editFurniture.forEach((item, i) => {
-      const spr = this.add.image(item.x, item.y, item.type);
+      const spr = this.add.image(item.x, item.y, item.tex || item.type);
       spr.setOrigin(0.5, 0.5);
       spr.setDepth(item.y);
       if (item.fixed) {
