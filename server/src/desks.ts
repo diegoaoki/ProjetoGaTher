@@ -72,8 +72,8 @@ export function getDeskById(deskId: string): DeskInfo | undefined {
 
 /**
  * Posição onde o avatar do dono fica sentado na mesa.
- * 36px abaixo do centro = onde fica a cadeira (sincronizado com o client).
+ * 56px abaixo do centro = onde fica a cadeira (= addWorkstation y+56).
  */
 export function getSeatPosition(desk: DeskInfo): { x: number; y: number } {
-  return { x: desk.x, y: desk.y + 36 };
+  return { x: desk.x, y: desk.y + 56 };
 }

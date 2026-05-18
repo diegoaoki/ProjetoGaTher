@@ -1630,7 +1630,7 @@ export class OfficeScene extends Phaser.Scene {
   public goToDesk(deskId: string): boolean {
     const d = this.allDesks.find((x) => x.id === deskId);
     if (!d) return false;
-    this.navigateTo(d.x, d.y + 28);
+    this.navigateTo(d.x, d.y + 52); // perto da cadeira (y+56) → senta
     return true;
   }
 

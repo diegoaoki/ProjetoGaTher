@@ -312,7 +312,9 @@ function addWorkstation(items: FurnitureItem[], desks: Array<{ id: string; x: nu
   // spawn). Jeito modular correto do LimeZu.
   items.push({ type: "desk", x, y, depth: 1, hitbox: HITBOXES.desk_work, deskId: id, tex: "desk_work" });
   items.push({ type: "monitor", x, y: y - 22, depth: 2 }); // PC na superfície do desk
-  items.push({ type: "chair", x, y: y + 40, depth: 0, hitbox: HITBOXES.chair });
+  // Cadeira afastada do desk (desk_work é 80px alto): o avatar senta
+  // NA FRENTE, visível, sem o desk cobrir o tronco ("cortado").
+  items.push({ type: "chair", x, y: y + 56, depth: 0, hitbox: HITBOXES.chair });
 }
 
 export function getDefaultLayout(): OfficeLayoutData {
