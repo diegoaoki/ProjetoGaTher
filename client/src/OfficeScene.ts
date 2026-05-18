@@ -156,6 +156,8 @@ export class OfficeScene extends Phaser.Scene {
   /** Override do editor (mobília + paredes) vindo do server. */
   private mapOverride: { furniture?: FurnitureItem[]; walls?: Wall[] } | null = null;
   /** GameObjects de mobília/parede/labels — pra poder limpar no rebuild. */
+  private floorSprite?: Phaser.GameObjects.TileSprite;
+  private worldBorder?: Phaser.GameObjects.Graphics;
   private furnitureObjs: Phaser.GameObjects.GameObject[] = [];
   private wallObjs: Phaser.GameObjects.GameObject[] = [];
   private roomLabelObjs: Phaser.GameObjects.GameObject[] = [];
@@ -640,6 +642,7 @@ export class OfficeScene extends Phaser.Scene {
     const floorKey = this.textures.exists("floorWoodLime") ? "floorWoodLime" : "floorWood";
     const floor = this.add.tileSprite(0, 0, WORLD_W, WORLD_H, floorKey).setOrigin(0, 0);
     floor.setDepth(-100);
+    this.floorSprite = floor;
 
     this.layout.floorRegions.forEach((region) => {
       if (region.type === "rug") {
@@ -656,9 +659,16 @@ export class OfficeScene extends Phaser.Scene {
     });
 
     const border = this.add.graphics();
-    border.lineStyle(4, 0x1a1a2e, 1);
-    border.strokeRect(0, 0, WORLD_W, WORLD_H);
     border.setDepth(-10);
+    this.worldBorder = border;
+    this.redrawWorldBorder(0, 0, WORLD_W, WORLD_H);
+  }
+
+  private redrawWorldBorder(x: number, y: number, w: number, h: number) {
+    if (!this.worldBorder) return;
+    this.worldBorder.clear();
+    this.worldBorder.lineStyle(4, 0x1a1a2e, 1);
+    this.worldBorder.strokeRect(x, y, w, h);
   }
 
   private drawFurniture() {
@@ -1901,24 +1911,29 @@ export class OfficeScene extends Phaser.Scene {
    */
   private applyFloorView() {
     const cam = this.cameras.main;
+    // Define os limites/região visível. O piso (tileSprite) e a borda
+    // são REDIMENSIONADOS pra essa região — senão, com zoom-out, o
+    // piso continua aparecendo no gap/2º andar como "espaço vazio".
+    const setRegion = (x: number, y: number, w: number, h: number) => {
+      cam.setBounds(x, y, w, h);
+      this.floorSprite?.setPosition(x, y).setSize(w, h);
+      this.redrawWorldBorder(x, y, w, h);
+    };
     if (this.editMode) {
       // No editor o admin precisa navegar/editar os 2 andares; a
       // visibilidade de estáticos x editáveis é do enter/exitMapEditor.
-      cam.setBounds(0, 0, WORLD_W, WORLD_H);
+      setRegion(0, 0, WORLD_W, WORLD_H);
       return;
     }
     const FLOOR1_MAX = 55 * 32; // térreo: y 0..1760 (sem o gap)
     if (this.myFloor === 2) {
-      // Limites = retângulo da SALA do 2º andar (não o mundo todo,
+      // Região = retângulo da SALA do 2º andar (não o mundo todo,
       // senão sobra margem vazia em volta). +1 tile de respiro.
       const f2 = this.layout.rooms.find((r) => r.id === "floor2");
-      if (f2) {
-        cam.setBounds(f2.x - 32, f2.y - 32, f2.w + 64, f2.h + 64);
-      } else {
-        cam.setBounds(0, FLOOR2_Y0, WORLD_W, WORLD_H - FLOOR2_Y0);
-      }
+      if (f2) setRegion(f2.x - 32, f2.y - 32, f2.w + 64, f2.h + 64);
+      else setRegion(0, FLOOR2_Y0, WORLD_W, WORLD_H - FLOOR2_Y0);
     } else {
-      cam.setBounds(0, 0, WORLD_W, FLOOR1_MAX);
+      setRegion(0, 0, WORLD_W, FLOOR1_MAX);
     }
     const floorOf = (o: any) => ((o?.y ?? 0) >= FLOOR2_Y0 ? 2 : 1);
     this.furnitureObjs.forEach((o: any) => o.setVisible?.(floorOf(o) === this.myFloor));
