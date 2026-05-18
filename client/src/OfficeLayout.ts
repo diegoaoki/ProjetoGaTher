@@ -305,11 +305,12 @@ function addWorkstation(items: FurnitureItem[], desks: Array<{ id: string; x: nu
   const x = tileX * TILE;
   const y = tileY * TILE;
   desks.push({ id, x, y });
-  // Desk LimeZu limpo (madeira + monitor) pra TODAS as workstations.
-  // `type` continua "desk" (reserva/overlay/spawn) — só o `tex` muda.
-  // (a tint por departamento `deskpc_*` ficou ruim; mantida só na
-  // paleta do editor pra quem quiser.)
+  // Estação de trabalho = desk LimeZu completo (#45 `desk_office`) +
+  // MONITOR por cima como objeto separado (sprite LimeZu nativo, sem
+  // esticar/cortar) + cadeira. `type` segue "desk" (reserva/overlay/
+  // spawn). Jeito modular correto do LimeZu.
   items.push({ type: "desk", x, y, depth: 1, hitbox: HITBOXES.desk_office, deskId: id, tex: "desk_office" });
+  items.push({ type: "monitor", x, y: y - 16, depth: 2 }); // PC em cima do desk
   items.push({ type: "chair", x, y: y + 36, depth: 0, hitbox: HITBOXES.chair });
 }
 
