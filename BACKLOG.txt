@@ -117,6 +117,9 @@ Interacao:
   - [FEITO] bolha sem convite - handleBubbleInvite cria/junta a
     bolha direto; removidos modal/handlers de convite; bolha =
     "Bolha aberta com X".
+  - [FEITO] assets de mesa no editor - EDITOR_FURNITURE_TYPES +=
+    desk/monitor/deskpc_* (HITBOXES deskpc_*); admin arrasta os
+    desks LimeZu no editor (decorativo, nao reservavel).
   - [FEITO] sentar na cadeira ao chegar - anim ${id}_${dir}_sit;
     chairSpots+onChair(26px); parado em cadeira -> sit virado "up"
     (meu avatar + remotos, local sem schema); volta walk/idle ao

@@ -62,6 +62,10 @@ export interface OfficeLayoutData {
 const HITBOXES: Record<string, Hitbox> = {
   desk:         { offsetX: -48, offsetY: -10, w: 96, h: 32 }, // diretorias (desk procedural largo)
   desk_pc:      { offsetX: -16, offsetY: -2,  w: 32, h: 28 }, // workstation LimeZu 32×64 (C30)
+  deskpc_dev:   { offsetX: -16, offsetY: -2,  w: 32, h: 28 },
+  deskpc_dados: { offsetX: -16, offsetY: -2,  w: 32, h: 28 },
+  deskpc_infra: { offsetX: -16, offsetY: -2,  w: 32, h: 28 },
+  deskpc_fin:   { offsetX: -16, offsetY: -2,  w: 32, h: 28 },
   chair:        { offsetX: -16, offsetY: -10, w: 32, h: 24 },
   sofa:         { offsetX: -40, offsetY: -16, w: 80, h: 32 },
   coffeeTable:  { offsetX: -28, offsetY: -8,  w: 56,  h: 20 }, // LimeZu 64×32
@@ -105,6 +109,11 @@ export const EDITOR_FURNITURE_TYPES = [
   "security_console", "server_rack", "security_camera",
   // 2º andar
   "crate",
+  // Mesas de trabalho (LimeZu) — pra você escolher/posicionar no editor.
+  // OBS: colocadas pelo editor são DECORATIVAS (não reserváveis; só
+  // a `desk` padrão do layout, com deskId, é reservável).
+  "desk", "monitor",
+  "deskpc_dev", "deskpc_dados", "deskpc_infra", "deskpc_fin",
 ];
 
 const TILE = 32;
