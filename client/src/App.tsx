@@ -54,6 +54,12 @@ function resolveHttpUrl(): string {
 const SERVER_URL = resolveServerUrl();
 const HTTP_URL = resolveHttpUrl();
 
+// Reconexão: teto de tentativas + timeout do joinOrCreate. Sem isso o
+// cliente entrava em loop infinito (~3 erros/s) em desconexão/sessão
+// duplicada e a tela "Conectando..." travava pra sempre (BUG-001/002).
+const MAX_RECONNECT = 5;
+const CONN_TIMEOUT_MS = 15000;
+
 // Categorias + rótulos PT pra paleta do editor de mapa (busca/filtro).
 const FURN_CAT: Record<string, string> = {
   plant: "Geral", sofa: "Geral", bookshelf: "Geral", whiteboard: "Geral",
@@ -448,11 +454,67 @@ export default function App() {
     setAuthState("authed");
   }
 
+  // Estado de reconexão (BUG-002): contador de tentativas, timer agendado e
+  // info pra mostrar "Reconectando... (n/5)" na tela. wasKickedRef é um REF
+  // (não state) porque o onLeave captura o closure no connect() — o state
+  // wasKicked fica stale (sempre false) lá dentro, então a sessão kickada
+  // reconectava e batia DUPLICATE de novo (BUG-001).
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimerRef = useRef<number | null>(null);
+  const wasKickedRef = useRef(false);
+  const [reconnectInfo, setReconnectInfo] = useState<{ attempt: number; max: number } | null>(null);
+
+  function clearReconnectTimer() {
+    if (reconnectTimerRef.current !== null) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
+  }
+
+  // Reconexão com backoff exponencial e teto. Chamado pelo onLeave em
+  // desconexão inesperada. Sem isso o reconnect era imediato e infinito.
+  function scheduleReconnect() {
+    clearReconnectTimer();
+    const n = reconnectAttemptsRef.current + 1;
+    reconnectAttemptsRef.current = n;
+    if (n > MAX_RECONNECT) {
+      setReconnectInfo(null);
+      setErrorMsg("Não foi possível reconectar ao servidor após várias tentativas.");
+      setConn("error");
+      autoConnectedRef.current = true; // não auto-reconecta; os botões resolvem
+      return;
+    }
+    const delay = Math.min(15000, 1000 * 2 ** (n - 1)); // 1s,2s,4s,8s,15s
+    autoConnectedRef.current = true; // bloqueia o efeito; o timer reconecta
+    setReconnectInfo({ attempt: n, max: MAX_RECONNECT });
+    setConn("connecting");
+    reconnectTimerRef.current = window.setTimeout(() => {
+      reconnectTimerRef.current = null;
+      connect();
+    }, delay);
+  }
+
+  // Retry manual (botões das telas Conectando/Erro): zera o backoff.
+  function manualRetry() {
+    clearReconnectTimer();
+    reconnectAttemptsRef.current = 0;
+    setReconnectInfo(null);
+    setErrorMsg("");
+    wasKickedRef.current = false;
+    setWasKicked(false);
+    autoConnectedRef.current = false;
+    setConn("idle");
+  }
+
   function logout() {
     if (conn === "connected") {
       roomRef.current?.leave();
       cleanupGame();
     }
+    clearReconnectTimer();
+    reconnectAttemptsRef.current = 0;
+    setReconnectInfo(null);
+    wasKickedRef.current = false;
     setConn("idle");
     clearToken();
     setSession(null);
@@ -606,17 +668,27 @@ export default function App() {
       return;
     }
 
+    clearReconnectTimer();
     setConn("connecting");
     setErrorMsg("");
     setDuplicateSession(false);
     setWasKicked(false);
+    wasKickedRef.current = false;
 
     try {
       const client = new Client(SERVER_URL);
-      const room = await client.joinOrCreate("office", {
-        token: session.token,
-        forceTakeover,
-      });
+      // Timeout no joinOrCreate (BUG-002): sem isso, se a conexão pendura
+      // (rede ruim, server fora), a tela "Conectando..." trava pra sempre
+      // sem nenhuma saída pro usuário.
+      const room: Room = await Promise.race([
+        client.joinOrCreate("office", {
+          token: session.token,
+          forceTakeover,
+        }),
+        new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error("CONN_TIMEOUT")), CONN_TIMEOUT_MS)
+        ),
+      ]);
       roomRef.current = room;
 
       const state: any = room.state;
@@ -658,20 +730,23 @@ export default function App() {
 
       room.onLeave(() => {
         cleanupGame();
-        // Se foi kickado por outra aba, NÃO tenta reconnect (loop infinito)
-        // — wasKicked é setado pelo listener session:kicked logo abaixo
-        if (!wasKicked) {
+        // Kickado por outra aba: NÃO reconecta (senão DUPLICATE em loop —
+        // BUG-001). Lê o REF, não o state wasKicked (que é stale neste
+        // closure, capturado lá no connect()).
+        if (wasKickedRef.current) {
           setConn("idle");
-          setErrorMsg("Desconectado do servidor — reconectando...");
-          autoConnectedRef.current = false;
-        } else {
-          setConn("idle");
+          return;
         }
+        // Desconexão inesperada → reconecta com backoff e teto (BUG-002),
+        // em vez do reconnect imediato e infinito de antes.
+        scheduleReconnect();
       });
 
       // Server avisa que esta sessão foi kickada porque o user entrou em outra aba
       room.onMessage("session:kicked", () => {
+        wasKickedRef.current = true;
         setWasKicked(true);
+        clearReconnectTimer();
         autoConnectedRef.current = true; // bloqueia auto-reconnect
       });
 
@@ -1031,18 +1106,32 @@ export default function App() {
 
       spatialRef.current = spatial;
       setAudioStatus("");
+      // Conectou: zera o backoff de reconexão.
+      reconnectAttemptsRef.current = 0;
+      setReconnectInfo(null);
       setConn("connected");
     } catch (e: any) {
       console.error(e);
+      clearReconnectTimer();
       const msg = String(e?.message || "");
       if (msg.includes("DUPLICATE_SESSION")) {
-        // Sessão duplicada: abre modal pra forçar entrada
+        // Sessão duplicada: abre o modal "Já está conectado" e PÁRA.
+        // autoConnectedRef fica TRUE de propósito — se resetasse pra false,
+        // o efeito de auto-connect dispararia connect() de novo na hora,
+        // batendo DUPLICATE outra vez → loop infinito de ~3 erros/s
+        // (BUG-001). A saída é o usuário escolher no modal.
+        setReconnectInfo(null);
         setDuplicateSession(true);
         setConn("idle");
-        autoConnectedRef.current = false;
+        autoConnectedRef.current = true;
         return;
       }
-      setErrorMsg(msg || "Falha na conexão");
+      setReconnectInfo(null);
+      setErrorMsg(
+        msg === "CONN_TIMEOUT"
+          ? "Tempo esgotado ao conectar. Verifique sua conexão e tente novamente."
+          : msg || "Falha na conexão"
+      );
       setConn("error");
     }
   }
@@ -1328,14 +1417,7 @@ export default function App() {
             Essa aba ficou inativa.
           </p>
           <div style={{ display: "flex", gap: 8 }}>
-            <button
-              onClick={() => {
-                setWasKicked(false);
-                autoConnectedRef.current = false;
-                setConn("idle");
-              }}
-              style={buttonStyle}
-            >
+            <button onClick={manualRetry} style={buttonStyle}>
               Voltar pra esta aba
             </button>
             <button onClick={logout} style={{ ...buttonStyle, background: "#334155", color: "#e2e8f0" }}>
@@ -1384,14 +1466,7 @@ export default function App() {
           <h1 style={{ margin: "0 0 8px", fontSize: 22 }}>Não consegui conectar</h1>
           <p style={{ margin: "0 0 16px", fontSize: 13, color: "#f87171" }}>{errorMsg}</p>
           <div style={{ display: "flex", gap: 8 }}>
-            <button
-              onClick={() => {
-                setErrorMsg("");
-                autoConnectedRef.current = false;
-                setConn("idle");
-              }}
-              style={buttonStyle}
-            >
+            <button onClick={manualRetry} style={buttonStyle}>
               Tentar de novo
             </button>
             <button onClick={logout} style={{ ...buttonStyle, background: "#334155", color: "#e2e8f0" }}>
@@ -1413,9 +1488,22 @@ export default function App() {
             Olá, <strong>{session.profile.displayName}</strong>
           </p>
           <p style={{ margin: "12px 0", opacity: 0.7, fontSize: 13, color: "#fbbf24" }}>
-            {audioStatus || "Conectando..."}
+            {reconnectInfo
+              ? `Reconectando... (tentativa ${reconnectInfo.attempt}/${reconnectInfo.max})`
+              : audioStatus || "Conectando..."}
           </p>
           <p style={{ marginTop: 12, fontSize: 11, opacity: 0.5 }}>⚠ Pode pedir acesso a microfone e câmera.</p>
+          {/* Saída sempre disponível (BUG-002): antes a tela "Conectando..."
+              travava sem nenhum botão e a única forma de sair era limpar o
+              localStorage no DevTools. */}
+          <div style={{ display: "flex", gap: 8, justifyContent: "center", marginTop: 16 }}>
+            <button onClick={manualRetry} style={buttonStyle}>
+              Tentar de novo
+            </button>
+            <button onClick={logout} style={{ ...buttonStyle, background: "#334155", color: "#e2e8f0" }}>
+              Sair da conta
+            </button>
+          </div>
         </div>
       </div>
     );

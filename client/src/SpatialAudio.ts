@@ -191,7 +191,10 @@ export class SpatialAudio {
     this.connect(opts).catch((err) => {
       // Log completo (com stack) pra diagnosticar a origem real do erro.
       console.error("[spatial] connect falhou:", err, err?.stack);
-      this.onError?.(err?.message || "Falha conectando no LiveKit");
+      // NUNCA repassar err.message cru pro HUD (BUG-003): vaza detalhe de
+      // implementação pro usuário. O erro técnico fica no console p/
+      // diagnóstico; o usuário vê algo acionável.
+      this.onError?.("Não foi possível iniciar áudio/vídeo. Tente recarregar a página.");
     });
   }
 
@@ -350,6 +353,19 @@ export class SpatialAudio {
       const el = track.attach() as HTMLVideoElement;
       el.muted = true;
 
+      // Os callbacks abaixo entram no Phaser (showVideoBalloon etc). Um erro
+      // de render ali NÃO pode propagar pra cá: este handler roda dentro do
+      // connect() (sync inicial de participantes), então uma exceção abortava
+      // o spatial connect inteiro e vazava a mensagem técnica pro HUD
+      // (BUG-003/004). Isolamos cada callback.
+      const safe = (fn: () => void) => {
+        try {
+          fn();
+        } catch (e) {
+          console.error("[spatial] callback de vídeo falhou (ignorado):", e);
+        }
+      };
+
       if (track.source === Track.Source.ScreenShare) {
         el.style.objectFit = "contain";
         el.style.background = "#000";
@@ -360,15 +376,15 @@ export class SpatialAudio {
           peer.screenStopTimer = undefined;
           peer.screenElement?.remove();
           peer.screenElement = el;
-          this.onScreenShareStarted?.(participant.identity, el);
+          safe(() => this.onScreenShareStarted?.(participant.identity, el));
         } else {
           peer.screenElement = el;
-          this.onScreenShareStarted?.(participant.identity, el);
+          safe(() => this.onScreenShareStarted?.(participant.identity, el));
         }
       } else {
         el.style.borderRadius = "8px";
         peer.cameraElement = el;
-        this.onCameraTrack?.(participant.identity, el);
+        safe(() => this.onCameraTrack?.(participant.identity, el));
       }
     }
   }

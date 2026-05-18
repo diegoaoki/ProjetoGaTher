@@ -587,10 +587,20 @@ export class OfficeScene extends Phaser.Scene {
       if (err?.name !== "AbortError") console.warn("[balloon] play falhou:", err);
     });
 
-    // Posição inicial — update() reposiciona a cada frame
+    // Posição inicial — update() reposiciona a cada frame.
+    // pos pode ser null se o track do peer chega ANTES do avatar entrar no
+    // state/remotePlayers (BUG-004). Nesse caso o balão nasce fora da tela e
+    // escondido; o update() (que já tolera pos null) o mostra e reposiciona
+    // assim que o avatar existir. Antes isso estourava `null.x`, abortava o
+    // spatial connect inteiro e vazava o erro técnico pro HUD (BUG-003).
     const pos = this.getAvatarPositionFor(identity);
     const offsetY = isScreen ? -100 : -50;
-    const dom = this.add.dom(pos.x, pos.y + offsetY, element);
+    const dom = this.add.dom(
+      pos ? pos.x : -9999,
+      pos ? pos.y + offsetY : -9999,
+      element
+    );
+    if (!pos) dom.setVisible(false);
     dom.setDepth(10000);
 
     const key = `${identity}|${kind}`;
