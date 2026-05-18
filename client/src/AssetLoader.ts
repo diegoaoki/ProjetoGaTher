@@ -95,7 +95,15 @@ export function preloadLimezuAssets(scene: Phaser.Scene) {
   for (const k of DESK_SPRITES) {
     scene.load.image(k, `/assets/interiors/desks/${k}.png`);
   }
+
+  // Recepção — balcão de atendimento (composição LimeZu Conference).
+  for (const k of RECEPTION_SPRITES) {
+    scene.load.image(k, `/assets/interiors/reception/${k}.png`);
+  }
 }
+
+/** Móveis da Recepção (key == type). */
+export const RECEPTION_SPRITES = ["reception_desk"] as const;
 
 /** Móveis de cozinha carregados como texturas próprias (key == type). */
 export const KITCHEN_SPRITES = [

@@ -75,6 +75,7 @@ const HITBOXES: Record<string, Hitbox> = {
   // Variedade LimeZu (editor)
   desk_office:  { offsetX: -16, offsetY: 0,  w: 32, h: 26 },
   desk_work:    { offsetX: -58, offsetY: -14, w: 116, h: 48 }, // desk largo 128×80
+  reception_desk:{ offsetX: -60, offsetY: -16, w: 120, h: 52 }, // balcão 128×80
   desk_long:    { offsetX: -90, offsetY: -16, w: 180, h: 50 }, // bancada 192×80
   desk_pc1:     { offsetX: -16, offsetY: 0,  w: 32, h: 26 },
   desk_pc2:     { offsetX: -16, offsetY: 0,  w: 32, h: 26 },
@@ -133,6 +134,7 @@ export const EDITOR_FURNITURE_TYPES = [
   "deskpc_dev", "deskpc_dados", "deskpc_infra", "deskpc_fin",
   "desk_work", "desk_long", "desk_office", "desk_plain", "desk_wide",
   "desk_pc1", "desk_pc2", "desk_screen1", "desk_screen2", "printer",
+  "reception_desk",
 ];
 
 const TILE = 32;
@@ -390,14 +392,24 @@ export function getDefaultLayout(): OfficeLayoutData {
   items.push({ type: "bookshelf", x: 2 * TILE, y: 11 * TILE, depth: 1, hitbox: HITBOXES.bookshelf });
   items.push({ type: "plant", x: 17 * TILE, y: 16 * TILE, depth: 1, hitbox: HITBOXES.plant });
 
-  // --- RECEPÇÃO (lobby) — sofás + plantas + notice board ---
-  items.push({ type: "sofa", x: 4 * TILE, y: 22 * TILE, depth: 1, hitbox: HITBOXES.sofa });
-  items.push({ type: "sofa", x: 9 * TILE, y: 22 * TILE, depth: 1, hitbox: HITBOXES.sofa });
-  items.push({ type: "coffeeTable", x: 6 * TILE, y: 24 * TILE, depth: 2, hitbox: HITBOXES.coffeeTable });
+  // --- RECEPÇÃO (lobby, y 18..26) — balcão de atendimento + espera ---
+  // Balcão de recepção (madeira larga LimeZu) perto do topo + cadeira
+  // do recepcionista atrás (senta virado pros visitantes) + quadro de
+  // boas-vindas na parede norte + plantas nas laterais.
+  items.push({ type: "reception_desk", x: 7 * TILE, y: 20 * TILE, depth: 1, hitbox: HITBOXES.reception_desk });
+  items.push({ type: "chair", x: 7 * TILE, y: 19 * TILE, depth: 0, hitbox: HITBOXES.chair });
+  items.push({ type: "whiteboard", x: 4 * TILE, y: 18 * TILE, depth: 1, hitbox: HITBOXES.whiteboard, tag: "notice_board" });
+  items.push({ type: "tv", x: 10 * TILE, y: 18 * TILE, depth: 1, hitbox: HITBOXES.tv, tag: "welcome_screen" });
+  items.push({ type: "plant", x: 1 * TILE, y: 20 * TILE, depth: 1, hitbox: HITBOXES.plant });
+  items.push({ type: "plant", x: 13 * TILE, y: 20 * TILE, depth: 1, hitbox: HITBOXES.plant });
+  // Área de espera embaixo: 2 sofás + mesa de centro + cadeiras + plantas
+  items.push({ type: "sofa", x: 3 * TILE, y: 24 * TILE, depth: 1, hitbox: HITBOXES.sofa });
+  items.push({ type: "sofa", x: 11 * TILE, y: 24 * TILE, depth: 1, hitbox: HITBOXES.sofa });
+  items.push({ type: "coffeeTable", x: 7 * TILE, y: 24 * TILE, depth: 2, hitbox: HITBOXES.coffeeTable });
+  items.push({ type: "chair", x: 6 * TILE, y: 24 * TILE, depth: 0, hitbox: HITBOXES.chair });
+  items.push({ type: "chair", x: 8 * TILE, y: 24 * TILE, depth: 0, hitbox: HITBOXES.chair });
   items.push({ type: "plant", x: 1 * TILE, y: 25 * TILE, depth: 1, hitbox: HITBOXES.plant });
-  items.push({ type: "plant", x: 12 * TILE, y: 25 * TILE, depth: 1, hitbox: HITBOXES.plant });
-  // Quadro de avisos (placeholder usando whiteboard, na parede norte)
-  items.push({ type: "whiteboard", x: 7 * TILE, y: 19 * TILE, depth: 1, hitbox: HITBOXES.whiteboard, tag: "notice_board" });
+  items.push({ type: "plant", x: 13 * TILE, y: 25 * TILE, depth: 1, hitbox: HITBOXES.plant });
 
   // --- COPA — cozinha de verdade (sprites LimeZu pago, Kitchen Singles) ---
   // Bancada CONTÍNUA encostada na parede de cima: todas as peças com a

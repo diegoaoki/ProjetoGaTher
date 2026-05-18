@@ -152,9 +152,11 @@ Interacao:
     animar na 1a render. Colisao segue estado logico. Client-only.
 
 Visual / mapa:
-  - revisar visual da Recepcao - so sofas + mesa de centro; falta balcao
-    de atendimento, plantas, totem/quadro de boas-vindas, cadeiras de
-    espera
+  - [FEITO] visual da Recepcao - reception_desk (Conference
+    #1+#2+#1 128x80) = balcao; lobby reescrito: balcao +
+    recepcionista + whiteboard/tv boas-vindas + plantas + area de
+    espera (sofas+coffeeTable+cadeiras). RECEPTION_SPRITES,
+    HITBOXES, EDITOR/categorias.
   - [FEITO] visual da Copa (cozinha real) - sprites LimeZu pago
     (Kitchen Singles) em client/public/assets/interiors/kitchen/;
     AssetLoader carrega cada PNG key=type (KITCHEN_SPRITES);
