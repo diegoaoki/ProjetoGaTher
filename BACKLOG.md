@@ -40,6 +40,7 @@ Legenda: 🔴 prioridade · 🐞 bug · 🟢 feito (mantido como referência) ·
 ## ⚪ Backlog geral
 
 ### Auth / infra
+- 🟢 [FEITO] **promover usuário a admin pela UI** — `adminStore` (app_meta `extra_admins`, cache no boot), `isAdminEmail` = env OU extra, `PATCH /admin/users/:id/admin {make}` (só admin; bloqueia demover env-admin/self), botão 👑 no `AdminPanel`. Env (`ADMIN_EMAILS`) segue como bootstrap. Promovido vira admin no próximo login.
 - esqueci-a-senha (precisa SMTP)
 - 🟢 [FEITO] mobile responsivo — viewport anti-zoom + safe-area + `100dvh`; pinça pra zoom (`OfficeScene`); botão **G** no `MobileControls` (conversa de mesa, antes inacessível); cards de vídeo menores e reposicionados pra não cobrir os controles; LoginScreen fluido (`min(380px,100%)`); modais com `maxWidth/maxHeight/overflow` (cardStyle/modalStyle globais + AudioTestScreen). Base que já existia: `useIsMobile`, joystick+E, HUD compacto, sidebar fullscreen, `Scale.RESIZE`.
 - editor de mapas

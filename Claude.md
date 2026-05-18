@@ -137,9 +137,10 @@ npm run build      # build de produção
 7. Logout: limpa JWT, derruba Colyseus + LiveKit.
 
 ### Administração de usuários
-- Quem está em `ADMIN_EMAILS` (env) vê o botão 🛡️ no HUD em jogo.
-- Endpoints: `GET /admin/users` (lista), `PATCH /admin/users/:id/password` (reset), `DELETE /admin/users/:id` (apagar).
-- Middleware `requireAdmin` em `server/src/auth/admin.ts` confere o email do JWT contra a env.
+- Admin = email em `ADMIN_EMAILS` (env, **bootstrap** do 1º admin) **OU** promovido pela UI (`adminStore.ts`, persistido em `app_meta` key `extra_admins`, cache em memória carregado no boot via `loadAdmins()` no `index.ts` — `isAdminEmail` continua síncrono = env OU extra). Quem é admin vê o 🛡️ no HUD.
+- Endpoints: `GET /admin/users` (lista; agora retorna `envAdmin` por user), `PATCH /admin/users/:id/password` (reset), `PATCH /admin/users/:id/admin` `{make}` (promover/remover — só admin; bloqueia demover env-admin e auto-demover), `DELETE /admin/users/:id` (apagar).
+- UI: `AdminPanel` tem botão 👑/👑✕ por usuário (desabilitado pra env-admin e pra você mesmo). **Usuário promovido só vira admin de fato no próximo login** (`session.user.isAdmin` vem do `/auth/me`/login via `isAdminEmail`).
+- Middleware `requireAdmin` em `server/src/auth/admin.ts` (`isAdminEmail` = `isEnvAdmin` OU `isExtraAdmin`).
 - Auto-delete é **bloqueado** no server (admin não pode apagar a própria conta) — evita travar o sistema.
 - Reset de senha é feito definindo a nova senha manualmente; o admin precisa transmitir por outro canal (não tem fluxo de "esqueci a senha" por email).
 - Apagar usuário cascateia pra `profiles` via FK `ON DELETE CASCADE`. Sessão JWT existente do user apagado vira inválida no próximo `/auth/me`.

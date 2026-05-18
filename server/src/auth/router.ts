@@ -7,7 +7,8 @@ import { users, profiles } from "../db/schema";
 import { hashPassword, verifyPassword } from "./password";
 import { signAuthToken } from "./jwt";
 import { requireAuth } from "./middleware";
-import { isAdminEmail, requireAdmin } from "./admin";
+import { isAdminEmail, isEnvAdmin, requireAdmin } from "./admin";
+import { setExtraAdmin } from "../adminStore";
 import { isUserOnline } from "../presence";
 import { getPool } from "../db/client";
 import { randomUUID } from "crypto";
@@ -383,6 +384,7 @@ export function createAuthRouter() {
       const list = rows.map((u) => ({
         ...u,
         isAdmin: isAdminEmail(u.email),
+        envAdmin: isEnvAdmin(u.email), // admin por env não dá pra remover na UI
         displayName: profileById.get(u.id)?.displayName ?? null,
       }));
       return res.json({ users: list });
@@ -417,6 +419,42 @@ export function createAuthRouter() {
       } catch (err: any) {
         console.error("[/admin/users/:id/password] erro:", err);
         return res.status(500).json({ error: "Falha ao resetar senha" });
+      }
+    }
+  );
+
+  // Promove/remove admin (só admin faz; persiste em app_meta).
+  router.patch(
+    "/admin/users/:id/admin",
+    authReadLimiter,
+    requireAuth,
+    requireAdmin,
+    async (req: Request, res: Response) => {
+      const make = !!req.body?.make;
+      const targetId = String(req.params.id || "");
+      try {
+        const db = getDb();
+        const [u] = await db
+          .select({ id: users.id, email: users.email })
+          .from(users)
+          .where(eq(users.id, targetId));
+        if (!u) return res.status(404).json({ error: "Usuário não encontrado" });
+
+        if (!make && isEnvAdmin(u.email)) {
+          return res.status(400).json({
+            error: "Esse admin é definido por ADMIN_EMAILS (env) — remova de lá, não dá pela UI.",
+          });
+        }
+        if (!make && u.email.toLowerCase() === (req.auth!.email || "").toLowerCase()) {
+          return res.status(400).json({ error: "Você não pode remover o próprio admin (evita travar o sistema)." });
+        }
+
+        await setExtraAdmin(u.email, make);
+        console.log(`[admin] ${req.auth!.email} ${make ? "promoveu" : "removeu"} admin de ${u.email}`);
+        return res.json({ ok: true });
+      } catch (err: any) {
+        console.error("[/admin/users/:id/admin] erro:", err);
+        return res.status(500).json({ error: "Falha ao atualizar admin" });
       }
     }
   );

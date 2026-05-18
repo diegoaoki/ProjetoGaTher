@@ -84,6 +84,11 @@ BACKLOG GERAL
 ------------------------------------------------------------------------------
 
 Auth / infra:
+  - [FEITO] promover usuario a admin pela UI - adminStore (app_meta
+    extra_admins, cache no boot), isAdminEmail = env OU extra,
+    PATCH /admin/users/:id/admin {make} (so admin; bloqueia demover
+    env-admin/self), botao no AdminPanel. Env segue bootstrap.
+    Promovido vira admin no proximo login.
   - esqueci-a-senha (precisa SMTP)
   - [FEITO] mobile responsivo - viewport anti-zoom + safe-area +
     100dvh; pinca pra zoom (OfficeScene); botao G no MobileControls

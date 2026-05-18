@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { AdminUser, deleteUser, listUsers, resetUserPassword } from "./auth";
+import { AdminUser, deleteUser, listUsers, resetUserPassword, setUserAdmin } from "./auth";
 
 interface Props {
   httpUrl: string;
@@ -8,7 +8,11 @@ interface Props {
   onClose: () => void;
 }
 
-type ConfirmKind = { type: "reset"; user: AdminUser } | { type: "delete"; user: AdminUser } | null;
+type ConfirmKind =
+  | { type: "reset"; user: AdminUser }
+  | { type: "delete"; user: AdminUser }
+  | { type: "admin"; user: AdminUser; make: boolean }
+  | null;
 
 export default function AdminPanel({ httpUrl, token, currentUserId, onClose }: Props) {
   const [list, setList] = useState<AdminUser[]>([]);
@@ -73,6 +77,26 @@ export default function AdminPanel({ httpUrl, token, currentUserId, onClose }: P
     }
   }
 
+  async function doAdmin() {
+    if (!confirm || confirm.type !== "admin") return;
+    setSubmitting(true);
+    setError("");
+    try {
+      await setUserAdmin(httpUrl, token, confirm.user.id, confirm.make);
+      setToast(
+        confirm.make
+          ? `${confirm.user.email} agora é admin`
+          : `${confirm.user.email} não é mais admin`
+      );
+      setConfirm(null);
+      await reload();
+    } catch (e: any) {
+      setError(e?.message || "Falha ao atualizar admin");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   // Limpa toast automaticamente
   useEffect(() => {
     if (!toast) return;
@@ -98,7 +122,7 @@ export default function AdminPanel({ httpUrl, token, currentUserId, onClose }: P
             <div style={{ ...rowStyle, ...headerRowStyle }}>
               <div style={{ flex: 2 }}>Email</div>
               <div style={{ flex: 1 }}>Nome</div>
-              <div style={{ width: 180, textAlign: "right" }}>Ações</div>
+              <div style={{ width: 240, textAlign: "right" }}>Ações</div>
             </div>
             {list.map((u) => {
               const isSelf = u.id === currentUserId;
@@ -110,7 +134,29 @@ export default function AdminPanel({ httpUrl, token, currentUserId, onClose }: P
                     {isSelf && <span style={{ ...badgeStyle, background: "#0e7490" }}>você</span>}
                   </div>
                   <div style={{ flex: 1, opacity: 0.8 }}>{u.displayName || "—"}</div>
-                  <div style={{ width: 180, display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                  <div style={{ width: 240, display: "flex", gap: 6, justifyContent: "flex-end" }}>
+                    <button
+                      onClick={() => {
+                        setError("");
+                        setConfirm({ type: "admin", user: u, make: !u.isAdmin });
+                      }}
+                      disabled={u.envAdmin || isSelf}
+                      style={{
+                        ...actionBtnStyle(u.isAdmin ? "#9333ea" : "#0e7490"),
+                        opacity: u.envAdmin || isSelf ? 0.4 : 1,
+                      }}
+                      title={
+                        u.envAdmin
+                          ? "Admin via ADMIN_EMAILS (env) — não dá pra mudar aqui"
+                          : isSelf
+                          ? "Você não pode remover o próprio admin"
+                          : u.isAdmin
+                          ? "Remover admin"
+                          : "Tornar admin"
+                      }
+                    >
+                      {u.isAdmin ? "👑✕" : "👑"}
+                    </button>
                     <button
                       onClick={() => {
                         setNewPassword("");
@@ -178,6 +224,55 @@ export default function AdminPanel({ httpUrl, token, currentUserId, onClose }: P
               <p style={{ marginTop: 10, fontSize: 11, opacity: 0.55 }}>
                 ⚠ Anota essa senha e manda pro usuário por outro canal. Não é mostrada de novo.
               </p>
+            </div>
+          </div>
+        )}
+
+        {/* Modal de confirmação: promover/remover admin */}
+        {confirm?.type === "admin" && (
+          <div style={confirmOverlayStyle}>
+            <div style={confirmCardStyle}>
+              <h3 style={{ margin: "0 0 8px", fontSize: 16 }}>
+                {confirm.make ? "Tornar admin" : "Remover admin"}
+              </h3>
+              <p style={{ margin: "0 0 12px", fontSize: 13 }}>
+                {confirm.make ? (
+                  <>
+                    Dar acesso de <strong>admin</strong> para{" "}
+                    <strong>{confirm.user.email}</strong>? Ele poderá gerenciar
+                    usuários, editar o mapa e tudo que admin faz.
+                  </>
+                ) : (
+                  <>
+                    Remover o admin de <strong>{confirm.user.email}</strong>?
+                  </>
+                )}
+                <br />
+                <span style={{ opacity: 0.7 }}>
+                  Ele precisa relogar pra valer (o crachá 🛡️ atualiza no
+                  próximo login).
+                </span>
+              </p>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={() => setConfirm(null)}
+                  disabled={submitting}
+                  style={{ ...primaryBtnStyle, background: "#334155", color: "#e2e8f0" }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={doAdmin}
+                  disabled={submitting}
+                  style={{
+                    ...primaryBtnStyle,
+                    background: confirm.make ? "#9333ea" : "#b91c1c",
+                    color: "#fff",
+                  }}
+                >
+                  {submitting ? "Salvando…" : confirm.make ? "Tornar admin" : "Remover"}
+                </button>
+              </div>
             </div>
           </div>
         )}

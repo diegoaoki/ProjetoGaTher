@@ -17,6 +17,8 @@ export interface AdminUser {
   email: string;
   displayName: string | null;
   isAdmin: boolean;
+  /** Admin via env ADMIN_EMAILS — não dá pra remover pela UI. */
+  envAdmin?: boolean;
   createdAt: string;
 }
 
@@ -236,6 +238,21 @@ export async function deleteUser(httpUrl: string, token: string, userId: string)
   const resp = await fetch(httpUrl + `/admin/users/${userId}`, {
     method: "DELETE",
     headers: { Authorization: "Bearer " + token },
+  });
+  if (!resp.ok) throw new Error(await parseError(resp));
+}
+
+/** Promove (make=true) ou remove (make=false) admin de um usuário. */
+export async function setUserAdmin(
+  httpUrl: string,
+  token: string,
+  userId: string,
+  make: boolean
+): Promise<void> {
+  const resp = await fetch(httpUrl + `/admin/users/${userId}/admin`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer " + token },
+    body: JSON.stringify({ make }),
   });
   if (!resp.ok) throw new Error(await parseError(resp));
 }

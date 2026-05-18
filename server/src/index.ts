@@ -11,6 +11,7 @@ import { createAuthRouter } from "./auth/router";
 import { createChatRouter } from "./chat/router";
 import { extractAuth } from "./auth/middleware";
 import { initDb } from "./db/init";
+import { loadAdmins } from "./adminStore";
 
 const PORT = Number(process.env.PORT || 2567);
 
@@ -96,6 +97,10 @@ async function bootstrap() {
     console.error("[boot] o server NÃO vai aceitar conexões sem DB. Configure DATABASE_URL.");
     process.exit(1);
   }
+
+  // Cache de admins extras (promovidos pela UI) — antes de aceitar req,
+  // pq requireAdmin/isAdminEmail são síncronos e batem nesse cache.
+  await loadAdmins();
 
   await gameServer.listen(PORT, "0.0.0.0");
   console.log(`✓ Servidor Colyseus rodando na porta ${PORT}`);
