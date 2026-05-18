@@ -130,6 +130,7 @@ export const DESK_SPRITES = [
   "desk_pc2",
   "desk_screen1",
   "desk_screen2",
+  "desk_office",
   "printer",
 ] as const;
 

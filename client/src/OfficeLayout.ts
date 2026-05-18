@@ -67,6 +67,7 @@ const HITBOXES: Record<string, Hitbox> = {
   deskpc_infra: { offsetX: -16, offsetY: -2,  w: 32, h: 28 },
   deskpc_fin:   { offsetX: -16, offsetY: -2,  w: 32, h: 28 },
   // Variedade LimeZu (editor)
+  desk_office:  { offsetX: -16, offsetY: 0,  w: 32, h: 26 },
   desk_pc1:     { offsetX: -16, offsetY: 0,  w: 32, h: 26 },
   desk_pc2:     { offsetX: -16, offsetY: 0,  w: 32, h: 26 },
   desk_screen1: { offsetX: -16, offsetY: 0,  w: 32, h: 26 },
@@ -122,7 +123,7 @@ export const EDITOR_FURNITURE_TYPES = [
   // a `desk` padrão do layout, com deskId, é reservável).
   "desk", "monitor",
   "deskpc_dev", "deskpc_dados", "deskpc_infra", "deskpc_fin",
-  "desk_plain", "desk_wide", "desk_pc1", "desk_pc2",
+  "desk_office", "desk_plain", "desk_wide", "desk_pc1", "desk_pc2",
   "desk_screen1", "desk_screen2", "printer",
 ];
 
@@ -307,7 +308,7 @@ function addWorkstation(items: FurnitureItem[], desks: Array<{ id: string; x: nu
   // `type` continua "desk" (reserva/overlay/spawn) — só o `tex` muda.
   // (a tint por departamento `deskpc_*` ficou ruim; mantida só na
   // paleta do editor pra quem quiser.)
-  items.push({ type: "desk", x, y, depth: 1, hitbox: HITBOXES.desk_pc, deskId: id, tex: "desk_pc1" });
+  items.push({ type: "desk", x, y, depth: 1, hitbox: HITBOXES.desk_pc, deskId: id, tex: "desk_office" });
   items.push({ type: "chair", x, y: y + 36, depth: 0, hitbox: HITBOXES.chair });
 }
 
