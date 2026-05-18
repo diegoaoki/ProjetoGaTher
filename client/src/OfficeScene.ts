@@ -1507,7 +1507,8 @@ export class OfficeScene extends Phaser.Scene {
     // Moldura cobrindo a MESA (sprite ~64×64, centro em info.y) + o
     // ASSENTO em frente (cadeira ~info.y+34). Caixa: 80×96 deslocada
     // pra baixo pra abraçar mesa + lugar de quem senta.
-    const outline = this.add.rectangle(info.x, info.y + 14, 80, 96);
+    // Mesa LimeZu agora é 32×64; moldura abraça mesa + cadeira (y+36).
+    const outline = this.add.rectangle(info.x, info.y + 16, 52, 92);
     outline.setStrokeStyle(2, color, 0.9);
     outline.setFillStyle(color, 0.07);
     outline.setDepth(info.y - 1);

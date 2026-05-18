@@ -60,7 +60,8 @@ export interface OfficeLayoutData {
 }
 
 const HITBOXES: Record<string, Hitbox> = {
-  desk:         { offsetX: -48, offsetY: -10, w: 96, h: 32 },
+  desk:         { offsetX: -48, offsetY: -10, w: 96, h: 32 }, // diretorias (desk procedural largo)
+  desk_pc:      { offsetX: -16, offsetY: -2,  w: 32, h: 28 }, // workstation LimeZu 32×64 (C30)
   chair:        { offsetX: -16, offsetY: -10, w: 32, h: 24 },
   sofa:         { offsetX: -40, offsetY: -16, w: 80, h: 32 },
   coffeeTable:  { offsetX: -28, offsetY: -8,  w: 56,  h: 20 }, // LimeZu 64×32
@@ -289,7 +290,7 @@ function addWorkstation(items: FurnitureItem[], desks: Array<{ id: string; x: nu
     tileY < 11 ? "desk_dev" :
     tileY < 21 ? "desk_dados" :
     tileY < 31 ? "desk_infra" : "desk_fin";
-  items.push({ type: "desk", x, y, depth: 1, hitbox: HITBOXES.desk, deskId: id, tex });
+  items.push({ type: "desk", x, y, depth: 1, hitbox: HITBOXES.desk_pc, deskId: id, tex });
   items.push({ type: "chair", x, y: y + 36, depth: 0, hitbox: HITBOXES.chair });
 }
 

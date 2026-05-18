@@ -142,11 +142,12 @@ Visual / mapa:
     tables/ + TABLES_SPRITES (substitui procedural/tileset; coffeeTable
     saiu de FURNITURE_TILES, kitchen_table de KITCHEN_SPRITES);
     HITBOXES atualizados.
-  - [FEITO] workstations por departamento (desk+PC) - fallback
-    (sprites do print nao achados): 4 PNGs desks/desk_{dev,dados,
-    infra,fin}.png (tampo madeira + 2 monitores tintados por setor);
-    DESK_SPRITES; FurnitureItem.tex (type continua "desk" -> reserva
-    intacta); addWorkstation define tex por tileY, removeu monitor.
+  - [FEITO, refeito] workstations por departamento (desk+PC) - 1a
+    versao (slab+monitor esticado) ficou ruim; refeito com desk
+    LimeZu Conference Hall #30 inteiro (32x64), so recolorindo a
+    tela por setor. DESK_SPRITES; FurnitureItem.tex (type "desk");
+    HITBOXES.desk_pc (32x28); addWorkstation tex por tileY, sem
+    monitor separado; renderDeskOverlay ajustado (52x92).
   - [FEITO] visual da sala de Seguranca - sprites LimeZu pago (TV/
     Film Studio) em client/public/assets/interiors/security/
     (cctv_screen/2/3, security_console, server_rack, security_camera);
