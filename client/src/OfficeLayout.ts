@@ -68,6 +68,7 @@ const HITBOXES: Record<string, Hitbox> = {
   deskpc_fin:   { offsetX: -16, offsetY: -2,  w: 32, h: 28 },
   // Variedade LimeZu (editor)
   desk_office:  { offsetX: -16, offsetY: 0,  w: 32, h: 26 },
+  desk_work:    { offsetX: -58, offsetY: -14, w: 116, h: 48 }, // desk largo 128×80
   desk_long:    { offsetX: -90, offsetY: -16, w: 180, h: 50 }, // bancada 192×80
   desk_pc1:     { offsetX: -16, offsetY: 0,  w: 32, h: 26 },
   desk_pc2:     { offsetX: -16, offsetY: 0,  w: 32, h: 26 },
@@ -124,8 +125,8 @@ export const EDITOR_FURNITURE_TYPES = [
   // a `desk` padrão do layout, com deskId, é reservável).
   "desk", "monitor",
   "deskpc_dev", "deskpc_dados", "deskpc_infra", "deskpc_fin",
-  "desk_long", "desk_office", "desk_plain", "desk_wide", "desk_pc1",
-  "desk_pc2", "desk_screen1", "desk_screen2", "printer",
+  "desk_work", "desk_long", "desk_office", "desk_plain", "desk_wide",
+  "desk_pc1", "desk_pc2", "desk_screen1", "desk_screen2", "printer",
 ];
 
 const TILE = 32;
@@ -309,9 +310,9 @@ function addWorkstation(items: FurnitureItem[], desks: Array<{ id: string; x: nu
   // MONITOR por cima como objeto separado (sprite LimeZu nativo, sem
   // esticar/cortar) + cadeira. `type` segue "desk" (reserva/overlay/
   // spawn). Jeito modular correto do LimeZu.
-  items.push({ type: "desk", x, y, depth: 1, hitbox: HITBOXES.desk_office, deskId: id, tex: "desk_office" });
-  items.push({ type: "monitor", x, y: y - 16, depth: 2 }); // PC em cima do desk
-  items.push({ type: "chair", x, y: y + 36, depth: 0, hitbox: HITBOXES.chair });
+  items.push({ type: "desk", x, y, depth: 1, hitbox: HITBOXES.desk_work, deskId: id, tex: "desk_work" });
+  items.push({ type: "monitor", x, y: y - 22, depth: 2 }); // PC na superfície do desk
+  items.push({ type: "chair", x, y: y + 40, depth: 0, hitbox: HITBOXES.chair });
 }
 
 export function getDefaultLayout(): OfficeLayoutData {

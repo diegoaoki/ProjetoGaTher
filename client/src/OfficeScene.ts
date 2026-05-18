@@ -966,7 +966,7 @@ export class OfficeScene extends Phaser.Scene {
         "desk-ed-" +
         Date.now().toString(36) +
         Math.floor(Math.random() * 1296).toString(36);
-      item.tex = "desk_office"; // desk LimeZu completo (#45, pronto)
+      item.tex = "desk_work"; // desk largo LimeZu (128×80, + monitor manual)
     }
     return item;
   }
