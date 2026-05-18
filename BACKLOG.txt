@@ -139,9 +139,10 @@ Interacao:
     desk/monitor/deskpc_* (HITBOXES deskpc_*); admin arrasta os
     desks LimeZu no editor (decorativo, nao reservavel).
   - [FEITO] sentar na cadeira ao chegar - anim ${id}_${dir}_sit;
-    chairSpots+onChair(26px); parado em cadeira -> sit virado "up"
-    (meu avatar + remotos, local sem schema); volta walk/idle ao
-    mover. MVP sempre "up".
+    chairSpots+onChair(26px); parado em cadeira -> sit; volta
+    walk/idle ao mover (meu avatar + remotos). Refino: chairSpots
+    guarda dir pela mesa mais proxima -> senta de frente pra mesa
+    (cadeiras laterais de reuniao viram certo).
   - [FEITO] menu de contexto right-click no avatar: "Pedir pra vir
     aqui" (summon -> toast + caminha ate voce, sem modal) + "Ir ate".
     Pan no vazio preservado.

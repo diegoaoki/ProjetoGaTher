@@ -167,15 +167,17 @@ export class OfficeScene extends Phaser.Scene {
   /** Override do editor (mobília + paredes) vindo do server. */
   private mapOverride: { furniture?: FurnitureItem[]; walls?: Wall[] } | null = null;
   /** GameObjects de mobília/parede/labels — pra poder limpar no rebuild. */
-  /** Posições das cadeiras — pra "sentar" ao chegar perto. */
-  private chairSpots: Array<{ x: number; y: number }> = [];
-  /** Se está perto o suficiente de uma cadeira pra sentar (raio²). */
-  private onChair(x: number, y: number): boolean {
+  /** Cadeiras: posição + direção pra onde quem senta fica virado
+   *  (calculada pela mesa/desk mais próxima — você senta de frente
+   *  pra mesa). "up" se não achar mesa perto. */
+  private chairSpots: Array<{ x: number; y: number; dir: string }> = [];
+  /** Direção do sentar se está em cima de uma cadeira; senão null. */
+  private onChair(x: number, y: number): string | null {
     for (const c of this.chairSpots) {
       const dx = x - c.x, dy = y - c.y;
-      if (dx * dx + dy * dy <= 26 * 26) return true;
+      if (dx * dx + dy * dy <= 26 * 26) return c.dir;
     }
-    return false;
+    return null;
   }
   private floorSprite?: Phaser.GameObjects.TileSprite;
   private worldBorder?: Phaser.GameObjects.Graphics;
@@ -725,9 +727,27 @@ export class OfficeScene extends Phaser.Scene {
   }
 
   private drawFurniture() {
+    // Mesas/desks: a cadeira fica virada PRA mesa mais próxima.
+    const isSurface = (t: string) =>
+      t === "desk" || t.startsWith("desk_") || t.startsWith("deskpc_") ||
+      t === "meetingTable" || t === "kitchen_table" || t === "coffeeTable";
+    const surfaces = this.layout.furniture.filter((f) => isSurface(f.type));
     this.chairSpots = this.layout.furniture
       .filter((f) => f.type === "chair")
-      .map((f) => ({ x: f.x, y: f.y }));
+      .map((f) => {
+        let best: { d: number; sx: number; sy: number } | null = null;
+        for (const s of surfaces) {
+          const dx = s.x - f.x, dy = s.y - f.y;
+          const d = dx * dx + dy * dy;
+          if (d <= 110 * 110 && (!best || d < best.d)) best = { d, sx: s.x, sy: s.y };
+        }
+        let dir = "up";
+        if (best) {
+          const dx = best.sx - f.x, dy = best.sy - f.y;
+          dir = Math.abs(dy) >= Math.abs(dx) ? (dy < 0 ? "up" : "down") : (dx < 0 ? "left" : "right");
+        }
+        return { x: f.x, y: f.y, dir };
+      });
     this.layout.furniture.forEach((item) => {
       const sprite = this.add.image(item.x, item.y, item.tex || item.type);
       sprite.setOrigin(0.5, 0.5);
@@ -2184,12 +2204,13 @@ export class OfficeScene extends Phaser.Scene {
     }
 
     this.myDirection = newDir;
-    // Parado em cima de uma cadeira → senta (de frente pra mesa = "up").
+    // Parado em cima de uma cadeira → senta virado pra mesa (dir da cadeira).
     let myAnim = this.isMoving ? "walk" : "idle";
     let myAnimDir = this.myDirection;
-    if (!this.isMoving && this.onChair(this.myContainer.x, this.myContainer.y)) {
+    const mySitDir = this.isMoving ? null : this.onChair(this.myContainer.x, this.myContainer.y);
+    if (mySitDir) {
       myAnim = "sit";
-      myAnimDir = "up";
+      myAnimDir = mySitDir;
     }
     const myKey = `${this.myTextureKey}_${myAnimDir}_${myAnim}`;
     if (myKey !== this.myAnimKey && this.anims.exists(myKey)) {
@@ -2232,9 +2253,10 @@ export class OfficeScene extends Phaser.Scene {
       const moved = Math.abs(rp.container.x - prevX) > 0.5 || Math.abs(rp.container.y - prevY) > 0.5;
       let anim = moved ? "walk" : "idle";
       let aDir = rp.direction;
-      if (!moved && this.onChair(rp.container.x, rp.container.y)) {
+      const rpSitDir = moved ? null : this.onChair(rp.container.x, rp.container.y);
+      if (rpSitDir) {
         anim = "sit";
-        aDir = "up";
+        aDir = rpSitDir;
       }
       const key = `${rp.textureKey}_${aDir}_${anim}`;
       if (this.anims.exists(key) && rp.sprite.anims.currentAnim?.key !== key) {
