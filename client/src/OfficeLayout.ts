@@ -66,6 +66,14 @@ const HITBOXES: Record<string, Hitbox> = {
   deskpc_dados: { offsetX: -16, offsetY: -2,  w: 32, h: 28 },
   deskpc_infra: { offsetX: -16, offsetY: -2,  w: 32, h: 28 },
   deskpc_fin:   { offsetX: -16, offsetY: -2,  w: 32, h: 28 },
+  // Variedade LimeZu (editor)
+  desk_pc1:     { offsetX: -16, offsetY: 0,  w: 32, h: 26 },
+  desk_pc2:     { offsetX: -16, offsetY: 0,  w: 32, h: 26 },
+  desk_screen1: { offsetX: -16, offsetY: 0,  w: 32, h: 26 },
+  desk_screen2: { offsetX: -16, offsetY: 0,  w: 32, h: 26 },
+  desk_plain:   { offsetX: -16, offsetY: 2,  w: 32, h: 22 },
+  desk_wide:    { offsetX: -24, offsetY: 2,  w: 48, h: 22 },
+  printer:      { offsetX: -14, offsetY: 0,  w: 28, h: 24 },
   chair:        { offsetX: -16, offsetY: -10, w: 32, h: 24 },
   sofa:         { offsetX: -40, offsetY: -16, w: 80, h: 32 },
   coffeeTable:  { offsetX: -28, offsetY: -8,  w: 56,  h: 20 }, // LimeZu 64×32
@@ -114,6 +122,8 @@ export const EDITOR_FURNITURE_TYPES = [
   // a `desk` padrão do layout, com deskId, é reservável).
   "desk", "monitor",
   "deskpc_dev", "deskpc_dados", "deskpc_infra", "deskpc_fin",
+  "desk_plain", "desk_wide", "desk_pc1", "desk_pc2",
+  "desk_screen1", "desk_screen2", "printer",
 ];
 
 const TILE = 32;

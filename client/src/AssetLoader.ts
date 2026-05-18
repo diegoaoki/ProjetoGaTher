@@ -115,12 +115,22 @@ export const TABLES_SPRITES = [
   "coffeeTable",
 ] as const;
 
-/** Desks por departamento (texturas via FurnitureItem.tex). */
+/**
+ * Desks: tintados por depto (via FurnitureItem.tex) + variedade
+ * LimeZu (Conference Hall) pra escolher/posicionar no editor.
+ */
 export const DESK_SPRITES = [
   "deskpc_dev",
   "deskpc_dados",
   "deskpc_infra",
   "deskpc_fin",
+  "desk_plain",
+  "desk_wide",
+  "desk_pc1",
+  "desk_pc2",
+  "desk_screen1",
+  "desk_screen2",
+  "printer",
 ] as const;
 
 /** Móveis da sala de Segurança (key == type). */
