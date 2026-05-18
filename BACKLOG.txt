@@ -136,6 +136,12 @@ Visual / mapa:
     por tipo; tipos no EDITOR_FURNITURE_TYPES. Pipeline de asset
     piloto validado -> replicavel p/ Recepcao/Seguranca. (Se houver
     override de mapa no Postgres, re-salvar pra ver.)
+  - [FEITO] mesas na proporcao do print - meetingTable/kitchen_table/
+    coffeeTable recompostas de pecas LimeZu Conference Hall (ponta+
+    meio xN + ponta espelhada), madeira clara larga; assets/interiors/
+    tables/ + TABLES_SPRITES (substitui procedural/tileset; coffeeTable
+    saiu de FURNITURE_TILES, kitchen_table de KITCHEN_SPRITES);
+    HITBOXES atualizados.
   - [FEITO] visual da sala de Seguranca - sprites LimeZu pago (TV/
     Film Studio) em client/public/assets/interiors/security/
     (cctv_screen/2/3, security_console, server_rack, security_camera);

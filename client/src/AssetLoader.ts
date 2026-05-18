@@ -81,6 +81,13 @@ export function preloadLimezuAssets(scene: Phaser.Scene) {
   for (const k of SECURITY_SPRITES) {
     scene.load.image(k, `/assets/interiors/security/${k}.png`);
   }
+
+  // Mesas (reunião / Copa / centro) — compostas de peças LimeZu
+  // Conference Hall (ponta+meio+ponta espelhada), proporção larga
+  // agradável. key == type → substitui as procedurais/tileset.
+  for (const k of TABLES_SPRITES) {
+    scene.load.image(k, `/assets/interiors/tables/${k}.png`);
+  }
 }
 
 /** Móveis de cozinha carregados como texturas próprias (key == type). */
@@ -91,8 +98,14 @@ export const KITCHEN_SPRITES = [
   "coffee_machine",
   "counter",
   "counter_sink",
-  "kitchen_table",
   "range_hood",
+] as const;
+
+/** Mesas compostas (LimeZu Conference Hall). key == type. */
+export const TABLES_SPRITES = [
+  "meetingTable",
+  "kitchen_table",
+  "coffeeTable",
 ] as const;
 
 /** Móveis da sala de Segurança (key == type). */

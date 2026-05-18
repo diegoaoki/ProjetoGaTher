@@ -17,7 +17,6 @@ export const FURNITURE_TILES: Record<string, { col: number; row: number; w?: num
   desk:        { col: 5,  row: 36, w: 2, h: 2 },
   chair:       { col: 6,  row: 21, w: 1, h: 2 },
   sofa:        { col: 7,  row: 8,  w: 2, h: 3 },
-  coffeeTable: { col: 4,  row: 51, w: 2, h: 2 },
   plant:       { col: 2,  row: 53, w: 1, h: 2 },
   whiteboard:  { col: 13, row: 40, w: 2, h: 2 },
   bookshelf:   { col: 10, row: 71, w: 2, h: 3 },

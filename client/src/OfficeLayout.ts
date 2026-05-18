@@ -60,8 +60,8 @@ const HITBOXES: Record<string, Hitbox> = {
   desk:         { offsetX: -48, offsetY: -10, w: 96, h: 32 },
   chair:        { offsetX: -16, offsetY: -10, w: 32, h: 24 },
   sofa:         { offsetX: -40, offsetY: -16, w: 80, h: 32 },
-  coffeeTable:  { offsetX: -24, offsetY: -10, w: 48, h: 20 },
-  meetingTable: { offsetX: -80, offsetY: -22, w: 160, h: 56 },
+  coffeeTable:  { offsetX: -28, offsetY: -8,  w: 56,  h: 20 }, // LimeZu 64×32
+  meetingTable: { offsetX: -88, offsetY: -18, w: 176, h: 56 }, // LimeZu 192×80
   plant:        { offsetX: -14, offsetY: -8,  w: 28, h: 24 },
   whiteboard:   { offsetX: -40, offsetY: -20, w: 80, h: 12 },
   bookshelf:    { offsetX: -24, offsetY: -28, w: 48, h: 56 },
@@ -73,7 +73,7 @@ const HITBOXES: Record<string, Hitbox> = {
   counter:       { offsetX: -32, offsetY: -24, w: 64, h: 44 },
   coffee_machine:{ offsetX: -14, offsetY: -18, w: 28, h: 36 },
   microwave:     { offsetX: -14, offsetY: -10, w: 28, h: 22 },
-  kitchen_table: { offsetX: -30, offsetY: -16, w: 60, h: 40 },
+  kitchen_table: { offsetX: -58, offsetY: -18, w: 116, h: 56 }, // LimeZu 128×80
   // range_hood é decoração de parede (sem colisão) — não tem hitbox
   // Segurança (sala no-entry; hitboxes só pro editor/consistência)
   cctv_screen:      { offsetX: -30, offsetY: -28, w: 60, h: 52 },
