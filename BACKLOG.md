@@ -49,6 +49,7 @@ Legenda: 🔴 prioridade · 🐞 bug · 🟢 feito (mantido como referência) ·
 - 🟢 [FEITO] **editor de mesa** — toda `desk` colocada no editor vira reservável: `makeEditItem` gera `deskId` único + `tex:"desk_pc1"`; server resolve via `deskById` (fixas OU override) em claim/spawn/seat/etc; `pruneOrphanReservations` (boot + map:reload) → mesa apagada perde a reserva (state+DB). `OfficeScene.goToDesk` usa o layout vivo → "ir até minha mesa/de X" navega pras editor-desks tb.
 
 ### Interação
+- ⚪ [pedido 2026-05-18] **sprint com Shift** — andando (WASD) + segurar Shift dobra a velocidade. (Cuidar do `MAX_DELTA` anti-cheat no server e do boost por tempo que já existe.)
 - 🟢 [FEITO] **não mostrar "mesa reservada" no join** — `deskToastSinceRef` (join+5s); só toasta reserva ATIVA pós-join.
 - 🟢 [FEITO] **bolha sem convite** — `handleBubbleInvite` cria/junta a bolha direto; removidos modal/handlers de convite; 🫧 = "Bolha aberta com X".
 - 🟢 [FEITO] **assets de mesa no editor** — `EDITOR_FURNITURE_TYPES` += desk/monitor/deskpc_* (HITBOXES deskpc_*); admin arrasta os desks LimeZu no editor (decorativo, não reservável). Pra escolher o desk que gostar.
