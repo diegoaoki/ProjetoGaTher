@@ -15,6 +15,8 @@ export class Player extends Schema {
   // {body,hair,outfit,hat} com keys das peças. "" = sem custom (usa
   // characterId/hash legado). Sincronizado p/ todos verem o avatar do peer.
   @type("string") appearance: string = "";
+  // Foto de perfil (data URL pequeno) — mostrada no mini-mapa. ""=sem foto.
+  @type("string") photo: string = "";
   @type("string") zoneId: string = "open";
   // Bolha de conversa privada: "" = sem bolha. Mesmo bubbleId = mesma bolha
   // (N pessoas). Áudio entre membros = cheio; pra fora da bolha = baixo.

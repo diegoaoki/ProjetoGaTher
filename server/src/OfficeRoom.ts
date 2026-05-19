@@ -23,6 +23,7 @@ interface AppearanceMessage {
   hairColor?: string;
   characterId?: string;
   appearance?: string; // JSON {body,hair,outfit,hat}
+  photo?: string;      // data URL da foto de perfil ("" = remover)
 }
 
 interface DeskClaimMessage {
@@ -150,6 +151,7 @@ interface AuthData {
   hairColor: string;
   characterId: string;
   appearance: string; // JSON {body,hair,outfit,hat} ou "" (legado)
+  photo: string;      // data URL da foto de perfil ou ""
   role: "user" | "visitor";
   visitorHost: string; // userId de quem convidou (visitante via código)
 }
@@ -353,7 +355,7 @@ export class OfficeRoom extends Room<OfficeState> {
       const authData = client.userData as AuthData | undefined;
       if (!player || !authData) return;
 
-      const updates: Partial<{ bodyColor: string; hairColor: string; characterId: string; appearance: string }> = {};
+      const updates: Partial<{ bodyColor: string; hairColor: string; characterId: string; appearance: string; photo: string }> = {};
       if (message.bodyColor && /^#[0-9a-fA-F]{6}$/.test(message.bodyColor)) {
         player.color = message.bodyColor;
         updates.bodyColor = message.bodyColor;
@@ -377,6 +379,15 @@ export class OfficeRoom extends Room<OfficeState> {
             updates.appearance = message.appearance;
           }
         } catch { /* JSON inválido — ignora */ }
+      }
+      // Foto de perfil (mini-mapa): "" = remover; senão exige data URL
+      // de imagem com tamanho razoável (cap ~60KB de base64).
+      if (typeof message.photo === "string") {
+        const p = message.photo;
+        if (p === "" || (p.startsWith("data:image/") && p.length <= 60000)) {
+          player.photo = p;
+          updates.photo = p;
+        }
       }
 
       if (Object.keys(updates).length === 0) return;
@@ -676,6 +687,7 @@ export class OfficeRoom extends Room<OfficeState> {
         hairColor: "#3b2c20",
         characterId: "",
         appearance: "",
+        photo: "",
         role: "visitor",
         visitorHost: payload.host || "",
       };
@@ -717,6 +729,7 @@ export class OfficeRoom extends Room<OfficeState> {
       hairColor: profile.hairColor,
       characterId: profile.characterId || "",
       appearance: profile.appearance || "",
+      photo: profile.photo || "",
       role: "user",
       visitorHost: "",
     };
@@ -740,6 +753,7 @@ export class OfficeRoom extends Room<OfficeState> {
     player.hairColor = auth.hairColor;
     player.characterId = auth.characterId;
     player.appearance = auth.appearance;
+    player.photo = auth.photo;
     player.role = auth.role;
     // Usuário normal sempre ok. Visitante: mudo até um host autorizar,
     // mas a autorização persiste até a meia-noite (BRT) — reconectar

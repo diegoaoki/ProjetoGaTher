@@ -29,6 +29,8 @@ export default function MiniMap({ room, meSessionId, onLocate, onClose, highligh
   const dotsRef = useRef<
     Array<{ cx: number; cy: number; x: number; y: number; me: boolean; name: string; userId: string }>
   >([]);
+  // Cache de fotos de perfil (data URL → Image) pro mini-mapa.
+  const photoCache = useRef<Map<string, HTMLImageElement>>(new Map());
   const hoverRef = useRef<{ cx: number; cy: number; name: string } | null>(null);
   const highlightRef = useRef<string | null>(highlightUserId ?? null);
   highlightRef.current = highlightUserId ?? null;
@@ -82,13 +84,41 @@ export default function MiniMap({ room, meSessionId, onLocate, onClose, highligh
         const me = sid === meSessionId;
         const uid = p.userId || "";
         dots.push({ cx, cy, x: p.x, y: p.y, me, name: p.name || "?", userId: uid });
-        ctx.beginPath();
-        ctx.arc(cx, cy, me ? 5 : 4, 0, Math.PI * 2);
-        ctx.fillStyle = me ? "#4ade80" : "#38bdf8";
-        ctx.fill();
-        ctx.strokeStyle = "#0b1220";
-        ctx.lineWidth = 1;
-        ctx.stroke();
+        const photo: string = p.photo || "";
+        let img: HTMLImageElement | undefined;
+        if (photo) {
+          img = photoCache.current.get(photo);
+          if (!img) {
+            img = new Image();
+            img.src = photo;
+            photoCache.current.set(photo, img);
+          }
+        }
+        if (img && img.complete && img.naturalWidth > 0) {
+          // Foto de perfil (recortada em círculo) no lugar do ponto.
+          const r = me ? 7 : 6;
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.closePath();
+          ctx.clip();
+          ctx.drawImage(img, cx - r, cy - r, r * 2, r * 2);
+          ctx.restore();
+          ctx.beginPath();
+          ctx.arc(cx, cy, r, 0, Math.PI * 2);
+          ctx.strokeStyle = me ? "#4ade80" : "#0b1220";
+          ctx.lineWidth = me ? 2 : 1;
+          ctx.stroke();
+        } else {
+          // Sem foto (ou ainda carregando) → ponto colorido como antes.
+          ctx.beginPath();
+          ctx.arc(cx, cy, me ? 5 : 4, 0, Math.PI * 2);
+          ctx.fillStyle = me ? "#4ade80" : "#38bdf8";
+          ctx.fill();
+          ctx.strokeStyle = "#0b1220";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+        }
         if (me) {
           ctx.strokeStyle = "#4ade80";
           ctx.lineWidth = 1.5;

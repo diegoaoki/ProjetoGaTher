@@ -30,6 +30,8 @@ export interface AuthProfile {
   characterId?: string | null;
   /** Avatar modular: JSON {body,hair,outfit,hat} ou null (legado). */
   appearance?: string | null;
+  /** Foto de perfil (data URL) mostrada no mini-mapa, ou null. */
+  photo?: string | null;
   updatedAt?: string;
 }
 
@@ -159,7 +161,7 @@ export async function fetchMe(httpUrl: string, token: string): Promise<{ user: A
 export async function updateProfile(
   httpUrl: string,
   token: string,
-  patch: { displayName?: string; bodyColor?: string; hairColor?: string; characterId?: string; appearance?: string }
+  patch: { displayName?: string; bodyColor?: string; hairColor?: string; characterId?: string; appearance?: string; photo?: string }
 ): Promise<AuthProfile> {
   const resp = await fetch(httpUrl + "/profile", {
     method: "PATCH",

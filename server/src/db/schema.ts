@@ -32,6 +32,8 @@ export const profiles = pgTable("profiles", {
   characterId: varchar("character_id", { length: 16 }),
   // Avatar modular: JSON {body,hair,outfit,hat}. NULL = sem custom (legado).
   appearance: text("appearance"),
+  // Foto de perfil (data URL pequeno, mostrada no mini-mapa). NULL = sem.
+  photo: text("photo"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -14,6 +14,7 @@ import AvatarEditor from "./AvatarEditor";
 import DeskEditor from "./DeskEditor";
 import WhatsNew, { WHATSNEW_KEY } from "./WhatsNew";
 import { useDraggable } from "./useDraggable";
+import ProfilePhotoModal from "./ProfilePhotoModal";
 import { getMirrorSelf } from "./audioPrefs";
 import { ChatMessage, playNotificationBeep } from "./chat";
 import { useIsMobile } from "./useIsMobile";
@@ -353,6 +354,9 @@ export default function App() {
   const [pwForm, setPwForm] = useState({ cur: "", nw: "", cf: "" });
   const [pwSaving, setPwSaving] = useState(false);
   const [pwError, setPwError] = useState("");
+  const [photoOpen, setPhotoOpen] = useState(false);
+  const [photoSaving, setPhotoSaving] = useState(false);
+  const [photoError, setPhotoError] = useState("");
   // Abre "Novidades" automaticamente 1x por versão (após entrar).
   useEffect(() => {
     if (conn !== "connected") return;
@@ -1712,6 +1716,9 @@ export default function App() {
             >
               <button onClick={() => setEditingAvatar(true)} style={menuItemStyle}>🎨 Editar avatar</button>
               {!isVisitor && (
+                <button onClick={() => { setPhotoError(""); setPhotoOpen(true); }} style={menuItemStyle}>🖼️ Foto de perfil</button>
+              )}
+              {!isVisitor && (
                 <button onClick={() => { setPwError(""); setPwForm({ cur: "", nw: "", cf: "" }); setPwOpen(true); }} style={menuItemStyle}>🔒 Trocar senha</button>
               )}
               <button onClick={() => setWhatsNewOpen(true)} style={menuItemStyle}>✨ Novidades</button>
@@ -2813,6 +2820,35 @@ export default function App() {
         <div style={modalStyle} onClick={() => setWhatsNewOpen(false)}>
           <div style={{ ...cardStyle, width: 420 }} onClick={(e) => e.stopPropagation()}>
             <WhatsNew onClose={() => setWhatsNewOpen(false)} />
+          </div>
+        </div>
+      )}
+
+      {photoOpen && session && (
+        <div style={modalStyle} onClick={() => !photoSaving && setPhotoOpen(false)}>
+          <div style={{ ...cardStyle, width: 360 }} onClick={(e) => e.stopPropagation()}>
+            <ProfilePhotoModal
+              currentPhoto={session.profile.photo ?? null}
+              saving={photoSaving}
+              error={photoError}
+              onClose={() => !photoSaving && setPhotoOpen(false)}
+              onSave={async (dataUrl) => {
+                if (photoSaving) return;
+                setPhotoError("");
+                setPhotoSaving(true);
+                try {
+                  const profile = await updateProfile(HTTP_URL, session.token, { photo: dataUrl });
+                  setSession({ ...session, profile });
+                  roomRef.current?.send("appearance", { photo: dataUrl });
+                  setPhotoOpen(false);
+                  setSocialToast({ text: dataUrl ? "Foto atualizada" : "Foto removida", tone: "info" });
+                } catch (e: any) {
+                  setPhotoError(e?.message || "Falha ao salvar a foto");
+                } finally {
+                  setPhotoSaving(false);
+                }
+              }}
+            />
           </div>
         </div>
       )}

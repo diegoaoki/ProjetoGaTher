@@ -50,6 +50,8 @@ const profilePatchSchema = z.object({
   // Avatar modular: JSON {body,hair,outfit,hat} (validação leve de tamanho;
   // conteúdo é resolvido no cliente com fallback).
   appearance: z.string().max(300).optional(),
+  // Foto de perfil (data URL pequeno p/ mini-mapa) ou "" pra remover.
+  photo: z.string().max(60000).optional(),
 });
 
 // Rate limits separados: registro/login mais restrito (anti-bruteforce),
@@ -172,6 +174,7 @@ export function createAuthRouter() {
             hairColor: "#3b2c20",
             characterId: null,
             appearance: null,
+            photo: null,
           },
         });
       }
