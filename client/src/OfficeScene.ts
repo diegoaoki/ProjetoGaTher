@@ -1010,8 +1010,14 @@ export class OfficeScene extends Phaser.Scene {
 
   /**
    * Monta o FurnitureItem do editor. `desk` colocado pelo editor vira
-   * RESERVÁVEL: ganha deskId único (desk-ed-...) + textura boa
-   * (desk_pc1). O server reconhece via deskById (override do mapa).
+   * RESERVÁVEL: ganha deskId único (desk-ed-...). O server reconhece via
+   * deskById (override do mapa).
+   *
+   * NÃO seta `tex`: assim a mesa colocada renderiza a MESMA textura que a
+   * miniatura da paleta mostra (`getFurnitureThumbnail` usa a textura do
+   * próprio `type` = `desk` procedural, com tampo+pés). Antes forçava
+   * `tex:"desk_work"` (composto LimeZu grande) → a paleta mostrava uma
+   * mesa e o mapa colocava outra. `hitboxFor("desk")` já casa (96×32).
    */
   private makeEditItem(type: string, x: number, y: number): FurnitureItem {
     const item: FurnitureItem = { type, x, y, depth: 1, hitbox: hitboxFor(type) };
@@ -1020,7 +1026,6 @@ export class OfficeScene extends Phaser.Scene {
         "desk-ed-" +
         Date.now().toString(36) +
         Math.floor(Math.random() * 1296).toString(36);
-      item.tex = "desk_work"; // desk largo LimeZu (128×80, + monitor manual)
     }
     return item;
   }
