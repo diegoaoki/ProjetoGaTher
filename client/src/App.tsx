@@ -11,6 +11,7 @@ import AudioTestScreen from "./AudioTestScreen";
 import SecurityLockModal from "./SecurityLockModal";
 import MiniMap from "./MiniMap";
 import AvatarEditor from "./AvatarEditor";
+import DeskEditor from "./DeskEditor";
 import { getMirrorSelf } from "./audioPrefs";
 import { ChatMessage, playNotificationBeep } from "./chat";
 import { useIsMobile } from "./useIsMobile";
@@ -339,6 +340,9 @@ export default function App() {
   const [deskToast, setDeskToast] = useState<{ text: string; tone: "info" | "error" } | null>(null);
   const [deskAction, setDeskAction] = useState<
     { deskId: string; free: boolean; mine: boolean; ownerName?: string } | null
+  >(null);
+  const [deskEditing, setDeskEditing] = useState<
+    { deskId: string; tex: string; decor: string[] } | null
   >(null);
   const [peerMenu, setPeerMenu] = useState<
     { sessionId: string; userId: string; name: string; x: number; y: number } | null
@@ -2247,17 +2251,29 @@ export default function App() {
             <h2 style={{ margin: "0 0 8px", fontSize: 20 }}>🪑 Mesa</h2>
             {deskAction.mine ? (
               <>
-                <p style={{ margin: "0 0 18px", fontSize: 14 }}>
-                  Esta é a <strong>sua mesa</strong>. Quer liberá-la?
+                <p style={{ margin: "0 0 16px", fontSize: 14 }}>
+                  Esta é a <strong>sua mesa</strong>.
                 </p>
-                <div style={{ display: "flex", gap: 8 }}>
-                  <button onClick={() => setDeskAction(null)} style={{ ...buttonStyle, background: "#334155", color: "#e2e8f0" }}>Cancelar</button>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                  <button
+                    onClick={() => {
+                      const d: any = (roomRef.current as any)?.state?.desks?.get?.(deskAction.deskId);
+                      let decor: string[] = [];
+                      try { const p = JSON.parse(d?.decor || "[]"); if (Array.isArray(p)) decor = p; } catch {}
+                      setDeskEditing({ deskId: deskAction.deskId, tex: d?.tex || "", decor });
+                      setDeskAction(null);
+                    }}
+                    style={{ ...buttonStyle, flex: "1 1 100%" }}
+                  >
+                    ✏️ Editar mesa
+                  </button>
+                  <button onClick={() => setDeskAction(null)} style={{ ...buttonStyle, flex: 1, background: "#334155", color: "#e2e8f0" }}>Cancelar</button>
                   <button
                     onClick={() => {
                       roomRef.current?.send("desk:release", { deskId: deskAction.deskId });
                       setDeskAction(null);
                     }}
-                    style={{ ...buttonStyle, background: "#b91c1c" }}
+                    style={{ ...buttonStyle, flex: 1, background: "#b91c1c" }}
                   >
                     Liberar mesa
                   </button>
@@ -2714,6 +2730,26 @@ export default function App() {
           mobile={isMobile}
           dmRequest={dmRequest}
         />
+      )}
+
+      {deskEditing && (
+        <div style={modalStyle} onClick={() => setDeskEditing(null)}>
+          <div style={{ ...cardStyle, width: 380 }} onClick={(e) => e.stopPropagation()}>
+            <DeskEditor
+              currentTex={deskEditing.tex}
+              currentDecor={deskEditing.decor}
+              saving={false}
+              error=""
+              onClose={() => setDeskEditing(null)}
+              onSave={(tex, decor) => {
+                roomRef.current?.send("desk:customize", {
+                  deskId: deskEditing.deskId, tex, decor,
+                });
+                setDeskEditing(null);
+              }}
+            />
+          </div>
+        </div>
       )}
 
       {editingAvatar && (

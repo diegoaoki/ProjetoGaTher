@@ -118,6 +118,13 @@ export class OfficeScene extends Phaser.Scene {
   // === Mesas reserváveis ===
   private allDesks: DeskInfo[] = [];
   private deskOverlays = new Map<string, DeskOverlay>(); // deskId → overlay
+  // Customização da mesa pelo dono: sprite base (pra trocar o modelo) +
+  // sprites de decoração por deskId.
+  private deskBaseSprites = new Map<
+    string,
+    { sprite: Phaser.GameObjects.Image; origTex: string; x: number; y: number }
+  >();
+  private deskDecorObjs = new Map<string, Phaser.GameObjects.GameObject[]>();
   private nearestDeskId: string | null = null;
   private myDeskId: string | null = null;
   private keyE!: Phaser.Input.Keyboard.Key;
@@ -804,6 +811,13 @@ export class OfficeScene extends Phaser.Scene {
 
   private drawFurniture() {
     this.drawDeskZones();
+    // Rebuild: limpa rastreio de mesa customizada. Os sprites base são
+    // recriados abaixo (e destruídos via furnitureObjs); os de decoração
+    // são objetos à parte → destruir aqui. reapplyDeskCustoms() no fim
+    // re-aplica a partir do state.desks.
+    this.deskDecorObjs.forEach((arr) => arr.forEach((o) => o.destroy()));
+    this.deskDecorObjs.clear();
+    this.deskBaseSprites.clear();
     // Mesas/desks: a cadeira fica virada PRA mesa mais próxima.
     const isSurface = (t: string) =>
       t === "desk" || t.startsWith("desk_") || t.startsWith("deskpc_") ||
@@ -847,6 +861,10 @@ export class OfficeScene extends Phaser.Scene {
           if (pointer.rightButtonDown()) return; // right-click = pan, não mesa
           this.onDeskClick?.(deskId);
         });
+        // Rastreia o sprite base p/ trocar modelo ao customizar.
+        this.deskBaseSprites.set(deskId, {
+          sprite, origTex: item.tex || item.type, x: item.x, y: item.y,
+        });
       }
 
       // Mesa-conversa: marca discreta no piso dos 3 lugares (sentado +
@@ -861,6 +879,63 @@ export class OfficeScene extends Phaser.Scene {
         }
       }
     });
+    // Re-aplica modelo/decoração das mesas reservadas (sobrevive a rebuild).
+    this.reapplyDeskCustoms();
+  }
+
+  /** Offsets fixos da decoração relativos ao centro da mesa. */
+  private static DECOR_OFFSET: Record<string, { dx: number; dy: number; depth: number }> = {
+    monitor: { dx: 0, dy: -16, depth: 2 },
+    plant: { dx: 46, dy: 4, depth: 1 },
+    printer: { dx: -46, dy: 4, depth: 1 },
+  };
+
+  /** Aplica o modelo (tex) + decoração de uma mesa reservada. */
+  private renderDeskCustom(deskId: string, desk: { tex?: string; decor?: string }) {
+    const base = this.deskBaseSprites.get(deskId);
+    if (!base) return;
+    // Modelo: troca a textura do sprite base (origem 0.5 mantém centrado);
+    // "" / "desk" / textura ausente → volta ao original do layout.
+    const tex = desk.tex || "";
+    if (tex && tex !== "desk" && this.textures.exists(tex)) {
+      base.sprite.setTexture(tex);
+    } else {
+      base.sprite.setTexture(base.origTex);
+    }
+    // Decoração: destrói as antigas e recria.
+    const old = this.deskDecorObjs.get(deskId);
+    if (old) old.forEach((o) => o.destroy());
+    const objs: Phaser.GameObjects.GameObject[] = [];
+    let decor: string[] = [];
+    try {
+      const parsed = JSON.parse(desk.decor || "[]");
+      if (Array.isArray(parsed)) decor = parsed;
+    } catch { /* ignora */ }
+    for (const type of decor) {
+      const off = OfficeScene.DECOR_OFFSET[type];
+      if (!off || !this.textures.exists(type)) continue;
+      const o = this.add.image(base.x + off.dx, base.y + off.dy, type);
+      o.setOrigin(0.5, 0.5);
+      o.setDepth(base.y + off.depth);
+      objs.push(o);
+    }
+    this.deskDecorObjs.set(deskId, objs);
+  }
+
+  /** Some a customização (mesa liberada): volta ao modelo do layout. */
+  private removeDeskCustom(deskId: string) {
+    const base = this.deskBaseSprites.get(deskId);
+    if (base) base.sprite.setTexture(base.origTex);
+    const old = this.deskDecorObjs.get(deskId);
+    if (old) old.forEach((o) => o.destroy());
+    this.deskDecorObjs.delete(deskId);
+  }
+
+  /** Re-aplica todas as customizações a partir do state.desks (pós-rebuild). */
+  private reapplyDeskCustoms() {
+    const desks = (this.room?.state as any)?.desks;
+    if (!desks || typeof desks.forEach !== "function") return;
+    desks.forEach((desk: any, deskId: string) => this.renderDeskCustom(deskId, desk));
   }
 
   private drawWalls() {
@@ -1422,7 +1497,11 @@ export class OfficeScene extends Phaser.Scene {
     if (state.desks && typeof state.desks.onAdd === "function") {
       state.desks.onAdd((desk: any, deskId: string) => {
         this.renderDeskOverlay(deskId, desk);
-        desk.onChange(() => this.renderDeskOverlay(deskId, desk));
+        this.renderDeskCustom(deskId, desk);
+        desk.onChange(() => {
+          this.renderDeskOverlay(deskId, desk);
+          this.renderDeskCustom(deskId, desk);
+        });
         if (desk.ownerId === this.myUserId) {
           this.myDeskId = deskId;
           this.onMyDeskChange?.(deskId);
@@ -1431,6 +1510,7 @@ export class OfficeScene extends Phaser.Scene {
 
       state.desks.onRemove((_desk: any, deskId: string) => {
         this.removeDeskOverlay(deskId);
+        this.removeDeskCustom(deskId);
         if (this.myDeskId === deskId) {
           this.myDeskId = null;
           this.onMyDeskChange?.(null);
