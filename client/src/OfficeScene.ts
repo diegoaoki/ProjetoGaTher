@@ -24,6 +24,12 @@ import {
   registerLimezuFloor,
   CharacterId,
 } from "./AssetLoader";
+import {
+  parseAppearance,
+  ensureAvatarParts,
+  layerKeys,
+  Appearance,
+} from "./AvatarParts";
 import { registerFurnitureTextures } from "./FurnitureTiles";
 
 interface RemotePlayer {
@@ -37,6 +43,9 @@ interface RemotePlayer {
   targetX: number;
   targetY: number;
   direction: string;
+  // Avatar modular: camadas empilhadas (vazio = usa o `sprite` legado).
+  layers?: Array<{ key: string; sprite: Phaser.GameObjects.Sprite }>;
+  appearance?: string; // JSON atual (pra detectar mudança)
 }
 
 interface DeskInfo {
@@ -89,6 +98,9 @@ export class OfficeScene extends Phaser.Scene {
   private myContainer!: Phaser.GameObjects.Container;
   private myNameText!: Phaser.GameObjects.Text;
   private myTextureKey!: string;
+  // Avatar modular do MEU player (vazio = usa mySprite legado).
+  private myLayers: Array<{ key: string; sprite: Phaser.GameObjects.Sprite }> = [];
+  private myAppearance = "";
   private myDirection = "down";
   private myAnimKey = "";
   /** Limite Y do avatar por andar: térreo não passa do prédio
@@ -1324,6 +1336,15 @@ export class OfficeScene extends Phaser.Scene {
           if (player.characterId && player.characterId !== this.myTextureKey) {
             this.refreshMyCharacter(player.characterId);
           }
+          // Mudança de avatar modular (editor)
+          if ((player.appearance || "") !== this.myAppearance) {
+            this.myAppearance = player.appearance || "";
+            this.buildAvatarLayers(
+              this.myContainer, this.mySprite, this.myNameText,
+              this.myAppearance, this.myLayers, null,
+              (layers) => { this.myLayers = layers; }
+            );
+          }
           return;
         }
         const rp = this.remotePlayers.get(sessionId);
@@ -1351,6 +1372,15 @@ export class OfficeScene extends Phaser.Scene {
           }
           if (player.characterId && player.characterId !== rp.textureKey) {
             this.refreshRemoteCharacter(rp, player.userId || "", player.characterId);
+          }
+          if ((player.appearance || "") !== (rp.appearance || "")) {
+            rp.appearance = player.appearance || "";
+            this.buildAvatarLayers(
+              rp.container, rp.sprite, rp.nameText,
+              rp.appearance, rp.layers,
+              { sessionId, userId: player.userId || "", name: player.name || "" },
+              (layers) => { rp.layers = layers; }
+            );
           }
         }
       });
@@ -1893,6 +1923,15 @@ export class OfficeScene extends Phaser.Scene {
     // Tocar idle inicial — animation key: `${charId}_${dir}_idle`
     this.mySprite.play(`${this.myTextureKey}_down_idle`);
 
+    // Avatar modular: se o player tem appearance custom, monta as camadas
+    // por cima (lazy). Enquanto carrega, o sprite legado acima é o fallback.
+    this.myAppearance = player.appearance || "";
+    this.buildAvatarLayers(
+      this.myContainer, this.mySprite, this.myNameText,
+      this.myAppearance, undefined, null,
+      (layers) => { this.myLayers = layers; }
+    );
+
     // Mantém appearance no server (cores não afetam visual no novo sistema, mas atualizam snapshot)
     this.room.send("appearance", {
       bodyColor: this.myBodyColor,
@@ -1959,6 +1998,69 @@ export class OfficeScene extends Phaser.Scene {
     if (this.anims.exists(animKey)) rp.sprite.play(animKey, true);
   }
 
+  /**
+   * (Re)constrói as camadas do avatar modular dentro de `container`.
+   * Enquanto carrega (lazy), o `baseSprite` legado fica visível como
+   * fallback → avatar NUNCA fica invisível. appearance inválido = legado.
+   */
+  private buildAvatarLayers(
+    container: Phaser.GameObjects.Container,
+    baseSprite: Phaser.GameObjects.Sprite,
+    nameText: Phaser.GameObjects.Text,
+    appearanceJson: string,
+    oldLayers: Array<{ key: string; sprite: Phaser.GameObjects.Sprite }> | undefined,
+    interactive: { sessionId: string; userId: string; name: string } | null,
+    onReady: (layers: Array<{ key: string; sprite: Phaser.GameObjects.Sprite }>) => void
+  ) {
+    const app: Appearance | null = parseAppearance(appearanceJson);
+    if (!app) {
+      (oldLayers || []).forEach((l) => l.sprite.destroy());
+      baseSprite.setVisible(true);
+      onReady([]);
+      return;
+    }
+    ensureAvatarParts(this, app, () => {
+      // container pode ter sido destruído enquanto carregava (peer saiu)
+      if (!container || !container.scene) return;
+      (oldLayers || []).forEach((l) => l.sprite.destroy());
+      const layers: Array<{ key: string; sprite: Phaser.GameObjects.Sprite }> = [];
+      for (const key of layerKeys(app)) {
+        if (!this.textures.exists(`${key}_idle`)) continue; // peça faltando → pula
+        const s = this.add.sprite(0, 0, `${key}_idle`, 0).setScale(2);
+        container.add(s);
+        if (interactive) {
+          s.setInteractive();
+          s.setData("rpSession", interactive.sessionId);
+          s.setData("rpUser", interactive.userId);
+          s.setData("rpName", interactive.name);
+        }
+        layers.push({ key, sprite: s });
+      }
+      baseSprite.setVisible(layers.length === 0); // tudo falhou → fallback
+      container.bringToTop(nameText); // nome sempre por cima das camadas
+      onReady(layers);
+    });
+  }
+
+  /** Toca a anim certa: nas camadas modulares se houver, senão no legado. */
+  private animateAvatar(
+    layers: Array<{ key: string; sprite: Phaser.GameObjects.Sprite }> | undefined,
+    baseSprite: Phaser.GameObjects.Sprite,
+    textureKey: string,
+    dir: string,
+    state: "idle" | "walk"
+  ) {
+    if (layers && layers.length > 0) {
+      for (const l of layers) {
+        const k = `${l.key}_${dir}_${state}`;
+        if (this.anims.exists(k)) l.sprite.play(k, true);
+      }
+    } else {
+      const k = `${textureKey}_${dir}_${state}`;
+      if (this.anims.exists(k)) baseSprite.play(k, true);
+    }
+  }
+
   private createRemoteAvatar(sessionId: string, player: any) {
     const userId: string = player.userId || "";
     const charId: CharacterId = pickCharacterFor(userId, player.characterId);
@@ -2002,14 +2104,26 @@ export class OfficeScene extends Phaser.Scene {
       }
     }
 
-    this.remotePlayers.set(sessionId, {
+    const rp: RemotePlayer = {
       container, sprite, ring, nameText,
       bodyColor: player.color || "",
       hairColor: player.hairColor || "",
       textureKey, // charId (usado pra montar key da anim no update)
       targetX: player.x, targetY: player.y,
       direction: player.direction || "down",
-    });
+      layers: [],
+      appearance: player.appearance || "",
+    };
+    this.remotePlayers.set(sessionId, rp);
+
+    // Avatar modular do peer (lazy). Mantém o right-click (menu de
+    // contexto) funcionando: a camada body herda o rpSession/rpUser/rpName.
+    this.buildAvatarLayers(
+      container, sprite, nameText,
+      rp.appearance || "", undefined,
+      { sessionId, userId, name: player.name || "" },
+      (layers) => { rp.layers = layers; }
+    );
   }
 
   /**
@@ -2325,11 +2439,12 @@ export class OfficeScene extends Phaser.Scene {
       myAnim = "idle";
       myAnimDir = mySitDir;
     }
-    const myKey = `${this.myTextureKey}_${myAnimDir}_${myAnim}`;
-    if (myKey !== this.myAnimKey && this.anims.exists(myKey)) {
-      this.myAnimKey = myKey;
-      this.mySprite.play(myKey, true);
-    }
+    // Camadas modulares se houver; senão o sprite legado. play(key,true)
+    // já deduplica (ignoreIfPlaying), não precisa do myAnimKey.
+    this.animateAvatar(
+      this.myLayers, this.mySprite, this.myTextureKey,
+      myAnimDir, myAnim === "walk" ? "walk" : "idle"
+    );
 
     if (time - this.lastSync > SYNC_INTERVAL) {
       this.lastSync = time;
@@ -2371,10 +2486,10 @@ export class OfficeScene extends Phaser.Scene {
         anim = "idle"; // idem meu avatar: idle virado pra mesa (sem _sit glitch)
         aDir = rpSitDir;
       }
-      const key = `${rp.textureKey}_${aDir}_${anim}`;
-      if (this.anims.exists(key) && rp.sprite.anims.currentAnim?.key !== key) {
-        rp.sprite.play(key, true);
-      }
+      this.animateAvatar(
+        rp.layers, rp.sprite, rp.textureKey,
+        aDir, anim === "walk" ? "walk" : "idle"
+      );
     });
 
     this.advanceSecurityNpcs(dt);
