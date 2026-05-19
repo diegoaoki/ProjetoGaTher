@@ -314,15 +314,13 @@ function addWorkstation(items: FurnitureItem[], desks: Array<{ id: string; x: nu
   const x = tileX * TILE;
   const y = tileY * TILE;
   desks.push({ id, x, y });
-  // Estação de trabalho = desk LimeZu completo (#45 `desk_office`) +
-  // MONITOR por cima como objeto separado (sprite LimeZu nativo, sem
-  // esticar/cortar) + cadeira. `type` segue "desk" (reserva/overlay/
-  // spawn). Jeito modular correto do LimeZu.
-  items.push({ type: "desk", x, y, depth: 1, hitbox: HITBOXES.desk_work, deskId: id, tex: "desk_work" });
-  items.push({ type: "monitor", x, y: y - 22, depth: 2 }); // PC na superfície do desk
-  // Cadeira afastada do desk (desk_work é 80px alto): o avatar senta
-  // NA FRENTE, visível, sem o desk cobrir o tronco ("cortado").
-  items.push({ type: "chair", x, y: y + 56, depth: 0, hitbox: HITBOXES.chair });
+  // Estação = mesma mesa `desk` procedural que o editor coloca (tampo+pés,
+  // a que o user aprovou) + cadeira. SEM `tex` (renderiza a textura do
+  // próprio type) e SEM monitor separado → paridade total com o que a
+  // paleta do editor mostra/coloca. `type` segue "desk" (reserva/overlay/
+  // spawn intactos). Mesa procedural ~96×56 → cadeira mais perto (y+40).
+  items.push({ type: "desk", x, y, depth: 1, hitbox: HITBOXES.desk, deskId: id });
+  items.push({ type: "chair", x, y: y + 40, depth: 0, hitbox: HITBOXES.chair });
 }
 
 export function getDefaultLayout(): OfficeLayoutData {

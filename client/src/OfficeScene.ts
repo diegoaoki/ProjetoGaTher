@@ -1656,11 +1656,11 @@ export class OfficeScene extends Phaser.Scene {
       return;
     }
 
-    // Moldura cobrindo a MESA (sprite ~64×64, centro em info.y) + o
-    // ASSENTO em frente (cadeira ~info.y+34). Caixa: 80×96 deslocada
-    // pra baixo pra abraçar mesa + lugar de quem senta.
-    // Mesa LimeZu agora é 32×64; moldura abraça mesa + cadeira (y+36).
-    const outline = this.add.rectangle(info.x, info.y + 16, 52, 92);
+    // Moldura abraça a MESA procedural (~96×56, centro em info.y) + a
+    // CADEIRA em frente (info.y+40). Largura 108 (96 da mesa + folga),
+    // altura 96 (topo da mesa até abaixo da cadeira), deslocada +16 pra
+    // baixo pra centralizar no conjunto mesa+assento.
+    const outline = this.add.rectangle(info.x, info.y + 16, 108, 96);
     outline.setStrokeStyle(2, color, 0.9);
     outline.setFillStyle(color, 0.07);
     outline.setDepth(info.y - 1);
@@ -1695,7 +1695,7 @@ export class OfficeScene extends Phaser.Scene {
   public goToDesk(deskId: string): boolean {
     const d = this.allDesks.find((x) => x.id === deskId);
     if (!d) return false;
-    this.navigateTo(d.x, d.y + 52); // perto da cadeira (y+56) → senta
+    this.navigateTo(d.x, d.y + 40); // na cadeira (y+40) → onChair(26px) → senta
     return true;
   }
 

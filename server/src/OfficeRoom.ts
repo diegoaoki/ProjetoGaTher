@@ -223,7 +223,7 @@ export class OfficeRoom extends Room<OfficeState> {
   private deskSeatPos(desk: { id: string; x: number; y: number }): { x: number; y: number } {
     const moved = this.mapFurniture.find((f) => f.deskId === desk.id);
     if (moved && typeof moved.x === "number" && typeof moved.y === "number") {
-      return { x: moved.x, y: moved.y + 56 }; // = cadeira (addWorkstation y+56)
+      return { x: moved.x, y: moved.y + 40 }; // = cadeira (addWorkstation y+40)
     }
     return getSeatPosition(desk as any);
   }
