@@ -46,6 +46,9 @@ export async function initDb(): Promise<void> {
       );
 
       CREATE INDEX IF NOT EXISTS desk_reservations_user_idx ON desk_reservations (user_id);
+      -- Customização da mesa pelo dono (some com a reserva ao liberar)
+      ALTER TABLE desk_reservations ADD COLUMN IF NOT EXISTS desk_tex TEXT;
+      ALTER TABLE desk_reservations ADD COLUMN IF NOT EXISTS desk_decor TEXT;
 
       CREATE TABLE IF NOT EXISTS app_meta (
         key VARCHAR(64) PRIMARY KEY,

@@ -38,6 +38,9 @@ export class Desk extends Schema {
   @type("string") ownerId: string = "";
   @type("string") ownerName: string = "";
   @type("string") ownerColor: string = "";
+  // Customização da mesa pelo dono (visível pra todos). "" = padrão.
+  @type("string") tex: string = "";     // modelo da mesa (LimeZu)
+  @type("string") decor: string = "";   // JSON array de itens de decoração
 }
 
 /**

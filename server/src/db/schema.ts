@@ -48,6 +48,9 @@ export const deskReservations = pgTable("desk_reservations", {
     .references(() => users.id, { onDelete: "cascade" }),
   displayName: varchar("display_name", { length: 24 }).notNull(),
   bodyColor: varchar("body_color", { length: 7 }).notNull(),
+  // Customização da mesa pelo dono (some junto com a reserva ao liberar).
+  deskTex: text("desk_tex"),
+  deskDecor: text("desk_decor"), // JSON array de itens de decoração
   claimedAt: timestamp("claimed_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

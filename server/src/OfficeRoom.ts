@@ -29,6 +29,20 @@ interface DeskClaimMessage {
   deskId: string;
 }
 
+interface DeskCustomizeMessage {
+  deskId: string;
+  tex?: string;       // modelo da mesa ("" = padrão)
+  decor?: string[];   // lista de itens de decoração
+}
+
+// Modelos de mesa e itens de decoração permitidos (espelhado no client
+// DeskEditor). "" / "desk" = mesa procedural padrão.
+const ALLOWED_DESK_TEX = [
+  "desk", "desk_work", "desk_pc1", "desk_pc2", "desk_screen1",
+  "desk_screen2", "desk_long", "desk_office", "desk_plain", "desk_wide",
+];
+const ALLOWED_DESK_DECOR = ["monitor", "plant", "printer"];
+
 interface TeleportToPlayerMessage {
   targetSessionId: string;
 }
@@ -322,6 +336,8 @@ export class OfficeRoom extends Room<OfficeState> {
         desk.ownerId = r.userId;
         desk.ownerName = r.displayName;
         desk.ownerColor = r.bodyColor;
+        desk.tex = r.deskTex || "";
+        desk.decor = r.deskDecor || "";
         this.state.desks.set(r.deskId, desk);
       }
       console.log(`[OfficeRoom] hidratou ${this.state.desks.size} reservas`);
@@ -507,6 +523,10 @@ export class OfficeRoom extends Room<OfficeState> {
     });
     this.onMessage<DeskClaimMessage>("desk:release", (client, msg) =>
       this.handleDeskRelease(client, msg)
+    );
+
+    this.onMessage<DeskCustomizeMessage>("desk:customize", (client, msg) =>
+      this.handleDeskCustomize(client, msg)
     );
 
     this.onMessage<TeleportToPlayerMessage>("teleport:to-player", (client, msg) =>
@@ -1059,6 +1079,39 @@ export class OfficeRoom extends Room<OfficeState> {
     }
     await this.releaseDeskInternal(deskId, auth.userId);
     console.log(`[OfficeRoom] ${auth.email} liberou ${deskId}`);
+  }
+
+  /** Dono customiza a própria mesa (modelo + decoração). */
+  private async handleDeskCustomize(client: Client, msg: DeskCustomizeMessage) {
+    const auth = client.userData as AuthData | undefined;
+    if (!auth) return;
+    const deskId = String(msg?.deskId || "");
+    const desk = this.state.desks.get(deskId);
+    if (!desk) return;
+    if (desk.ownerId !== auth.userId) {
+      client.send("desk:error", { error: "Essa mesa não é sua" });
+      return;
+    }
+    // Valida modelo (vazio/"desk" = padrão) e decoração (lista curada,
+    // teto de itens, sem repetir). Authoritative: ignora o que não bate.
+    let tex = typeof msg.tex === "string" ? msg.tex : "";
+    if (tex && !ALLOWED_DESK_TEX.includes(tex)) tex = "";
+    const decorIn = Array.isArray(msg.decor) ? msg.decor : [];
+    const decor = [...new Set(decorIn)]
+      .filter((d) => ALLOWED_DESK_DECOR.includes(d))
+      .slice(0, 6);
+    const decorJson = JSON.stringify(decor);
+
+    desk.tex = tex;
+    desk.decor = decorJson;
+    try {
+      await getDb()
+        .update(deskReservations)
+        .set({ deskTex: tex, deskDecor: decorJson })
+        .where(eq(deskReservations.deskId, deskId));
+    } catch (err) {
+      console.warn("[OfficeRoom] falha ao persistir customização da mesa:", err);
+    }
   }
 
   /** Acha a mesa atualmente reservada pelo userId (no state). */
