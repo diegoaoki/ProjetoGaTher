@@ -174,6 +174,23 @@ export async function updateProfile(
   return data.profile;
 }
 
+/** Troca a própria senha (qualquer logado). Exige a senha atual. */
+export async function changeMyPassword(
+  httpUrl: string,
+  token: string,
+  body: { currentPassword: string; newPassword: string }
+): Promise<void> {
+  const resp = await fetch(httpUrl + "/auth/password", {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: "Bearer " + token,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!resp.ok) throw new Error(await parseError(resp));
+}
+
 /** Diretório completo (online + offline). Não precisa ser admin. */
 export async function listAllUsers(httpUrl: string, token: string): Promise<DirectoryUser[]> {
   const resp = await fetch(httpUrl + "/users", {

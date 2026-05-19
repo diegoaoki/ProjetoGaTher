@@ -369,6 +369,44 @@ export function createAuthRouter() {
     newPassword: z.string().min(8).max(128),
   });
 
+  const changeMyPasswordSchema = z.object({
+    currentPassword: z.string().min(1).max(128),
+    newPassword: z.string().min(8).max(128),
+  });
+
+  // Usuário troca a PRÓPRIA senha (qualquer logado, não precisa ser
+  // admin). Exige a senha atual. Visitante não tem senha → bloqueia.
+  router.patch(
+    "/auth/password",
+    authReadLimiter,
+    requireAuth,
+    async (req: Request, res: Response) => {
+      if (req.auth?.role === "visitor") {
+        return res.status(400).json({ error: "Visitante não tem senha" });
+      }
+      const parsed = changeMyPasswordSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: formatZodError(parsed.error) });
+      try {
+        const db = getDb();
+        const userId = req.auth!.sub;
+        const [user] = await db
+          .select({ id: users.id, passwordHash: users.passwordHash })
+          .from(users)
+          .where(eq(users.id, userId))
+          .limit(1);
+        if (!user) return res.status(404).json({ error: "Usuário não encontrado" });
+        const ok = await verifyPassword(parsed.data.currentPassword, user.passwordHash);
+        if (!ok) return res.status(400).json({ error: "Senha atual incorreta" });
+        const passwordHash = await hashPassword(parsed.data.newPassword);
+        await db.update(users).set({ passwordHash }).where(eq(users.id, userId));
+        return res.json({ ok: true });
+      } catch (err: any) {
+        console.error("[/auth/password] erro:", err);
+        return res.status(500).json({ error: "Falha ao trocar a senha" });
+      }
+    }
+  );
+
   router.get("/admin/users", authReadLimiter, requireAuth, requireAdmin, async (_req: Request, res: Response) => {
     try {
       const db = getDb();

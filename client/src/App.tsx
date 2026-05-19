@@ -26,6 +26,7 @@ import {
   getStoredToken,
   storeToken,
   updateProfile,
+  changeMyPassword,
   listAllUsers,
   DirectoryUser,
   fetchMapLayout,
@@ -348,6 +349,10 @@ export default function App() {
     { deskId: string; tex: string; decor: string[] } | null
   >(null);
   const [whatsNewOpen, setWhatsNewOpen] = useState(false);
+  const [pwOpen, setPwOpen] = useState(false);
+  const [pwForm, setPwForm] = useState({ cur: "", nw: "", cf: "" });
+  const [pwSaving, setPwSaving] = useState(false);
+  const [pwError, setPwError] = useState("");
   // Abre "Novidades" automaticamente 1x por versão (após entrar).
   useEffect(() => {
     if (conn !== "connected") return;
@@ -1706,6 +1711,9 @@ export default function App() {
               onClick={() => setSettingsOpen(false)}
             >
               <button onClick={() => setEditingAvatar(true)} style={menuItemStyle}>🎨 Editar avatar</button>
+              {!isVisitor && (
+                <button onClick={() => { setPwError(""); setPwForm({ cur: "", nw: "", cf: "" }); setPwOpen(true); }} style={menuItemStyle}>🔒 Trocar senha</button>
+              )}
               <button onClick={() => setWhatsNewOpen(true)} style={menuItemStyle}>✨ Novidades</button>
               <button onClick={() => setAudioTestOpen(true)} style={menuItemStyle}>🎧 Testar áudio/vídeo</button>
               <button onClick={() => setSidebarOpen(true)} style={menuItemStyle}>👥 Quem está online</button>
@@ -2805,6 +2813,68 @@ export default function App() {
         <div style={modalStyle} onClick={() => setWhatsNewOpen(false)}>
           <div style={{ ...cardStyle, width: 420 }} onClick={(e) => e.stopPropagation()}>
             <WhatsNew onClose={() => setWhatsNewOpen(false)} />
+          </div>
+        </div>
+      )}
+
+      {pwOpen && (
+        <div style={modalStyle} onClick={() => !pwSaving && setPwOpen(false)}>
+          <div style={{ ...cardStyle, width: 360 }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ margin: "0 0 12px", fontSize: 20 }}>🔒 Trocar senha</h2>
+            {(["cur", "nw", "cf"] as const).map((k) => (
+              <input
+                key={k}
+                type="password"
+                value={pwForm[k]}
+                onChange={(e) => setPwForm((f) => ({ ...f, [k]: e.target.value }))}
+                onKeyDown={(e) => e.stopPropagation()}
+                placeholder={
+                  k === "cur" ? "Senha atual" : k === "nw" ? "Nova senha (mín. 8)" : "Confirmar nova senha"
+                }
+                disabled={pwSaving}
+                autoComplete={k === "cur" ? "current-password" : "new-password"}
+                style={{
+                  width: "100%", boxSizing: "border-box", marginBottom: 8,
+                  padding: "9px 12px", borderRadius: 6, border: "1px solid #334155",
+                  background: "#1e293b", color: "#e2e8f0", fontSize: 14, outline: "none",
+                }}
+              />
+            ))}
+            {pwError && <p style={{ color: "#f87171", fontSize: 13, margin: "4px 0 0" }}>{pwError}</p>}
+            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <button
+                onClick={async () => {
+                  if (pwSaving) return;
+                  setPwError("");
+                  if (pwForm.nw.length < 8) { setPwError("Nova senha precisa de ao menos 8 caracteres"); return; }
+                  if (pwForm.nw !== pwForm.cf) { setPwError("As senhas não conferem"); return; }
+                  if (!session) return;
+                  setPwSaving(true);
+                  try {
+                    await changeMyPassword(HTTP_URL, session.token, {
+                      currentPassword: pwForm.cur, newPassword: pwForm.nw,
+                    });
+                    setPwOpen(false);
+                    setSocialToast({ text: "Senha alterada com sucesso", tone: "info" });
+                  } catch (e: any) {
+                    setPwError(e?.message || "Falha ao trocar a senha");
+                  } finally {
+                    setPwSaving(false);
+                  }
+                }}
+                disabled={pwSaving}
+                style={{ ...buttonStyle, flex: 1, opacity: pwSaving ? 0.6 : 1 }}
+              >
+                {pwSaving ? "Salvando…" : "Salvar"}
+              </button>
+              <button
+                onClick={() => !pwSaving && setPwOpen(false)}
+                disabled={pwSaving}
+                style={{ ...buttonStyle, background: "#334155", color: "#e2e8f0" }}
+              >
+                Cancelar
+              </button>
+            </div>
           </div>
         </div>
       )}
