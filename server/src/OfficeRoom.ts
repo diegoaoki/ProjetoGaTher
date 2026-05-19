@@ -22,6 +22,7 @@ interface AppearanceMessage {
   bodyColor?: string;
   hairColor?: string;
   characterId?: string;
+  appearance?: string; // JSON {body,hair,outfit,hat}
 }
 
 interface DeskClaimMessage {
@@ -134,6 +135,7 @@ interface AuthData {
   bodyColor: string;
   hairColor: string;
   characterId: string;
+  appearance: string; // JSON {body,hair,outfit,hat} ou "" (legado)
   role: "user" | "visitor";
   visitorHost: string; // userId de quem convidou (visitante via código)
 }
@@ -335,7 +337,7 @@ export class OfficeRoom extends Room<OfficeState> {
       const authData = client.userData as AuthData | undefined;
       if (!player || !authData) return;
 
-      const updates: Partial<{ bodyColor: string; hairColor: string; characterId: string }> = {};
+      const updates: Partial<{ bodyColor: string; hairColor: string; characterId: string; appearance: string }> = {};
       if (message.bodyColor && /^#[0-9a-fA-F]{6}$/.test(message.bodyColor)) {
         player.color = message.bodyColor;
         updates.bodyColor = message.bodyColor;
@@ -347,6 +349,18 @@ export class OfficeRoom extends Room<OfficeState> {
       if (message.characterId && ["adam", "alex", "amelia", "bob"].includes(message.characterId)) {
         player.characterId = message.characterId;
         updates.characterId = message.characterId;
+      }
+      // Avatar modular: aceita string JSON pequena com objeto de keys.
+      // Authoritative-light: valida formato/tamanho, não o conteúdo das keys
+      // (o cliente resolve peça inexistente via fallback no render).
+      if (typeof message.appearance === "string" && message.appearance.length <= 300) {
+        try {
+          const a = JSON.parse(message.appearance);
+          if (a && typeof a === "object" && !Array.isArray(a)) {
+            player.appearance = message.appearance;
+            updates.appearance = message.appearance;
+          }
+        } catch { /* JSON inválido — ignora */ }
       }
 
       if (Object.keys(updates).length === 0) return;
@@ -641,6 +655,7 @@ export class OfficeRoom extends Room<OfficeState> {
         bodyColor: "#4ade80",
         hairColor: "#3b2c20",
         characterId: "",
+        appearance: "",
         role: "visitor",
         visitorHost: payload.host || "",
       };
@@ -681,6 +696,7 @@ export class OfficeRoom extends Room<OfficeState> {
       bodyColor: profile.bodyColor,
       hairColor: profile.hairColor,
       characterId: profile.characterId || "",
+      appearance: profile.appearance || "",
       role: "user",
       visitorHost: "",
     };
@@ -703,6 +719,7 @@ export class OfficeRoom extends Room<OfficeState> {
     player.color = auth.bodyColor;
     player.hairColor = auth.hairColor;
     player.characterId = auth.characterId;
+    player.appearance = auth.appearance;
     player.role = auth.role;
     // Usuário normal sempre ok. Visitante: mudo até um host autorizar,
     // mas a autorização persiste até a meia-noite (BRT) — reconectar

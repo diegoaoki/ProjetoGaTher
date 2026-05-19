@@ -47,6 +47,9 @@ const profilePatchSchema = z.object({
   bodyColor: z.string().regex(HEX_COLOR).optional(),
   hairColor: z.string().regex(HEX_COLOR).optional(),
   characterId: z.enum(CHARACTER_IDS).optional(),
+  // Avatar modular: JSON {body,hair,outfit,hat} (validação leve de tamanho;
+  // conteúdo é resolvido no cliente com fallback).
+  appearance: z.string().max(300).optional(),
 });
 
 // Rate limits separados: registro/login mais restrito (anti-bruteforce),
@@ -168,6 +171,7 @@ export function createAuthRouter() {
             bodyColor: "#4ade80",
             hairColor: "#3b2c20",
             characterId: null,
+            appearance: null,
           },
         });
       }

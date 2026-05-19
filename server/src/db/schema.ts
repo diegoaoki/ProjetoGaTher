@@ -30,6 +30,8 @@ export const profiles = pgTable("profiles", {
   hairColor: varchar("hair_color", { length: 7 }).notNull().default("#3b2c20"),
   // Etapa 3 (LimeZu): personagem escolhido. NULL = usa hash do userId como fallback.
   characterId: varchar("character_id", { length: 16 }),
+  // Avatar modular: JSON {body,hair,outfit,hat}. NULL = sem custom (legado).
+  appearance: text("appearance"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

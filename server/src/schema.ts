@@ -11,6 +11,10 @@ export class Player extends Schema {
   @type("string") color: string = "#4ade80"; // cor da camisa (legado — não usado no LimeZu)
   @type("string") hairColor: string = "#3b2c20"; // cor do cabelo (legado)
   @type("string") characterId: string = "";  // adam|alex|amelia|bob — "" = fallback pra hash do userId
+  // Avatar modular (LimeZu Character Generator): JSON
+  // {body,hair,outfit,hat} com keys das peças. "" = sem custom (usa
+  // characterId/hash legado). Sincronizado p/ todos verem o avatar do peer.
+  @type("string") appearance: string = "";
   @type("string") zoneId: string = "open";
   // Bolha de conversa privada: "" = sem bolha. Mesmo bubbleId = mesma bolha
   // (N pessoas). Áudio entre membros = cheio; pra fora da bolha = baixo.

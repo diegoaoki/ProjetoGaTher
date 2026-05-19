@@ -34,6 +34,8 @@ export async function initDb(): Promise<void> {
 
       -- Migration idempotente: adiciona coluna character_id em profiles existentes
       ALTER TABLE profiles ADD COLUMN IF NOT EXISTS character_id VARCHAR(16);
+      -- Avatar modular: JSON {body,hair,outfit,hat} (NULL = legado)
+      ALTER TABLE profiles ADD COLUMN IF NOT EXISTS appearance TEXT;
 
       CREATE TABLE IF NOT EXISTS desk_reservations (
         desk_id VARCHAR(32) PRIMARY KEY,

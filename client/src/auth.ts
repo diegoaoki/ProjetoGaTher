@@ -28,6 +28,8 @@ export interface AuthProfile {
   bodyColor: string;
   hairColor: string;
   characterId?: string | null;
+  /** Avatar modular: JSON {body,hair,outfit,hat} ou null (legado). */
+  appearance?: string | null;
   updatedAt?: string;
 }
 
@@ -157,7 +159,7 @@ export async function fetchMe(httpUrl: string, token: string): Promise<{ user: A
 export async function updateProfile(
   httpUrl: string,
   token: string,
-  patch: { displayName?: string; bodyColor?: string; hairColor?: string; characterId?: string }
+  patch: { displayName?: string; bodyColor?: string; hairColor?: string; characterId?: string; appearance?: string }
 ): Promise<AuthProfile> {
   const resp = await fetch(httpUrl + "/profile", {
     method: "PATCH",
