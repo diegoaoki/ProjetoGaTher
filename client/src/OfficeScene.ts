@@ -207,12 +207,12 @@ export class OfficeScene extends Phaser.Scene {
   /** Cadeiras: posição + direção pra onde quem senta fica virado
    *  (calculada pela mesa/desk mais próxima — você senta de frente
    *  pra mesa). "up" se não achar mesa perto. */
-  private chairSpots: Array<{ x: number; y: number; dir: string }> = [];
-  /** Direção do sentar se está em cima de uma cadeira; senão null. */
+  private chairSpots: Array<{ x: number; y: number; dir: string; rx: number; ry: number }> = [];
+  /** Direção do sentar se está DENTRO da zona de uma cadeira/mesa
+   *  (retângulo generoso); senão null. */
   private onChair(x: number, y: number): string | null {
     for (const c of this.chairSpots) {
-      const dx = x - c.x, dy = y - c.y;
-      if (dx * dx + dy * dy <= 26 * 26) return c.dir;
+      if (Math.abs(x - c.x) <= c.rx && Math.abs(y - c.y) <= c.ry) return c.dir;
     }
     return null;
   }
@@ -970,14 +970,17 @@ export class OfficeScene extends Phaser.Scene {
           const dx = best.sx - f.x, dy = best.sy - f.y;
           dir = Math.abs(dy) >= Math.abs(dx) ? (dy < 0 ? "up" : "down") : (dx < 0 ? "left" : "right");
         }
-        return { x: f.x, y: f.y, dir };
+        // Zona generosa em volta da cadeira (sprite ~32px) — parar
+        // "em cima" da cadeira conta, não precisa acertar o centro.
+        return { x: f.x, y: f.y, dir, rx: 26, ry: 28 };
       });
-    // Assento DERIVADO DA PRÓPRIA MESA reservável (mesa.y+40, encara a
-    // mesa = "up"). Garante o sentar mesmo em mesa do editor / mapa com
-    // override, que NÃO tem móvel "chair" adjacente (causa do "não senta").
+    // Assento DERIVADO DA PRÓPRIA MESA reservável: zona LARGA na frente
+    // da mesa (cobre desde a borda da mesa até além da cadeira), pra
+    // "chegar na mesa e parar" já sentar — não precisa de móvel "chair"
+    // (mesa do editor / mapa com override também funcionam). Encara "up".
     const seatFromDesks = this.layout.furniture
       .filter((f) => f.type === "desk" && f.deskId)
-      .map((f) => ({ x: f.x, y: f.y + 40, dir: "up" }));
+      .map((f) => ({ x: f.x, y: f.y + 34, dir: "up", rx: 46, ry: 32 }));
     this.chairSpots = [...chairFromFurniture, ...seatFromDesks];
     this.layout.furniture.forEach((item) => {
       const sprite = this.add.image(item.x, item.y, item.tex || item.type);
