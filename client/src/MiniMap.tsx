@@ -27,11 +27,11 @@ export default function MiniMap({ room, meSessionId, onLocate, onClose, highligh
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // dots atuais (px do canvas) → usado no clique/hover pra achar a pessoa
   const dotsRef = useRef<
-    Array<{ cx: number; cy: number; x: number; y: number; me: boolean; name: string; userId: string }>
+    Array<{ cx: number; cy: number; x: number; y: number; me: boolean; name: string; userId: string; photo: string }>
   >([]);
   // Cache de fotos de perfil (data URL → Image) pro mini-mapa.
   const photoCache = useRef<Map<string, HTMLImageElement>>(new Map());
-  const hoverRef = useRef<{ cx: number; cy: number; name: string } | null>(null);
+  const hoverRef = useRef<{ cx: number; cy: number; name: string; photo: string } | null>(null);
   const highlightRef = useRef<string | null>(highlightUserId ?? null);
   highlightRef.current = highlightUserId ?? null;
 
@@ -83,8 +83,8 @@ export default function MiniMap({ room, meSessionId, onLocate, onClose, highligh
         const cy = (p.y - region.y) * scale;
         const me = sid === meSessionId;
         const uid = p.userId || "";
-        dots.push({ cx, cy, x: p.x, y: p.y, me, name: p.name || "?", userId: uid });
         const photo: string = p.photo || "";
+        dots.push({ cx, cy, x: p.x, y: p.y, me, name: p.name || "?", userId: uid, photo });
         let img: HTMLImageElement | undefined;
         if (photo) {
           img = photoCache.current.get(photo);
@@ -138,19 +138,43 @@ export default function MiniMap({ room, meSessionId, onLocate, onClose, highligh
       });
       dotsRef.current = dots;
 
-      // Tooltip de nome (hover)
+      // Tooltip no hover: foto (se houver) + nome.
       const hov = hoverRef.current;
       if (hov) {
         ctx.font = "11px system-ui, -apple-system";
         const tw = ctx.measureText(hov.name).width;
-        let bx = hov.cx + 8;
-        let by = hov.cy - 10;
-        if (bx + tw + 8 > cv.width) bx = hov.cx - tw - 16;
-        if (by < 2) by = hov.cy + 8;
-        ctx.fillStyle = "#000000cc";
-        ctx.fillRect(bx, by, tw + 8, 16);
+        const himg = hov.photo ? photoCache.current.get(hov.photo) : undefined;
+        const hasPhoto = !!(himg && himg.complete && himg.naturalWidth > 0);
+        const PS = 40;          // tamanho da foto no tooltip
+        const PAD = 6;
+        const bw = (hasPhoto ? PS + PAD : 0) + tw + PAD * 2;
+        const bh = hasPhoto ? PS + PAD * 2 : 16;
+        let bx = hov.cx + 10;
+        let by = hov.cy - bh / 2;
+        if (bx + bw > cv.width) bx = hov.cx - bw - 10;
+        if (bx < 2) bx = 2;
+        if (by < 2) by = 2;
+        if (by + bh > cv.height) by = cv.height - bh - 2;
+        ctx.fillStyle = "#000000d8";
+        ctx.fillRect(bx, by, bw, bh);
+        ctx.strokeStyle = "#334155";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(bx, by, bw, bh);
+        let tx = bx + PAD;
+        if (hasPhoto) {
+          const px2 = bx + PAD;
+          const py2 = by + PAD;
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(px2 + PS / 2, py2 + PS / 2, PS / 2, 0, Math.PI * 2);
+          ctx.closePath();
+          ctx.clip();
+          ctx.drawImage(himg as HTMLImageElement, px2, py2, PS, PS);
+          ctx.restore();
+          tx = px2 + PS + PAD;
+        }
         ctx.fillStyle = "#ffffff";
-        ctx.fillText(hov.name, bx + 4, by + 12);
+        ctx.fillText(hov.name, tx, by + bh / 2 + 4);
       }
     };
     draw();
@@ -180,14 +204,14 @@ export default function MiniMap({ room, meSessionId, onLocate, onClose, highligh
     const rect = cv.getBoundingClientRect();
     const px = ((e.clientX - rect.left) / rect.width) * cv.width;
     const py = ((e.clientY - rect.top) / rect.height) * cv.height;
-    let best: { cx: number; cy: number; name: string; d2: number } | null = null;
+    let best: { cx: number; cy: number; name: string; photo: string; d2: number } | null = null;
     for (const d of dotsRef.current) {
       const dd = (d.cx - px) ** 2 + (d.cy - py) ** 2;
       if (dd < 16 * 16 && (!best || dd < best.d2)) {
-        best = { cx: d.cx, cy: d.cy, name: d.me ? `${d.name} (você)` : d.name, d2: dd };
+        best = { cx: d.cx, cy: d.cy, name: d.me ? `${d.name} (você)` : d.name, photo: d.photo, d2: dd };
       }
     }
-    hoverRef.current = best ? { cx: best.cx, cy: best.cy, name: best.name } : null;
+    hoverRef.current = best ? { cx: best.cx, cy: best.cy, name: best.name, photo: best.photo } : null;
   }
 
   return (
