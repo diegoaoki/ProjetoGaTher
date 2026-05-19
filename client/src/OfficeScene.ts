@@ -231,6 +231,55 @@ export class OfficeScene extends Phaser.Scene {
     }
     return "";
   }
+
+  /**
+   * Emite myInfo/peerInfo pro App recalcular o áudio espacial. Usa as
+   * posições do STATE do Colyseus (chegam por websocket, não dependem
+   * do rAF) → funciona mesmo com a aba em background (chamado também por
+   * um setInterval, não só pelo update() do Phaser, que o browser
+   * estrangula fora de foco). Senão o volume congela e você continua
+   * ouvindo quem se afastou.
+   */
+  private emitPositions() {
+    if (!this.onPositionsUpdate || !this.room || !this.myContainer) return;
+    const state: any = this.room.state;
+    const peerInfo = new Map<
+      string,
+      { x: number; y: number; zoneId: string; bubbleId: string; role: string; visitorOk: boolean; deskSeat: string; floor: number }
+    >();
+    this.remotePlayers.forEach((rp, sessionId) => {
+      const p = state?.players?.get?.(sessionId);
+      const px = p?.x ?? rp.container.x;
+      const py = p?.y ?? rp.container.y;
+      peerInfo.set(sessionId, {
+        x: px,
+        y: py,
+        zoneId: p?.zoneId || "open",
+        bubbleId: p?.bubbleId || "",
+        role: p?.role || "user",
+        visitorOk: p?.visitorOk ?? true,
+        deskSeat: p?.deskSeat || this.physicalDeskAt(px, py),
+        floor: p?.floor ?? 1,
+      });
+    });
+    const mySid = (this.room as any).sessionId;
+    const me = state?.players?.get?.(mySid);
+    const mx = me?.x ?? this.myContainer.x;
+    const my = me?.y ?? this.myContainer.y;
+    this.onPositionsUpdate(
+      {
+        x: mx,
+        y: my,
+        zoneId: this.currentZone || "open",
+        bubbleId: me?.bubbleId || "",
+        role: me?.role || "user",
+        visitorOk: me?.visitorOk ?? true,
+        deskSeat: me?.deskSeat || this.physicalDeskAt(mx, my),
+        floor: me?.floor ?? this.myFloor,
+      },
+      peerInfo
+    );
+  }
   private floorSprite?: Phaser.GameObjects.TileSprite;
   private worldBorder?: Phaser.GameObjects.Graphics;
   private furnitureObjs: Phaser.GameObjects.GameObject[] = [];
@@ -445,6 +494,12 @@ export class OfficeScene extends Phaser.Scene {
     window.addEventListener("keydown", onArrowDown);
     window.addEventListener("keyup", onArrowUp);
 
+    // Tick de áudio independente do rAF: o browser estrangula o
+    // update() do Phaser quando a aba está fora de foco, congelando os
+    // volumes. setInterval continua (≥1s em background) e recalcula com
+    // posições do state (ws) → para de ouvir quem saiu de perto.
+    const posTimer = window.setInterval(() => this.emitPositions(), 200);
+
     // Guard global anti-vazamento: se um pointerdown acontece numa UI
     // React (sidebar/lista de usuários, HUD, modal...) e NÃO no canvas do
     // jogo, suprime o "clique de mundo" (ex: abrir modal da mesa por
@@ -470,6 +525,7 @@ export class OfficeScene extends Phaser.Scene {
       window.removeEventListener("pointerdown", uiClickGuard, true);
       window.removeEventListener("keydown", onArrowDown);
       window.removeEventListener("keyup", onArrowUp);
+      clearInterval(posTimer);
     });
 
     // Pan com botão direito do mouse — não interfere com cliques de UI nem com tecla E
@@ -2702,40 +2758,7 @@ export class OfficeScene extends Phaser.Scene {
       }
     }
 
-    if (this.onPositionsUpdate) {
-      const peerInfo = new Map<string, { x: number; y: number; zoneId: string; bubbleId: string; role: string; visitorOk: boolean; deskSeat: string; floor: number }>();
-      const state: any = this.room.state;
-      this.remotePlayers.forEach((rp, sessionId) => {
-        const peerPlayer = state?.players?.get?.(sessionId);
-        peerInfo.set(sessionId, {
-          x: rp.container.x,
-          y: rp.container.y,
-          zoneId: peerPlayer?.zoneId || "open",
-          bubbleId: peerPlayer?.bubbleId || "",
-          role: peerPlayer?.role || "user",
-          visitorOk: peerPlayer?.visitorOk ?? true,
-          // Mesa-conversa (G) OU estar fisicamente numa mesa → mesmo
-          // efeito: só ouve quem está na MESMA mesa.
-          deskSeat: peerPlayer?.deskSeat || this.physicalDeskAt(rp.container.x, rp.container.y),
-          floor: peerPlayer?.floor ?? 1,
-        });
-      });
-      const mySessionId = (this.room as any).sessionId;
-      const myPlayer = state?.players?.get?.(mySessionId);
-      this.onPositionsUpdate(
-        {
-          x: this.myContainer.x,
-          y: this.myContainer.y,
-          zoneId: this.currentZone || "open",
-          bubbleId: myPlayer?.bubbleId || "",
-          role: myPlayer?.role || "user",
-          visitorOk: myPlayer?.visitorOk ?? true,
-          deskSeat: myPlayer?.deskSeat || this.physicalDeskAt(this.myContainer.x, this.myContainer.y),
-          floor: myPlayer?.floor ?? this.myFloor,
-        },
-        peerInfo
-      );
-    }
+    this.emitPositions();
 
     this.updateNearestDesk();
 
