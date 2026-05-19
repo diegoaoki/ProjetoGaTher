@@ -191,6 +191,9 @@ export class OfficeScene extends Phaser.Scene {
   private lastSync = 0;
   private movingSince = 0;     // timestamp (ms) quando começou a se mover continuamente
   private isMoving = false;
+  /** Estado das SETAS via listener próprio (window) — funciona mesmo
+   *  digitando no chat (Phaser keyboard fica off ao focar input). */
+  private altArrows = { up: false, down: false, left: false, right: false };
 
   // === Mesa-conversa (tecla G + modo fantasma) ===
   private ghostMode = false;
@@ -424,6 +427,24 @@ export class OfficeScene extends Phaser.Scene {
     window.addEventListener("focusin", onFocusIn);
     window.addEventListener("focusout", onFocusOut);
 
+    // SETAS sempre movem o avatar, mesmo digitando no chat (decisão do
+    // user). Listener próprio no window — independe do keyboard do Phaser
+    // (que é desligado ao focar input). WASD/letras continuam só
+    // digitando (o bloco de movimento ignora WASD quando `typing`).
+    const arrowMap: Record<string, "up" | "down" | "left" | "right"> = {
+      ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left", ArrowRight: "right",
+    };
+    const onArrowDown = (e: KeyboardEvent) => {
+      const d = arrowMap[e.key];
+      if (d) this.altArrows[d] = true;
+    };
+    const onArrowUp = (e: KeyboardEvent) => {
+      const d = arrowMap[e.key];
+      if (d) this.altArrows[d] = false;
+    };
+    window.addEventListener("keydown", onArrowDown);
+    window.addEventListener("keyup", onArrowUp);
+
     // Guard global anti-vazamento: se um pointerdown acontece numa UI
     // React (sidebar/lista de usuários, HUD, modal...) e NÃO no canvas do
     // jogo, suprime o "clique de mundo" (ex: abrir modal da mesa por
@@ -447,6 +468,8 @@ export class OfficeScene extends Phaser.Scene {
       window.removeEventListener("focusin", onFocusIn);
       window.removeEventListener("focusout", onFocusOut);
       window.removeEventListener("pointerdown", uiClickGuard, true);
+      window.removeEventListener("keydown", onArrowDown);
+      window.removeEventListener("keyup", onArrowUp);
     });
 
     // Pan com botão direito do mouse — não interfere com cliques de UI nem com tecla E
@@ -471,6 +494,19 @@ export class OfficeScene extends Phaser.Scene {
           }
         }
         this.startPan(pointer.x, pointer.y);
+        return;
+      }
+      // DOUBLE-CLICK (botão esquerdo) no mundo → anda até o ponto.
+      // `detail === 2` = 2º clique de um duplo. Ignora no editor e se o
+      // clique foi numa UI (guard global anti-vazamento).
+      const me = pointer.event as MouseEvent | undefined;
+      if (
+        !this.editMode &&
+        me && me.detail === 2 &&
+        performance.now() >= this.ignoreWorldClickUntil
+      ) {
+        const wp = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+        this.navigateTo(wp.x, wp.y);
       }
     });
     // Habilita um 2º ponteiro de toque pra detectar pinça (mobile).
@@ -2480,6 +2516,13 @@ export class OfficeScene extends Phaser.Scene {
         }
       }
     }
+
+    // SETAS sempre (mesmo digitando no chat). Sobrepõe se alguma seta
+    // está pressionada; se nenhuma, não mexe (mantém WASD/joystick/nav).
+    if (this.altArrows.left) { vx = -1; newDir = "left"; }
+    else if (this.altArrows.right) { vx = 1; newDir = "right"; }
+    if (this.altArrows.up) { vy = -1; newDir = "up"; }
+    else if (this.altArrows.down) { vy = 1; newDir = "down"; }
 
     // Autopilot: se há rota ativa e o usuário NÃO está dando input manual,
     // o avatar segue a rota. Qualquer input manual cancela a navegação.

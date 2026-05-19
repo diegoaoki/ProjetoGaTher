@@ -426,12 +426,13 @@ export default function ChatPanel({
               autoFocus
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              // Só impede o Phaser de receber a tecla (W/A/S/D/E/C move o
-              // avatar). NÃO trata Enter aqui — quem envia é o onSubmit do
-              // form. NÃO chamar preventDefault no Enter (mataria o submit
-              // implícito do form).
-              onKeyDown={(e) => e.stopPropagation()}
-              onKeyUp={(e) => e.stopPropagation()}
+              // Bloqueia o Phaser de receber a tecla (W/A/S/D/E/C move o
+              // avatar) — EXCETO as SETAS, que o user quer que continuem
+              // movendo o avatar mesmo digitando (listener próprio no
+              // window precisa receber). NÃO trata Enter aqui — quem envia
+              // é o onSubmit do form (sem preventDefault no Enter).
+              onKeyDown={(e) => { if (!e.key.startsWith("Arrow")) e.stopPropagation(); }}
+              onKeyUp={(e) => { if (!e.key.startsWith("Arrow")) e.stopPropagation(); }}
               onKeyPress={(e) => e.stopPropagation()}
               placeholder={
                 visitorBlocked
