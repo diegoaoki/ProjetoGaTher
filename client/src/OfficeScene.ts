@@ -607,10 +607,19 @@ export class OfficeScene extends Phaser.Scene {
     this.input.on("wheel", (_p: unknown, _o: unknown, _dx: number, dy: number) => {
       applyZoom(this.cameras.main.zoom - dy * 0.0015);
     });
-    this.input.keyboard!.addKey("MINUS").on("down", () => applyZoom(this.cameras.main.zoom - 0.15));
-    this.input.keyboard!.addKey("PLUS").on("down", () => applyZoom(this.cameras.main.zoom + 0.15));
-    this.input.keyboard!.addKey("EQUALS").on("down", () => applyZoom(this.cameras.main.zoom + 0.15));
-    this.input.keyboard!.addKey("ZERO").on("down", () => applyZoom(1.3));
+    // Zoom por teclado via `e.key` (CARACTERE produzido) num listener
+    // de window — independe do layout. Os addKey("MINUS"/"PLUS"/...) do
+    // Phaser usam KeyCodes de layout US: no teclado BR/ABNT2 o `-`/`+`
+    // ficam em teclas/códigos diferentes e não disparavam. `e.key`
+    // cobre tb o numpad (+ e - dão "+"/"-"). Ignora se digitando.
+    const onZoomKey = (e: KeyboardEvent) => {
+      if (isTypingInInput()) return;
+      if (e.key === "-") applyZoom(this.cameras.main.zoom - 0.15);
+      else if (e.key === "+" || e.key === "=") applyZoom(this.cameras.main.zoom + 0.15);
+      else if (e.key === "0") applyZoom(1.3);
+    };
+    window.addEventListener("keydown", onZoomKey);
+    this.events.once("shutdown", () => window.removeEventListener("keydown", onZoomKey));
   }
 
   private startPan(screenX: number, screenY: number) {
