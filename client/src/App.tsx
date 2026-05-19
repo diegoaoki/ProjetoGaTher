@@ -10,6 +10,7 @@ import MobileControls from "./MobileControls";
 import AudioTestScreen from "./AudioTestScreen";
 import SecurityLockModal from "./SecurityLockModal";
 import MiniMap from "./MiniMap";
+import AvatarEditor from "./AvatarEditor";
 import { getMirrorSelf } from "./audioPrefs";
 import { ChatMessage, playNotificationBeep } from "./chat";
 import { useIsMobile } from "./useIsMobile";
@@ -2717,57 +2718,28 @@ export default function App() {
 
       {editingAvatar && (
         <div style={modalStyle} onClick={() => !savingEdit && setEditingAvatar(false)}>
-          <div style={cardStyle} onClick={(e) => e.stopPropagation()}>
-            <h2 style={{ margin: "0 0 8px", fontSize: 20 }}>Escolha seu personagem</h2>
-            <p style={{ margin: "0 0 16px", fontSize: 12, opacity: 0.7 }}>
-              Click pra escolher. Salva ao clicar — outros vão ver na hora.
-            </p>
-
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10, marginBottom: 16 }}>
-              {(["adam", "alex", "amelia", "bob"] as const).map((c) => {
-                const selected = (session.profile.characterId || "") === c;
-                const label = c.charAt(0).toUpperCase() + c.slice(1);
-                return (
-                  <button
-                    key={c}
-                    onClick={async () => {
-                      if (savingEdit) return;
-                      setEditError("");
-                      setSavingEdit(true);
-                      try {
-                        const profile = await updateProfile(HTTP_URL, session.token, { characterId: c });
-                        setSession({ ...session, profile });
-                        roomRef.current?.send("appearance", { characterId: c });
-                      } catch (e: any) {
-                        setEditError(e?.message || "Falha ao salvar");
-                      } finally {
-                        setSavingEdit(false);
-                      }
-                    }}
-                    disabled={savingEdit}
-                    style={{
-                      background: selected ? "#2563eb" : "#1e293b",
-                      border: selected ? "2px solid #60a5fa" : "1px solid #334155",
-                      borderRadius: 10, padding: 10,
-                      cursor: "pointer",
-                      display: "flex", flexDirection: "column", alignItems: "center", gap: 6,
-                    }}
-                  >
-                    <CharacterPreview character={label} />
-                    <span style={{ fontSize: 12, color: "#e2e8f0" }}>{label}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div style={{ display: "flex", gap: 8 }}>
-              <button onClick={() => setEditingAvatar(false)} disabled={savingEdit}
-                style={{ ...buttonStyle, background: "#334155", color: "#e2e8f0" }}>
-                Fechar
-              </button>
-            </div>
-
-            {editError && <p style={{ color: "#f87171", marginTop: 12, fontSize: 13 }}>{editError}</p>}
+          <div style={{ ...cardStyle, width: 380 }} onClick={(e) => e.stopPropagation()}>
+            <AvatarEditor
+              currentAppearance={session.profile.appearance ?? null}
+              saving={savingEdit}
+              error={editError}
+              onClose={() => !savingEdit && setEditingAvatar(false)}
+              onSave={async (appearanceJson) => {
+                if (savingEdit) return;
+                setEditError("");
+                setSavingEdit(true);
+                try {
+                  const profile = await updateProfile(HTTP_URL, session.token, { appearance: appearanceJson });
+                  setSession({ ...session, profile });
+                  roomRef.current?.send("appearance", { appearance: appearanceJson });
+                  setEditingAvatar(false);
+                } catch (e: any) {
+                  setEditError(e?.message || "Falha ao salvar");
+                } finally {
+                  setSavingEdit(false);
+                }
+              }}
+            />
           </div>
         </div>
       )}
