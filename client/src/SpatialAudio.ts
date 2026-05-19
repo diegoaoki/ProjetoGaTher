@@ -225,15 +225,14 @@ export class SpatialAudio {
         await this.localParticipant.setMicrophoneEnabled(false);
       }
 
-      // CÂMERA: continua gerenciada pelo LiveKit (sem mudança no pipeline)
-      if (opts.enableVideo) {
-        const vts = await createLocalTracks({
-          audio: false,
-          video: { resolution: { width: 320, height: 240 }, facingMode: "user" },
-        });
-        for (const t of vts) await this.localParticipant.publishTrack(t);
-      }
-      await this.localParticipant.setCameraEnabled(false);
+      // CÂMERA: NÃO pré-publicar. Antes o connect() criava+publicava a
+      // track e fazia setCameraEnabled(false) → a publicação muted virava
+      // um CARD PRETO em todos os peers, e o setCameraEnabled(true)
+      // depois conflitava com a track manual (só funcionava no 2º
+      // toggle). Agora a câmera é 100% on-demand: setCameraEnabled(true)
+      // (LiveKit) cria+publica na hora; (false) despublica → some o card.
+      // Começa desligada (nenhuma track publicada) — alinhado ao pedido
+      // "cam/mic sempre off ao iniciar".
 
       // Aplica saída de áudio escolhida (setSinkId via LiveKit, best-effort)
       const spkId = getSpeakerDeviceId();
@@ -506,11 +505,19 @@ export class SpatialAudio {
   public async setMicEnabled(enabled: boolean) {
     if (!this.localParticipant) return;
     if (this.micTrack) {
-      // Pipeline próprio: mute/unmute mantém o GainNode intacto
+      // Pipeline próprio: mute/unmute mantém o GainNode intacto.
+      // Ao LIGAR, garante o AudioContext retomado ANTES do unmute — se
+      // estava suspenso (autoplay), o 1º unmute não fluía áudio e só
+      // funcionava no 2º toggle.
       this.micMuted = !enabled;
       try {
-        if (enabled) await this.micTrack.unmute();
-        else await this.micTrack.mute();
+        if (enabled) {
+          const ctx = this.ensureAudioCtx();
+          if (ctx && ctx.state === "suspended") {
+            try { await ctx.resume(); } catch {}
+          }
+          await this.micTrack.unmute();
+        } else await this.micTrack.mute();
       } catch (e) {
         console.warn("[spatial] mic mute/unmute falhou:", e);
       }
