@@ -423,10 +423,20 @@ export default function ChatPanel({
   );
 }
 
+// Mostra só HH:MM pra msgs de hoje; "ontem HH:MM"; e "DD/MM HH:MM" pra mais
+// antigas. Antes era sempre HH:MM sem data — uma msg de ontem 18:08 acima de
+// uma de hoje 10:34 parecia fora de ordem / formato inconsistente (BUG-010).
 function formatTime(iso: string): string {
   try {
     const d = new Date(iso);
-    return d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    const hm = d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const t = d.getTime();
+    if (t >= startOfToday) return hm;
+    if (t >= startOfToday - 86400000) return `ontem ${hm}`;
+    const dm = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+    return `${dm} ${hm}`;
   } catch {
     return "";
   }

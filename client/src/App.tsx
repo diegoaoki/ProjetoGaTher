@@ -1822,7 +1822,7 @@ export default function App() {
             {rows.map((p) => (
                 <div key={p.key} style={{ ...sidebarRowStyle, opacity: p.online ? 1 : 0.5 }}>
                   <MiniAvatar bodyColor={p.bodyColor} hairColor={p.hairColor} />
-                  <div style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  <div style={{ flex: 1, minWidth: 120, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                     <span
                       title={p.online ? "Online" : "Offline"}
                       style={{
@@ -1849,7 +1849,7 @@ export default function App() {
                     )}
                   </div>
                   {!p.isMe && p.online && p.sessionId && (
-                    <div style={{ display: "flex", gap: 4 }}>
+                    <div style={sidebarActionsRow}>
                       <button
                         onClick={() => {
                           // p.key == userId (vide construção das rows)
@@ -1919,7 +1919,7 @@ export default function App() {
                     </div>
                   )}
                   {!p.isMe && !p.online && (
-                    <div style={{ display: "flex", gap: 4 }}>
+                    <div style={sidebarActionsRow}>
                       <button
                         onClick={() => goToUserDesk(p.key, p.name)}
                         disabled={!deskOfUser.has(p.key)}
@@ -2066,9 +2066,13 @@ export default function App() {
         </div>
       )}
 
-      {/* Painel do visitante (até ser autorizado) */}
-      {isVisitor && !visitorAuthorized && conn === "connected" && (
-        <div style={{ ...editorPanelStyle, top: 16, right: 16, width: 300 }}>
+      {/* Painel do visitante (até ser autorizado). O chat também ancora à
+          direita (340px, full-height) — sem ajuste, este painel ficava
+          exatamente em cima das abas do chat (BUG-009). Quando o chat está
+          aberto: no desktop desloca pra esquerda do painel de chat; no
+          mobile o chat é fullscreen, então some (reaparece ao fechar). */}
+      {isVisitor && !visitorAuthorized && conn === "connected" && !(chatOpen && isMobile) && (
+        <div style={{ ...editorPanelStyle, top: 16, right: chatOpen ? 356 : 16, width: 300 }}>
           <div style={{ fontWeight: 700, fontSize: 14, marginBottom: 4 }}>👤 Você é visitante</div>
           {visitorWaiting ? (
             // Entrou por código → host é quem gerou; aguarda autorização
@@ -2979,6 +2983,17 @@ const sidebarListStyle: React.CSSProperties = {
 const sidebarRowStyle: React.CSSProperties = {
   display: "flex", gap: 8, alignItems: "center",
   padding: "4px 6px", borderRadius: 4, fontSize: 13,
+  // Sidebar tem só 240px. Sem wrap, os 5-6 botões de ação de um usuário
+  // online espremiam o nome (flex:1 + overflow:hidden) até 0px — só a
+  // linha "você" (sem botões) e os offline (1 botão) mostravam nome
+  // (BUG-008). Com wrap + flexBasis:100% nos botões, eles caem pra linha
+  // de baixo e o nome sempre aparece.
+  flexWrap: "wrap",
+};
+// Container dos botões de ação: ocupa a linha inteira abaixo do nome e
+// quebra entre si em telas estreitas (mobile).
+const sidebarActionsRow: React.CSSProperties = {
+  display: "flex", gap: 4, flexBasis: "100%", flexWrap: "wrap",
 };
 const youBadgeStyle: React.CSSProperties = {
   marginLeft: 6, background: "#0e7490", color: "#fff",

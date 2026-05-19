@@ -1813,6 +1813,11 @@ export class OfficeScene extends Phaser.Scene {
       backgroundColor: "#000000bb",
       padding: { x: 6, y: 2 },
       resolution: 2,
+      // Contorno: quando dois avatares ficam lado a lado as tags se
+      // sobrepõem (BUG-012); o stroke mantém cada nome legível mesmo
+      // colado no de cima/baixo.
+      stroke: "#000000",
+      strokeThickness: 3,
     }).setOrigin(0.5);
 
     let spawnX = player.x;
@@ -1924,6 +1929,10 @@ export class OfficeScene extends Phaser.Scene {
       backgroundColor: "#000000bb",
       padding: { x: 6, y: 2 },
       resolution: 2,
+      // Ver nota em myNameText (BUG-012): contorno mantém o nome legível
+      // quando duas tags se sobrepõem.
+      stroke: "#000000",
+      strokeThickness: 3,
     }).setOrigin(0.5);
 
     const container = this.add.container(player.x, player.y, [ring, sprite, nameText]);
