@@ -54,7 +54,7 @@ Legenda: 🔴 prioridade · 🐞 bug · 🟢 feito (mantido como referência) ·
 
 ### Interação
 - ⚪ [PEDIDO 2026-05-18] **editor de avatar completo** — escolher o avatar por partes: cabeça, chapéu, cabelo, corpo, cor (etc), além do que já existe (cor de corpo/cabelo). Provável uso de spritesheets LimeZu de personagem (camadas) ou seletor de presets. Definir: quantas opções por slot, se é layered (compõe em runtime) ou sprites prontos, persistência no profile (Postgres) + sync no schema.
-- 🐞 [REPORTADO 2026-05-18, EM ANÁLISE] **"sentar" na cadeira ainda quebra o avatar** — investigar (pode ter relação com o recálculo de cadeira y+56→y+40 / anim `_sit` / `onChair`).
+- 🟢 [FEITO 2026-05-18] **"sentar" quebrava o avatar (pose errada/glitch)** — causa: spritesheet `_sit` tem a arte sentada numa posição diferente dentro da célula 16×32 → ao trocar idle→`_sit` na mesma origem, a figura desalinhava da cadeira (flutuando/cortada). Decisão do user (opção segura): na cadeira o avatar fica **idle virado pra mesa** (dir da `chairSpot`), sem usar o sheet `_sit`. Zero glitch, zero iteração. Anims `_sit` seguem criadas no AssetLoader (não usadas; reusáveis se um dia tiver sheet/anim adequada).
 - 🟢 [FEITO] **sprint com Shift** — `cursors.shift?.isDown ? 2 : 1` multiplica dx/dy; pior caso ~54px/sync < MAX_DELTA(100), sem rubberband.
 - 🟢 [FEITO] **não mostrar "mesa reservada" no join** — `deskToastSinceRef` (join+5s); só toasta reserva ATIVA pós-join.
 - 🟢 [FEITO] **bolha sem convite** — `handleBubbleInvite` cria/junta a bolha direto; removidos modal/handlers de convite; 🫧 = "Bolha aberta com X".

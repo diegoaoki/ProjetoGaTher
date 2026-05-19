@@ -2313,12 +2313,16 @@ export class OfficeScene extends Phaser.Scene {
     }
 
     this.myDirection = newDir;
-    // Parado em cima de uma cadeira → senta virado pra mesa (dir da cadeira).
+    // Parado em cima de uma cadeira → fica IDLE virado pra mesa (dir da
+    // cadeira). NÃO usa o spritesheet `_sit`: a arte sentada fica numa
+    // posição diferente dentro da célula 16×32 e desalinhava da cadeira
+    // (sprite "flutuando/cortado" — decisão do user: idle virado pra mesa,
+    // lê-se como "na mesa", zero glitch).
     let myAnim = this.isMoving ? "walk" : "idle";
     let myAnimDir = this.myDirection;
     const mySitDir = this.isMoving ? null : this.onChair(this.myContainer.x, this.myContainer.y);
     if (mySitDir) {
-      myAnim = "sit";
+      myAnim = "idle";
       myAnimDir = mySitDir;
     }
     const myKey = `${this.myTextureKey}_${myAnimDir}_${myAnim}`;
@@ -2364,7 +2368,7 @@ export class OfficeScene extends Phaser.Scene {
       let aDir = rp.direction;
       const rpSitDir = moved ? null : this.onChair(rp.container.x, rp.container.y);
       if (rpSitDir) {
-        anim = "sit";
+        anim = "idle"; // idem meu avatar: idle virado pra mesa (sem _sit glitch)
         aDir = rpSitDir;
       }
       const key = `${rp.textureKey}_${aDir}_${anim}`;
