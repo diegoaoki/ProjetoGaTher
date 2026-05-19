@@ -2287,7 +2287,7 @@ export class OfficeScene extends Phaser.Scene {
     baseSprite: Phaser.GameObjects.Sprite,
     textureKey: string,
     dir: string,
-    state: "idle" | "walk"
+    state: "idle" | "walk" | "sit"
   ) {
     if (layers && layers.length > 0) {
       for (const l of layers) {
@@ -2678,19 +2678,21 @@ export class OfficeScene extends Phaser.Scene {
     // posição diferente dentro da célula 16×32 e desalinhava da cadeira
     // (sprite "flutuando/cortado" — decisão do user: idle virado pra mesa,
     // lê-se como "na mesa", zero glitch).
-    let myAnim = this.isMoving ? "walk" : "idle";
+    let myAnim: "idle" | "walk" | "sit" = this.isMoving ? "walk" : "idle";
     let myAnimDir = this.myDirection;
     const mySitDir = this.isMoving ? null : this.onChair(this.myContainer.x, this.myContainer.y);
+    // Avatar modular (camadas) não tem sheet `_sit` → fica idle virado
+    // pra mesa. Legado (4 chars) usa a POSE sentada de verdade + offset
+    // de 8px pra baixo (a arte sentada fica ~8px acima da base da
+    // em-pé; sem o offset ela "flutua" acima da cadeira).
+    const myModular = this.myLayers.length > 0;
     if (mySitDir) {
-      myAnim = "idle";
       myAnimDir = mySitDir;
+      myAnim = myModular ? "idle" : "sit";
     }
-    // Camadas modulares se houver; senão o sprite legado. play(key,true)
-    // já deduplica (ignoreIfPlaying), não precisa do myAnimKey.
-    this.animateAvatar(
-      this.myLayers, this.mySprite, this.myTextureKey,
-      myAnimDir, myAnim === "walk" ? "walk" : "idle"
-    );
+    const mySitY = mySitDir && !myModular ? 8 : 0;
+    if (this.mySprite && this.mySprite.y !== mySitY) this.mySprite.setY(mySitY);
+    this.animateAvatar(this.myLayers, this.mySprite, this.myTextureKey, myAnimDir, myAnim);
 
     if (time - this.lastSync > SYNC_INTERVAL) {
       this.lastSync = time;
@@ -2725,17 +2727,17 @@ export class OfficeScene extends Phaser.Scene {
       rp.container.setDepth(rp.container.y);
 
       const moved = Math.abs(rp.container.x - prevX) > 0.5 || Math.abs(rp.container.y - prevY) > 0.5;
-      let anim = moved ? "walk" : "idle";
+      let anim: "idle" | "walk" | "sit" = moved ? "walk" : "idle";
       let aDir = rp.direction;
       const rpSitDir = moved ? null : this.onChair(rp.container.x, rp.container.y);
+      const rpModular = !!(rp.layers && rp.layers.length > 0);
       if (rpSitDir) {
-        anim = "idle"; // idem meu avatar: idle virado pra mesa (sem _sit glitch)
         aDir = rpSitDir;
+        anim = rpModular ? "idle" : "sit"; // modular não tem _sit
       }
-      this.animateAvatar(
-        rp.layers, rp.sprite, rp.textureKey,
-        aDir, anim === "walk" ? "walk" : "idle"
-      );
+      const rpSitY = rpSitDir && !rpModular ? 8 : 0;
+      if (rp.sprite.y !== rpSitY) rp.sprite.setY(rpSitY);
+      this.animateAvatar(rp.layers, rp.sprite, rp.textureKey, aDir, anim);
     });
 
     this.advanceSecurityNpcs(dt);
