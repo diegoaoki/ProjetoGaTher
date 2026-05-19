@@ -1556,6 +1556,11 @@ export class OfficeScene extends Phaser.Scene {
           if (player.characterId && player.characterId !== this.myTextureKey) {
             this.refreshMyCharacter(player.characterId);
           }
+          // Mudança do nome de exibição (modal "Alterar nome")
+          if (player.name && this.myNameText) {
+            const want = player.name + " (você)";
+            if (this.myNameText.text !== want) this.myNameText.setText(want);
+          }
           // Mudança de avatar modular (editor)
           if ((player.appearance || "") !== this.myAppearance) {
             this.myAppearance = player.appearance || "";
@@ -1586,6 +1591,13 @@ export class OfficeScene extends Phaser.Scene {
             } else if (!player.visitorOk && c.visible) {
               c.setVisible(false);
             }
+          }
+          // Nome de exibição mudou → atualiza o label e o data do
+          // right-click (menu de contexto).
+          if (player.name && rp.nameText && rp.nameText.text !== player.name) {
+            rp.nameText.setText(player.name);
+            rp.sprite.setData("rpName", player.name);
+            rp.layers?.forEach((l) => l.sprite.setData("rpName", player.name));
           }
           if (rp.bodyColor !== player.color || rp.hairColor !== player.hairColor) {
             this.refreshRemoteAvatarTexture(rp, player.color, player.hairColor);

@@ -357,6 +357,10 @@ export default function App() {
   const [photoOpen, setPhotoOpen] = useState(false);
   const [photoSaving, setPhotoSaving] = useState(false);
   const [photoError, setPhotoError] = useState("");
+  const [nameOpen, setNameOpen] = useState(false);
+  const [nameVal, setNameVal] = useState("");
+  const [nameSaving, setNameSaving] = useState(false);
+  const [nameError, setNameError] = useState("");
   // Abre "Novidades" automaticamente 1x por versão (após entrar).
   useEffect(() => {
     if (conn !== "connected") return;
@@ -1715,6 +1719,12 @@ export default function App() {
               onClick={() => setSettingsOpen(false)}
             >
               <button onClick={() => setEditingAvatar(true)} style={menuItemStyle}>🎨 Editar avatar</button>
+              <button
+                onClick={() => { setNameError(""); setNameVal(session.profile.displayName || ""); setNameOpen(true); }}
+                style={menuItemStyle}
+              >
+                ✏️ Alterar nome
+              </button>
               {!isVisitor && (
                 <button onClick={() => { setPhotoError(""); setPhotoOpen(true); }} style={menuItemStyle}>🖼️ Foto de perfil</button>
               )}
@@ -2820,6 +2830,62 @@ export default function App() {
         <div style={modalStyle} onClick={() => setWhatsNewOpen(false)}>
           <div style={{ ...cardStyle, width: 420 }} onClick={(e) => e.stopPropagation()}>
             <WhatsNew onClose={() => setWhatsNewOpen(false)} />
+          </div>
+        </div>
+      )}
+
+      {nameOpen && session && (
+        <div style={modalStyle} onClick={() => !nameSaving && setNameOpen(false)}>
+          <div style={{ ...cardStyle, width: 360 }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ margin: "0 0 12px", fontSize: 20 }}>✏️ Alterar nome</h2>
+            <input
+              value={nameVal}
+              onChange={(e) => setNameVal(e.target.value)}
+              onKeyDown={(e) => e.stopPropagation()}
+              maxLength={24}
+              placeholder="Nome que aparece (até 24)"
+              disabled={nameSaving}
+              autoFocus
+              style={{
+                width: "100%", boxSizing: "border-box", marginBottom: 8,
+                padding: "9px 12px", borderRadius: 6, border: "1px solid #334155",
+                background: "#1e293b", color: "#e2e8f0", fontSize: 14, outline: "none",
+              }}
+            />
+            {nameError && <p style={{ color: "#f87171", fontSize: 13, margin: "4px 0 0" }}>{nameError}</p>}
+            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <button
+                onClick={async () => {
+                  if (nameSaving) return;
+                  const nm = nameVal.trim();
+                  setNameError("");
+                  if (nm.length < 1) { setNameError("Digite um nome"); return; }
+                  setNameSaving(true);
+                  try {
+                    const profile = await updateProfile(HTTP_URL, session.token, { displayName: nm });
+                    setSession({ ...session, profile });
+                    roomRef.current?.send("appearance", { name: nm });
+                    setNameOpen(false);
+                    setSocialToast({ text: "Nome alterado", tone: "info" });
+                  } catch (e: any) {
+                    setNameError(e?.message || "Falha ao alterar o nome");
+                  } finally {
+                    setNameSaving(false);
+                  }
+                }}
+                disabled={nameSaving}
+                style={{ ...buttonStyle, flex: 1, opacity: nameSaving ? 0.6 : 1 }}
+              >
+                {nameSaving ? "Salvando…" : "Salvar"}
+              </button>
+              <button
+                onClick={() => !nameSaving && setNameOpen(false)}
+                disabled={nameSaving}
+                style={{ ...buttonStyle, background: "#334155", color: "#e2e8f0" }}
+              >
+                Cancelar
+              </button>
+            </div>
           </div>
         </div>
       )}

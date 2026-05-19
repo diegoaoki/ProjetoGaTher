@@ -24,6 +24,7 @@ interface AppearanceMessage {
   characterId?: string;
   appearance?: string; // JSON {body,hair,outfit,hat}
   photo?: string;      // data URL da foto de perfil ("" = remover)
+  name?: string;       // novo nome de exibição (1..24 chars)
 }
 
 interface DeskClaimMessage {
@@ -355,7 +356,14 @@ export class OfficeRoom extends Room<OfficeState> {
       const authData = client.userData as AuthData | undefined;
       if (!player || !authData) return;
 
-      const updates: Partial<{ bodyColor: string; hairColor: string; characterId: string; appearance: string; photo: string }> = {};
+      const updates: Partial<{ bodyColor: string; hairColor: string; characterId: string; appearance: string; photo: string; displayName: string }> = {};
+      if (typeof message.name === "string") {
+        const nm = message.name.trim().slice(0, 24);
+        if (nm.length >= 1 && nm !== player.name) {
+          player.name = nm;
+          updates.displayName = nm;
+        }
+      }
       if (message.bodyColor && /^#[0-9a-fA-F]{6}$/.test(message.bodyColor)) {
         player.color = message.bodyColor;
         updates.bodyColor = message.bodyColor;
