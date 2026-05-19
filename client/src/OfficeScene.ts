@@ -295,6 +295,10 @@ export class OfficeScene extends Phaser.Scene {
   public onDeskError?: (msg: string) => void;
   /** Clique numa mesa (reserva): App abre o modal de reservar/liberar. */
   public onDeskClick?: (deskId: string) => void;
+  /** Timestamp (performance.now) até quando ignorar cliques de mundo
+   *  (mesa/etc). Setado pelo App ao interagir com menu/overlay React
+   *  por cima do canvas, pra o pointerdown não vazar pra baixo. */
+  public ignoreWorldClickUntil = 0;
   /** Right-click num avatar de outro player → App abre menu de contexto. */
   public onPeerContextMenu?: (info: {
     sessionId: string;
@@ -881,6 +885,11 @@ export class OfficeScene extends Phaser.Scene {
         sprite.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
           if (this.editMode) return;
           if (pointer.rightButtonDown()) return; // right-click = pan, não mesa
+          // Acabou de interagir com um menu/overlay React (ex: clicar
+          // "Abrir bolha" no menu de contexto sobre uma mesa) → o
+          // pointerdown vaza pra mesa por baixo e abria o modal de
+          // reserva. Ignora cliques de mundo logo após o menu.
+          if (performance.now() < this.ignoreWorldClickUntil) return;
           this.onDeskClick?.(deskId);
         });
         // Rastreia o sprite base p/ trocar modelo ao customizar.

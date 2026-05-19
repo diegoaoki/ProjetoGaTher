@@ -500,6 +500,14 @@ export default function App() {
   }
 
   // Retry manual (botões das telas Conectando/Erro): zera o backoff.
+  // Fecha o menu de contexto do avatar e bloqueia cliques de mundo por
+  // ~500ms — senão o pointerdown do clique no item vaza pra mesa por
+  // baixo e abre o modal de reservar mesa.
+  function closePeerMenu() {
+    if (sceneRef.current) sceneRef.current.ignoreWorldClickUntil = performance.now() + 500;
+    setPeerMenu(null);
+  }
+
   function manualRetry() {
     clearReconnectTimer();
     reconnectAttemptsRef.current = 0;
@@ -2201,7 +2209,7 @@ export default function App() {
       {peerMenu && (
         <div
           style={{ position: "fixed", inset: 0, zIndex: 60 }}
-          onClick={() => setPeerMenu(null)}
+          onClick={() => closePeerMenu()}
           // Só previne o menu nativo do browser. NÃO fecha aqui: o próprio
           // right-click que ABRE o menu dispara um `contextmenu` que cai
           // neste overlay (full-screen) e fechava na hora. Fecha por
@@ -2229,7 +2237,7 @@ export default function App() {
               onClick={() => {
                 roomRef.current?.send("summon", { targetSessionId: peerMenu.sessionId });
                 setSocialToast({ text: `Você chamou ${peerMenu.name}`, tone: "info" });
-                setPeerMenu(null);
+                closePeerMenu();
               }}
               style={menuItemStyle}
             >
@@ -2239,7 +2247,7 @@ export default function App() {
               onClick={() => {
                 const p: any = (roomRef.current as any)?.state?.players?.get?.(peerMenu.sessionId);
                 if (p && sceneRef.current) sceneRef.current.navigateTo(p.x, p.y);
-                setPeerMenu(null);
+                closePeerMenu();
               }}
               style={menuItemStyle}
             >
@@ -2249,7 +2257,7 @@ export default function App() {
               onClick={() => {
                 roomRef.current?.send("bubble:invite", { targetSessionId: peerMenu.sessionId });
                 setSocialToast({ text: `Bolha aberta com ${peerMenu.name}`, tone: "info" });
-                setPeerMenu(null);
+                closePeerMenu();
               }}
               style={menuItemStyle}
             >
