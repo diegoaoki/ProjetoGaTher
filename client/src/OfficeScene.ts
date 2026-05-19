@@ -213,6 +213,21 @@ export class OfficeScene extends Phaser.Scene {
     }
     return null;
   }
+
+  /**
+   * deskId da mesa em que (x,y) está "dentro" (assento = desk.y+40),
+   * ou "" se não está em nenhuma. Determinístico (todos os clients
+   * calculam igual) → usado pra ISOLAR o áudio por mesa: quem está numa
+   * mesa só ouve quem está na MESMA mesa; o corredor segue por distância
+   * curta. Raio ~42px = área do assento (não pega quem só passa perto).
+   */
+  private physicalDeskAt(x: number, y: number): string {
+    for (const d of this.allDesks) {
+      const dx = x - d.x, dy = y - (d.y + 40);
+      if (dx * dx + dy * dy <= 42 * 42) return d.id;
+    }
+    return "";
+  }
   private floorSprite?: Phaser.GameObjects.TileSprite;
   private worldBorder?: Phaser.GameObjects.Graphics;
   private furnitureObjs: Phaser.GameObjects.GameObject[] = [];
@@ -2634,7 +2649,9 @@ export class OfficeScene extends Phaser.Scene {
           bubbleId: peerPlayer?.bubbleId || "",
           role: peerPlayer?.role || "user",
           visitorOk: peerPlayer?.visitorOk ?? true,
-          deskSeat: peerPlayer?.deskSeat || "",
+          // Mesa-conversa (G) OU estar fisicamente numa mesa → mesmo
+          // efeito: só ouve quem está na MESMA mesa.
+          deskSeat: peerPlayer?.deskSeat || this.physicalDeskAt(rp.container.x, rp.container.y),
           floor: peerPlayer?.floor ?? 1,
         });
       });
@@ -2648,7 +2665,7 @@ export class OfficeScene extends Phaser.Scene {
           bubbleId: myPlayer?.bubbleId || "",
           role: myPlayer?.role || "user",
           visitorOk: myPlayer?.visitorOk ?? true,
-          deskSeat: myPlayer?.deskSeat || "",
+          deskSeat: myPlayer?.deskSeat || this.physicalDeskAt(this.myContainer.x, this.myContainer.y),
           floor: myPlayer?.floor ?? this.myFloor,
         },
         peerInfo
