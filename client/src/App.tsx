@@ -2202,13 +2202,17 @@ export default function App() {
         <div
           style={{ position: "fixed", inset: 0, zIndex: 60 }}
           onClick={() => setPeerMenu(null)}
-          onContextMenu={(e) => { e.preventDefault(); setPeerMenu(null); }}
+          // Só previne o menu nativo do browser. NÃO fecha aqui: o próprio
+          // right-click que ABRE o menu dispara um `contextmenu` que cai
+          // neste overlay (full-screen) e fechava na hora. Fecha por
+          // clique (esquerdo) fora ou ao escolher um item.
+          onContextMenu={(e) => e.preventDefault()}
         >
           <div
             style={{
               position: "absolute",
-              left: Math.min(peerMenu.x, window.innerWidth - 200),
-              top: Math.min(peerMenu.y, window.innerHeight - 110),
+              left: Math.min(peerMenu.x, window.innerWidth - 220),
+              top: Math.min(peerMenu.y, window.innerHeight - 170),
               minWidth: 180,
               background: "#0f172af2",
               border: "1px solid #334155",
@@ -2240,6 +2244,16 @@ export default function App() {
               style={menuItemStyle}
             >
               📍 Ir até {peerMenu.name}
+            </button>
+            <button
+              onClick={() => {
+                roomRef.current?.send("bubble:invite", { targetSessionId: peerMenu.sessionId });
+                setSocialToast({ text: `Bolha aberta com ${peerMenu.name}`, tone: "info" });
+                setPeerMenu(null);
+              }}
+              style={menuItemStyle}
+            >
+              🫧 Abrir bolha com {peerMenu.name}
             </button>
           </div>
         </div>
