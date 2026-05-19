@@ -70,6 +70,13 @@ export function createChatRouter() {
 
   // GET /messages/global — últimas msgs do canal global (ordem: mais recente primeiro)
   router.get("/messages/global", requireAuth, async (req: Request, res: Response) => {
+    // Visitante não vê histórico do canal global (privacidade — ele entra
+    // pra uma sessão pontual e não deve ler conversas anteriores à entrada;
+    // padrão de guest do Gather/Slack/Discord). BUG-007. Ele também não
+    // posta no global (BUG-006), então a aba fica naturalmente vazia.
+    if (req.auth!.role === "visitor") {
+      return res.json({ messages: [] });
+    }
     const { limit, before } = parsePagination(req);
     try {
       const db = getDb();
@@ -99,6 +106,7 @@ export function createChatRouter() {
 
   // GET /messages/dm/:otherUserId — histórico do par
   router.get("/messages/dm/:otherUserId", requireAuth, async (req: Request, res: Response) => {
+    if (req.auth!.role === "visitor") return res.json({ messages: [] });
     const me = req.auth!.sub;
     const other = req.params.otherUserId;
     const { limit, before } = parsePagination(req);
@@ -136,6 +144,7 @@ export function createChatRouter() {
   // GET /messages/dm — lista de conversas DM do usuário logado.
   // Pra cada outro usuário com quem ele já trocou msg, devolve a última mensagem.
   router.get("/messages/dm", requireAuth, async (req: Request, res: Response) => {
+    if (req.auth!.role === "visitor") return res.json({ conversations: [] });
     const me = req.auth!.sub;
     try {
       const db = getDb();

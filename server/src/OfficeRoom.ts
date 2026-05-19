@@ -1661,6 +1661,19 @@ export class OfficeRoom extends Room<OfficeState> {
         return;
       }
 
+      // Visitante só pode usar o canal "room" (efêmero, proximidade). Global
+      // e DM persistem em `messages`, cujo senderId tem FK pra `users` — a
+      // conta de visitante (`visitor:<uuid>`) não tem linha lá, então o
+      // INSERT estourava e caía no catch SEM avisar o cliente: a mensagem
+      // sumia e o usuário achava que tinha enviado (BUG-006). Agora bloqueia
+      // explicitamente com feedback.
+      if (auth.role === "visitor" && channelType !== "room") {
+        client.send("chat:error", {
+          error: "Visitantes só podem conversar no canal “Aqui” (proximidade).",
+        });
+        return;
+      }
+
       // === Sala / proximidade: efêmero, só broadcast filtrado ===
       if (channelType === "room") {
         const senderZone = sender.zoneId || "open";

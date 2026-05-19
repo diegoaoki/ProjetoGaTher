@@ -2686,6 +2686,7 @@ export default function App() {
             .map((p) => ({ userId: p.userId, name: p.name, isMe: p.isMe }))}
           liveMessages={liveMessages}
           reactionsOverride={reactionsOverride}
+          isVisitor={isVisitor}
           onSend={(channel, content) => {
             roomRef.current?.send("chat:send", {
               channelType: channel.type,

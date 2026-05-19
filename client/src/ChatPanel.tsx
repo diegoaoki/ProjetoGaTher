@@ -32,6 +32,10 @@ interface Props {
   onClose: () => void;
   /** Chama quando o usuário visualiza msgs de um canal — pra App zerar o unread. */
   onChannelViewed: (channelKey: string) => void;
+  /** Visitante: só pode usar a aba "Aqui" (proximidade, efêmera). Global e
+   *  DM persistem no Postgres e a conta de visitante não tem linha em
+   *  `users` (FK quebra) — antes a msg sumia sem feedback nenhum (BUG-006). */
+  isVisitor?: boolean;
   /** Em mobile, ocupa a tela inteira. */
   mobile?: boolean;
   /** Pedido de abrir DM com alguém (vindo da lista de usuários). O `n` é um
@@ -42,7 +46,7 @@ interface Props {
 type Tab = "global" | "room" | "dm";
 
 export default function ChatPanel({
-  httpUrl, token, myUserId, onlinePlayers, liveMessages, reactionsOverride, onSend, onToggleReaction, onClose, onChannelViewed, mobile, dmRequest,
+  httpUrl, token, myUserId, onlinePlayers, liveMessages, reactionsOverride, onSend, onToggleReaction, onClose, onChannelViewed, isVisitor, mobile, dmRequest,
 }: Props) {
   const [pickerOpenFor, setPickerOpenFor] = useState<string | null>(null);
   /**
@@ -172,7 +176,12 @@ export default function ChatPanel({
     else if (tab === "dm" && activeDmUserId) onChannelViewed(`dm:${activeDmUserId}`);
   }, [tab, activeDmUserId, visibleMessages.length, onChannelViewed]);
 
+  // Visitante só pode mandar na aba "Aqui" (room/proximidade, efêmera).
+  // Global/DM persistem e a conta de visitante não existe em `users`.
+  const visitorBlocked = !!isVisitor && tab !== "room";
+
   function submit() {
+    if (visitorBlocked) return;
     const text = input.trim();
     if (!text) return;
     if (tab === "global") onSend({ type: "global" }, text);
@@ -389,12 +398,22 @@ export default function ChatPanel({
               onKeyDown={(e) => e.stopPropagation()}
               onKeyUp={(e) => e.stopPropagation()}
               onKeyPress={(e) => e.stopPropagation()}
-              placeholder={tab === "dm" && !activeDmUserId ? "Selecione uma conversa" : "Digite uma mensagem…"}
-              disabled={tab === "dm" && !activeDmUserId}
+              placeholder={
+                visitorBlocked
+                  ? "Visitantes só escrevem na aba “Aqui”"
+                  : tab === "dm" && !activeDmUserId
+                  ? "Selecione uma conversa"
+                  : "Digite uma mensagem…"
+              }
+              disabled={(tab === "dm" && !activeDmUserId) || visitorBlocked}
               style={inputStyle}
               maxLength={2000}
             />
-            <button type="submit" disabled={tab === "dm" && !activeDmUserId} style={sendBtnStyle}>
+            <button
+              type="submit"
+              disabled={(tab === "dm" && !activeDmUserId) || visitorBlocked}
+              style={sendBtnStyle}
+            >
               Enviar
             </button>
           </form>

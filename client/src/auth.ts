@@ -63,7 +63,18 @@ export function storeToken(token: string) {
 
 export function clearToken() {
   try {
-    localStorage.removeItem(TOKEN_KEY);
+    // Varre TODAS as chaves virtual-office-* (não só o JWT). Builds antigos
+    // gravavam o perfil em `virtual-office-profile-v1` numa chave separada
+    // do JWT e nunca invalidavam junto — o resultado era ver o nome/avatar
+    // de OUTRO usuário em cache mesmo com JWT de outra conta (BUG-005). Hoje
+    // o perfil vem fresh do /auth/me, mas a chave órfã pode sobreviver de
+    // deploys anteriores; sair tem que deixar o localStorage realmente limpo.
+    const toRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && k.startsWith("virtual-office-")) toRemove.push(k);
+    }
+    for (const k of toRemove) localStorage.removeItem(k);
   } catch {}
 }
 
