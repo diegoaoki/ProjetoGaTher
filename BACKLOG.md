@@ -74,7 +74,7 @@ Legenda: 🔴 prioridade · 🐞 bug · 🟢 feito (mantido como referência) ·
 - 🟢 [FEITO] **área verde ao redor do mapa** — `grass`/`tree`/`bush` procedurais; `drawOutsideDecor()` (moldura OUTER_MARGIN 160px, depth -200); câmera do térreo abre a margem mas piso fica no prédio; avatar travado por `maxY` (térreo até 1744). 2º andar sem moldura. Ruas: ficou de fora (opcional).
 
 ### NPC
-- NPC segurança com **pathfinding real** (A* entre móveis/paredes) — substituir o "teletransporte + fade" atual. Precisa grid de navegação evitando furniture hitboxes e walls dinâmicas (portas fechadas)
+- 🟢 [FEITO `549beb1` (A*) + `99524f7` (refino portas)] **NPC segurança com pathfinding real** — `pathfinding.ts` é A* completo (grid 16px, min-heap, string-pulling, sem corte de quina, evita móveis+paredes). O guarda usa `findPath` e **caminha a rota** frame-a-frame (`advanceSecurityNpcs`); volta caminhando à origem ao sair (fade-out só fallback sem rota). "Teletransporte+fade" não existe mais. **Refino `99524f7`**: `findPath` aceita `extraWalls?` opcional; o guarda passa `dynamicDoorWalls` (só portas fechadas, sem o blanket no-entry da Segurança) → não traça rota cruzando porta que ele não abre. `navigateTo` do player segue sem extraWalls (porta abre na aproximação dele).
 
 ### Áudio / câmera
 - áudio/microfone: relatos de microfone abafado — UI pra (a) escolher dispositivo de entrada, (b) ajustar ganho do mic, (c) ajustar volume de saída/peers *(coberto pelas prioridades acima)*
