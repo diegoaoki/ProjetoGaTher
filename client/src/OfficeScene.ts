@@ -197,6 +197,9 @@ export class OfficeScene extends Phaser.Scene {
   private floorSprite?: Phaser.GameObjects.TileSprite;
   private worldBorder?: Phaser.GameObjects.Graphics;
   private furnitureObjs: Phaser.GameObjects.GameObject[] = [];
+  /** Tapetes de zona embaixo de cada mesa reservável (marca visual de que
+   *  "ali cabem 3 pessoas" — a zona de áudio da mesa-conversa). */
+  private deskZoneObjs: Phaser.GameObjects.GameObject[] = [];
   private wallObjs: Phaser.GameObjects.GameObject[] = [];
   private roomLabelObjs: Phaser.GameObjects.GameObject[] = [];
 
@@ -758,7 +761,37 @@ export class OfficeScene extends Phaser.Scene {
     this.worldBorder.strokeRect(x, y, w, h);
   }
 
+  /**
+   * Tapete/piso diferente embaixo de cada mesa RESERVÁVEL (type "desk" +
+   * deskId) marcando visualmente a zona — "ali cabem 3 pessoas" (a zona
+   * de áudio da mesa-conversa: sentado + esq + dir). Renderizado num depth
+   * baixo (abaixo da mobília e dos avatares, acima do piso base).
+   */
+  private drawDeskZones() {
+    this.deskZoneObjs.forEach((o) => o.destroy());
+    this.deskZoneObjs = [];
+    const desks = this.layout.furniture.filter((f) => f.type === "desk" && f.deskId);
+    for (const d of desks) {
+      // Conjunto mesa (~96×56, centro em d.y) + cadeira (d.y+40) + folga
+      // lateral pros 2 lugares ao lado → tapete largo e baixo.
+      const cx = d.x;
+      const cy = d.y + 14;
+      const w = 168; // 96 da mesa + ~36 de cada lado (lugares laterais)
+      const h = 116; // topo da mesa até abaixo da cadeira
+      const rug = this.add.rectangle(cx, cy, w, h, 0xb8c6e6, 0.32);
+      rug.setStrokeStyle(2, 0x8aa0c8, 0.55);
+      rug.setDepth(-100); // acima do piso base (-200), abaixo de móveis/avatares
+      this.deskZoneObjs.push(rug);
+      // Detalhe interno (losango central) só pra dar a textura de "área"
+      const inner = this.add.rectangle(cx, cy, w - 24, h - 24, 0x000000, 0);
+      inner.setStrokeStyle(1, 0x8aa0c8, 0.35);
+      inner.setDepth(-99);
+      this.deskZoneObjs.push(inner);
+    }
+  }
+
   private drawFurniture() {
+    this.drawDeskZones();
     // Mesas/desks: a cadeira fica virada PRA mesa mais próxima.
     const isSurface = (t: string) =>
       t === "desk" || t.startsWith("desk_") || t.startsWith("deskpc_") ||
