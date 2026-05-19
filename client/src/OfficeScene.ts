@@ -424,6 +424,18 @@ export class OfficeScene extends Phaser.Scene {
     window.addEventListener("focusin", onFocusIn);
     window.addEventListener("focusout", onFocusOut);
 
+    // Guard global anti-vazamento: se um pointerdown acontece numa UI
+    // React (sidebar/lista de usuários, HUD, modal...) e NÃO no canvas do
+    // jogo, suprime o "clique de mundo" (ex: abrir modal da mesa por
+    // baixo) que o Phaser dispara pra mesma posição. Capture phase →
+    // roda antes do input do Phaser. Cobre TODA UI de uma vez.
+    const uiClickGuard = (e: PointerEvent) => {
+      if (e.target !== this.game.canvas) {
+        this.ignoreWorldClickUntil = performance.now() + 350;
+      }
+    };
+    window.addEventListener("pointerdown", uiClickGuard, true);
+
     // NOTA: NÃO interceptar key events em capture phase no document. Um
     // keyInterceptor com stopPropagation() em CAPTURE chega ANTES do input
     // e impede que o onKeyDown do próprio input rode (ex: Enter pra enviar
@@ -434,6 +446,7 @@ export class OfficeScene extends Phaser.Scene {
     this.events.once("shutdown", () => {
       window.removeEventListener("focusin", onFocusIn);
       window.removeEventListener("focusout", onFocusOut);
+      window.removeEventListener("pointerdown", uiClickGuard, true);
     });
 
     // Pan com botão direito do mouse — não interfere com cliques de UI nem com tecla E
