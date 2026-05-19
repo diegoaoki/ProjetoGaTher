@@ -1542,6 +1542,8 @@ export class OfficeScene extends Phaser.Scene {
     // Idempotente — se já existe (race condition), só atualiza o destino
     const existing = this.securityNpcs.get(roomId);
     if (existing) {
+      const rd = ["left", "right", "up", "down"].includes(npc.direction) ? npc.direction : "down";
+      existing.setData("restDir", rd);
       const p = findPath({ x: existing.x, y: existing.y }, { x: npc.x, y: npc.y }, this.layout, this.dynamicDoorWalls);
       if (p && p.length) this.securityNpcNav.set(roomId, { path: p });
       else { existing.x = npc.x; existing.y = npc.y; existing.setDepth(npc.y + NPC_DEPTH_BASE); }
@@ -1555,9 +1557,15 @@ export class OfficeScene extends Phaser.Scene {
     // Avatar de verdade (mesmo sistema de sprite/animação dos players).
     // Personagem fixo por sala (determinístico).
     const charId: CharacterId = pickCharacterFor(`security:${roomId}`, "");
+    // Direção de repouso = a que o server mandou (encara pra FORA, vigiando
+    // o corredor). O guarda SEMPRE volta a essa direção parado, nunca fica
+    // virado pra dentro só porque foi a última direção da caminhada.
+    const restDir = ["left", "right", "up", "down"].includes(npc.direction)
+      ? npc.direction
+      : "down";
     const sprite = this.add.sprite(0, 0, `${charId}_idle`, 0);
     sprite.setScale(2);
-    sprite.play(`${charId}_down_idle`);
+    sprite.play(`${charId}_${restDir}_idle`);
 
     // Balão "🛡️ Segurança" acima da cabeça
     const tag = this.add.text(0, -34, "🛡️ Segurança", {
@@ -1572,7 +1580,8 @@ export class OfficeScene extends Phaser.Scene {
     container.add([sprite, tag]);
     container.setData("sprite", sprite);
     container.setData("tex", charId);
-    container.setData("dir", "down");
+    container.setData("dir", restDir);
+    container.setData("restDir", restDir); // pra onde encara parado (fora)
     this.securityNpcs.set(roomId, container);
 
     // Fade-in rápido (some o "pop") e calcula a rota até o posto.
@@ -1644,7 +1653,12 @@ export class OfficeScene extends Phaser.Scene {
       const wp = nav.path[0];
       if (!wp) {
         this.securityNpcNav.delete(key);
-        playAnim((c.getData("dir") as string) || "down", false); // chegou → idle
+        // Chegou ao posto → encara pra FORA (restDir do server), não a
+        // direção da última caminhada.
+        const restDir =
+          (c.getData("restDir") as string) || (c.getData("dir") as string) || "down";
+        c.setData("dir", restDir);
+        playAnim(restDir, false);
         if (nav.onDone) {
           this.securityNpcs.delete(key);
           nav.onDone();
