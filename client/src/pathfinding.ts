@@ -1,9 +1,14 @@
-import { checkCollision, OfficeLayoutData } from "./OfficeLayout";
+import { checkCollision, OfficeLayoutData, Wall } from "./OfficeLayout";
 
 /**
  * Pathfinding A* sobre um grid derivado do layout (móveis + paredes
- * estáticas). Portas NÃO entram como obstáculo: elas abrem sozinhas quando
- * o avatar chega perto, então a rota pode atravessar os vãos normalmente.
+ * estáticas). Portas NÃO entram como obstáculo por padrão: pro player elas
+ * abrem sozinhas quando ele chega perto, então a rota atravessa os vãos.
+ *
+ * `extraWalls` (opcional) adiciona obstáculos dinâmicos — usado pelos NPCs
+ * de segurança: NPC NÃO dispara abertura de porta (só o player, por
+ * proximidade), então pra ele as portas fechadas precisam ser obstáculo,
+ * senão ele traçaria rota cruzando uma porta que nunca vai abrir.
  *
  * Resolução do grid = meio-tile (16px) pra passar nos vãos de porta.
  * O avatar é amostrado com um raio um pouco maior que o real pra a rota
@@ -15,9 +20,14 @@ const SAMPLE_HALF = 14; // PLAYER_HALF (12) + folga
 
 type Pt = { x: number; y: number };
 
-function cellBlocked(cx: number, cy: number, layout: OfficeLayoutData): boolean {
+function cellBlocked(
+  cx: number,
+  cy: number,
+  layout: OfficeLayoutData,
+  extraWalls?: Wall[]
+): boolean {
   // Centro da célula em pixels. Sem extraWalls → portas são passáveis.
-  return checkCollision(cx * CELL + CELL / 2, cy * CELL + CELL / 2, SAMPLE_HALF, layout);
+  return checkCollision(cx * CELL + CELL / 2, cy * CELL + CELL / 2, SAMPLE_HALF, layout, extraWalls);
 }
 
 /** Acha a célula livre mais próxima de (gx,gy) por busca em anel (BFS espiral). */
@@ -44,14 +54,14 @@ function nearestFree(
 }
 
 /** Linha de visão livre entre dois pontos em pixels (amostra a cada ~CELL/2). */
-function lineClear(a: Pt, b: Pt, layout: OfficeLayoutData): boolean {
+function lineClear(a: Pt, b: Pt, layout: OfficeLayoutData, extraWalls?: Wall[]): boolean {
   const dx = b.x - a.x;
   const dy = b.y - a.y;
   const dist = Math.hypot(dx, dy);
   const steps = Math.max(1, Math.ceil(dist / (CELL / 2)));
   for (let i = 0; i <= steps; i++) {
     const t = i / steps;
-    if (checkCollision(a.x + dx * t, a.y + dy * t, SAMPLE_HALF, layout)) return false;
+    if (checkCollision(a.x + dx * t, a.y + dy * t, SAMPLE_HALF, layout, extraWalls)) return false;
   }
   return true;
 }
@@ -63,7 +73,8 @@ function lineClear(a: Pt, b: Pt, layout: OfficeLayoutData): boolean {
 export function findPath(
   start: Pt,
   goal: Pt,
-  layout: OfficeLayoutData
+  layout: OfficeLayoutData,
+  extraWalls?: Wall[]
 ): Pt[] | null {
   const gridW = Math.ceil(layout.width / CELL);
   const gridH = Math.ceil(layout.height / CELL);
@@ -75,7 +86,7 @@ export function findPath(
   const blockedId = (id: number): boolean => {
     let v = bmemo[id];
     if (v === 0) {
-      v = cellBlocked(id % gridW, (id / gridW) | 0, layout) ? 2 : 1;
+      v = cellBlocked(id % gridW, (id / gridW) | 0, layout, extraWalls) ? 2 : 1;
       bmemo[id] = v;
     }
     return v === 2;
@@ -161,7 +172,7 @@ export function findPath(
       const out: Pt[] = [];
       let anchor: Pt = { x: start.x, y: start.y };
       for (let i = 1; i < cells.length; i++) {
-        if (!lineClear(anchor, cells[i], layout)) {
+        if (!lineClear(anchor, cells[i], layout, extraWalls)) {
           out.push(cells[i - 1]);
           anchor = cells[i - 1];
         }

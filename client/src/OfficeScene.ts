@@ -116,6 +116,12 @@ export class OfficeScene extends Phaser.Scene {
   private doorOpenState = new Map<string, boolean>();
   /** Walls dinâmicos a partir das portas fechadas — usados em checkCollision. */
   private dynamicWalls: Array<{ x: number; y: number; w: number; h: number }> = [];
+  /** Só os retângulos de PORTAS fechadas (subconjunto de dynamicWalls SEM o
+   *  blanket no-entry da Segurança). Usado no pathfinding dos NPCs: o guarda
+   *  não abre porta, então não pode traçar rota cruzando porta fechada — mas
+   *  o blanket da Segurança não entra (a rota dele é externa e curta; incluí-lo
+   *  arriscaria o nearestFree empurrar o posto do guarda). */
+  private dynamicDoorWalls: Array<{ x: number; y: number; w: number; h: number }> = [];
 
   // === Navegação automática (rota com A*) ===
   /** Waypoints restantes em pixels; null = sem rota ativa. */
@@ -1468,7 +1474,7 @@ export class OfficeScene extends Phaser.Scene {
     // Idempotente — se já existe (race condition), só atualiza o destino
     const existing = this.securityNpcs.get(roomId);
     if (existing) {
-      const p = findPath({ x: existing.x, y: existing.y }, { x: npc.x, y: npc.y }, this.layout);
+      const p = findPath({ x: existing.x, y: existing.y }, { x: npc.x, y: npc.y }, this.layout, this.dynamicDoorWalls);
       if (p && p.length) this.securityNpcNav.set(roomId, { path: p });
       else { existing.x = npc.x; existing.y = npc.y; existing.setDepth(npc.y + NPC_DEPTH_BASE); }
       return;
@@ -1504,7 +1510,7 @@ export class OfficeScene extends Phaser.Scene {
     // Fade-in rápido (some o "pop") e calcula a rota até o posto.
     this.tweens.add({ targets: container, alpha: 1, duration: 200, ease: "Linear" });
 
-    const path = findPath(origin, { x: npc.x, y: npc.y }, this.layout);
+    const path = findPath(origin, { x: npc.x, y: npc.y }, this.layout, this.dynamicDoorWalls);
     if (path && path.length) {
       this.securityNpcNav.set(roomId, { path });
     } else {
@@ -1527,7 +1533,7 @@ export class OfficeScene extends Phaser.Scene {
     const origin = this.securityApproach.get(roomId);
     this.securityApproach.delete(roomId);
     const back = origin
-      ? findPath({ x: container.x, y: container.y }, origin, this.layout)
+      ? findPath({ x: container.x, y: container.y }, origin, this.layout, this.dynamicDoorWalls)
       : null;
     if (back && back.length) {
       this.securityNpcNav.set(`__leaving__${roomId}`, {
@@ -1616,9 +1622,14 @@ export class OfficeScene extends Phaser.Scene {
       walls.push({ x: door.x - w / 2, y: door.y - h / 2, w, h });
     });
 
+    // Só portas: snapshot ANTES do blanket da Segurança (o pathfinding do
+    // NPC usa este subconjunto — ver dynamicDoorWalls).
+    this.dynamicDoorWalls = walls.slice();
+
     // Sala de Segurança = no-entry pra TODOS: bloqueia o interior inteiro
-    // (independente da porta abrir/fechar). O guarda NPC não usa tryMove
-    // nem o A* usa dynamicWalls, então não é afetado.
+    // (independente da porta abrir/fechar). O guarda NPC não usa tryMove;
+    // o A* do player não usa dynamicWalls; o A* do NPC usa só
+    // dynamicDoorWalls (sem este blanket), então não é afetado.
     const sec = this.layout.rooms.find((r) => r.id === "security_room");
     if (sec) walls.push({ x: sec.x, y: sec.y, w: sec.w, h: sec.h });
 
