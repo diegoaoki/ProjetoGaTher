@@ -18,6 +18,7 @@ import { getMirrorSelf } from "./audioPrefs";
 import { ChatMessage, playNotificationBeep } from "./chat";
 import { useIsMobile } from "./useIsMobile";
 import { requestNotificationPermissionOnce, showNotificationIfHidden } from "./notifications";
+import { flashTitle } from "./titleFlash";
 import {
   AuthSession,
   clearToken,
@@ -779,6 +780,7 @@ export default function App() {
 
       // Listeners de convites/teleporte do server
       room.onMessage("invite:received", (msg: { fromSessionId: string; fromName: string }) => {
+        flashTitle(`👋 ${msg.fromName} te chamou`);
         // Segundo convite enquanto há um pendente: substitui (avisa via toast)
         setIncomingInvite((prev) => {
           if (prev) setSocialToast({ text: `Novo convite de ${msg.fromName} (substituiu anterior)`, tone: "info" });
@@ -823,6 +825,7 @@ export default function App() {
 
       // === Bolha de conversa privada (sem convite — criada direto) ===
       room.onMessage("bubble:started", (msg: { joinedName: string }) => {
+        flashTitle(`🫧 Bolha com ${msg.joinedName}`);
         setInBubble(true);
         setSocialToast({ text: `Bolha de conversa ativa (${msg.joinedName} entrou)`, tone: "info" });
       });
@@ -836,6 +839,7 @@ export default function App() {
 
       // "Vir para cá": alguém te chamou → toast + caminha até lá
       room.onMessage("summon:incoming", (msg: { fromName: string; x: number; y: number }) => {
+        flashTitle(`📢 ${msg.fromName} chamou você`);
         setSocialToast({ text: `${msg.fromName} chamou você`, tone: "info" });
         sceneRef.current?.navigateTo(msg.x, msg.y);
       });
@@ -851,6 +855,7 @@ export default function App() {
       });
       // Host recebe pedido de um visitante
       room.onMessage("visitor:incoming", (msg: { visitorSessionId: string; visitorName: string }) => {
+        flashTitle(`👤 ${msg.visitorName} quer entrar`);
         setIncomingVisitor(msg);
         showNotificationIfHidden({
           title: "👤 Visitante",
@@ -959,6 +964,7 @@ export default function App() {
         // Não conta msg PRÓPRIA como não lida
         const isMine = !!session && msg.senderId === session.user.id;
         if (!isMine) {
+          flashTitle(`💬 ${msg.senderName || "Nova mensagem"}`);
           let channelKey = "global";
           if (msg.channelType === "room") channelKey = "room";
           else if (msg.channelType === "dm") channelKey = `dm:${msg.senderId}`;
