@@ -12,6 +12,8 @@ import SecurityLockModal from "./SecurityLockModal";
 import MiniMap from "./MiniMap";
 import AvatarEditor from "./AvatarEditor";
 import DeskEditor from "./DeskEditor";
+import WhatsNew, { WHATSNEW_KEY } from "./WhatsNew";
+import { useDraggable } from "./useDraggable";
 import { getMirrorSelf } from "./audioPrefs";
 import { ChatMessage, playNotificationBeep } from "./chat";
 import { useIsMobile } from "./useIsMobile";
@@ -344,6 +346,17 @@ export default function App() {
   const [deskEditing, setDeskEditing] = useState<
     { deskId: string; tex: string; decor: string[] } | null
   >(null);
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
+  // Abre "Novidades" automaticamente 1x por versão (após entrar).
+  useEffect(() => {
+    if (conn !== "connected") return;
+    try {
+      if (!localStorage.getItem(WHATSNEW_KEY)) {
+        setWhatsNewOpen(true);
+        localStorage.setItem(WHATSNEW_KEY, "1");
+      }
+    } catch {}
+  }, [conn]);
   const [peerMenu, setPeerMenu] = useState<
     { sessionId: string; userId: string; name: string; x: number; y: number } | null
   >(null);
@@ -359,6 +372,7 @@ export default function App() {
 
   // === Sidebar de usuários online ===
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const sidebarDrag = useDraggable();
   const [miniMapOpen, setMiniMapOpen] = useState(false);
   const [locateUserId, setLocateUserId] = useState<string | null>(null);
   interface OnlinePlayer {
@@ -1686,6 +1700,7 @@ export default function App() {
               onClick={() => setSettingsOpen(false)}
             >
               <button onClick={() => setEditingAvatar(true)} style={menuItemStyle}>🎨 Editar avatar</button>
+              <button onClick={() => setWhatsNewOpen(true)} style={menuItemStyle}>✨ Novidades</button>
               <button onClick={() => setAudioTestOpen(true)} style={menuItemStyle}>🎧 Testar áudio/vídeo</button>
               <button onClick={() => setSidebarOpen(true)} style={menuItemStyle}>👥 Quem está online</button>
               {!isVisitor && (
@@ -1820,9 +1835,14 @@ export default function App() {
         return (
         <div style={{
           ...sidebarStyle,
-          ...(isMobile ? { top: 0, left: 0, right: 0, bottom: 0, width: "100vw", maxHeight: "100vh" } : {}),
+          ...(isMobile
+            ? { top: 0, left: 0, right: 0, bottom: 0, width: "100vw", maxHeight: "100vh" }
+            : sidebarDrag.style),
         }}>
-          <div style={sidebarHeaderStyle}>
+          <div
+            style={{ ...sidebarHeaderStyle, ...(isMobile ? {} : { cursor: "move" }) }}
+            onPointerDown={isMobile ? undefined : sidebarDrag.onHandlePointerDown}
+          >
             <span><strong>{onlineCount}</strong> online · {rows.length} no total</span>
             <button onClick={() => setSidebarOpen(false)} style={sidebarCloseBtn} title="Fechar">✕</button>
           </div>
@@ -2219,8 +2239,8 @@ export default function App() {
           <div
             style={{
               position: "absolute",
-              left: Math.min(peerMenu.x, window.innerWidth - 220),
-              top: Math.min(peerMenu.y, window.innerHeight - 170),
+              left: Math.min(peerMenu.x, window.innerWidth - 240),
+              top: Math.min(peerMenu.y, window.innerHeight - 220),
               minWidth: 180,
               background: "#0f172af2",
               border: "1px solid #334155",
@@ -2262,6 +2282,27 @@ export default function App() {
               style={menuItemStyle}
             >
               🫧 Abrir bolha com {peerMenu.name}
+            </button>
+            <button
+              onClick={() => {
+                // Acha a mesa reservada por esse userId no state.desks
+                // (hidratado do Postgres → vale mesmo se o dono estiver
+                // offline) e navega até ela.
+                let deskId = "";
+                const ds: any = (roomRef.current as any)?.state?.desks;
+                ds?.forEach?.((d: any) => {
+                  if (d?.ownerId === peerMenu.userId && d?.deskId) deskId = d.deskId;
+                });
+                if (deskId && sceneRef.current?.goToDesk(deskId)) {
+                  setSocialToast({ text: `Indo até a mesa de ${peerMenu.name}`, tone: "info" });
+                } else {
+                  setSocialToast({ text: `${peerMenu.name} não tem mesa reservada`, tone: "error" });
+                }
+                closePeerMenu();
+              }}
+              style={menuItemStyle}
+            >
+              🪑 Ir até a mesa de {peerMenu.name}
             </button>
           </div>
         </div>
@@ -2752,6 +2793,14 @@ export default function App() {
           mobile={isMobile}
           dmRequest={dmRequest}
         />
+      )}
+
+      {whatsNewOpen && (
+        <div style={modalStyle} onClick={() => setWhatsNewOpen(false)}>
+          <div style={{ ...cardStyle, width: 420 }} onClick={(e) => e.stopPropagation()}>
+            <WhatsNew onClose={() => setWhatsNewOpen(false)} />
+          </div>
+        </div>
       )}
 
       {deskEditing && (

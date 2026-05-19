@@ -12,6 +12,7 @@ export default function LoginScreen({ httpUrl, onAuthed }: Props) {
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [vcode, setVcode] = useState("");
   const [vpass, setVpass] = useState("");
@@ -58,6 +59,10 @@ export default function LoginScreen({ httpUrl, onAuthed }: Props) {
       }
       if (password.length < 8) {
         setError("Senha precisa ter ao menos 8 caracteres");
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError("As senhas não conferem");
         return;
       }
     }
@@ -142,6 +147,22 @@ export default function LoginScreen({ httpUrl, onAuthed }: Props) {
               disabled={loading}
               autoComplete={mode === "login" ? "current-password" : "new-password"}
             />
+
+            {mode === "register" && (
+              <>
+                <label style={labelStyle}>Confirmar senha</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && submit()}
+                  placeholder="Repita a senha"
+                  style={inputStyle}
+                  disabled={loading}
+                  autoComplete="new-password"
+                />
+              </>
+            )}
           </>
         )}
 

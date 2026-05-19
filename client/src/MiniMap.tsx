@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { Room } from "colyseus.js";
 import { getDefaultLayout, FLOOR2_Y0 } from "./OfficeLayout";
+import { useDraggable } from "./useDraggable";
 
 interface Props {
   room: Room;
@@ -22,6 +23,7 @@ const PANEL_W = 240; // largura do canvas em px
  * Atualiza ~4x/s lendo o state do Colyseus (sem re-render do React).
  */
 export default function MiniMap({ room, meSessionId, onLocate, onClose, highlightUserId, myFloor = 1 }: Props) {
+  const drag = useDraggable();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   // dots atuais (px do canvas) → usado no clique/hover pra achar a pessoa
   const dotsRef = useRef<
@@ -159,8 +161,11 @@ export default function MiniMap({ room, meSessionId, onLocate, onClose, highligh
   }
 
   return (
-    <div style={panelStyle}>
-      <div style={headerStyle}>
+    <div style={{ ...panelStyle, ...drag.style }}>
+      <div
+        style={{ ...headerStyle, cursor: "move" }}
+        onPointerDown={drag.onHandlePointerDown}
+      >
         <span>🧭 Mini-mapa</span>
         <button onClick={onClose} style={closeBtn} title="Fechar">✕</button>
       </div>
