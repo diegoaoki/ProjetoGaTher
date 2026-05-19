@@ -54,6 +54,10 @@ export interface Room {
   y: number;
   w: number;
   h: number;
+  /** Zona sem paredes = só DEMARCAÇÃO visual (departamentos). Não conta
+   *  como "sala": getCurrentRoom a ignora → trata como corredor (áudio
+   *  por proximidade, cards de vídeo na coluna lateral, etc). */
+  noWalls?: boolean;
 }
 
 export interface OfficeLayoutData {
@@ -342,6 +346,7 @@ export function getDefaultLayout(): OfficeLayoutData {
     y: z.y * TILE,
     w: z.w * TILE,
     h: z.h * TILE,
+    noWalls: z.noWalls,
   }));
 
   // ============================================================
@@ -600,6 +605,9 @@ export function checkCollision(
 /** Retorna a Room atual do player; "open" se está fora de qualquer zona. */
 export function getCurrentRoom(px: number, py: number, layout: OfficeLayoutData): Room {
   for (const room of layout.rooms) {
+    // Departamento (noWalls) é só demarcação visual — NÃO é sala.
+    // Tratado como corredor (áudio por proximidade, cards laterais...).
+    if (room.noWalls) continue;
     if (px >= room.x && px <= room.x + room.w && py >= room.y && py <= room.y + room.h) {
       return room;
     }
