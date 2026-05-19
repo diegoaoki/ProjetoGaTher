@@ -823,7 +823,7 @@ export class OfficeScene extends Phaser.Scene {
       t === "desk" || t.startsWith("desk_") || t.startsWith("deskpc_") ||
       t === "meetingTable" || t === "kitchen_table" || t === "coffeeTable";
     const surfaces = this.layout.furniture.filter((f) => isSurface(f.type));
-    this.chairSpots = this.layout.furniture
+    const chairFromFurniture = this.layout.furniture
       .filter((f) => f.type === "chair")
       .map((f) => {
         let best: { d: number; sx: number; sy: number } | null = null;
@@ -839,6 +839,13 @@ export class OfficeScene extends Phaser.Scene {
         }
         return { x: f.x, y: f.y, dir };
       });
+    // Assento DERIVADO DA PRÓPRIA MESA reservável (mesa.y+40, encara a
+    // mesa = "up"). Garante o sentar mesmo em mesa do editor / mapa com
+    // override, que NÃO tem móvel "chair" adjacente (causa do "não senta").
+    const seatFromDesks = this.layout.furniture
+      .filter((f) => f.type === "desk" && f.deskId)
+      .map((f) => ({ x: f.x, y: f.y + 40, dir: "up" }));
+    this.chairSpots = [...chairFromFurniture, ...seatFromDesks];
     this.layout.furniture.forEach((item) => {
       const sprite = this.add.image(item.x, item.y, item.tex || item.type);
       sprite.setOrigin(0.5, 0.5);
