@@ -55,6 +55,11 @@ interface RemotePeer {
 const SCREEN_STOP_DEBOUNCE_MS = 800;
 
 export class SpatialAudio {
+  // Zonas que NÃO isolam áudio (só demarcação visual — `noWalls:true`
+  // no ZONES do OfficeLayout). Tratadas como "open" (proximidade).
+  private static NON_ISOLATED_ZONES = new Set<string>([
+    "dev_area", "data_area", "infra_area", "finance_area",
+  ]);
   private room: Room;
   private peers = new Map<string, RemotePeer>();
   private nearRadius: number;
@@ -455,8 +460,15 @@ export class SpatialAudio {
         return;
       }
 
-      const myZone = myInfo.zoneId || "open";
-      const peerZone = info.zoneId || "open";
+      // Áreas de departamento (Desenvolvimento/Dados/Infra/Financeiro) são
+      // só DEMARCAÇÃO visual (noWalls) — NÃO isolam áudio. Normaliza pra
+      // "open" → comportam como corredor (ouve só por proximidade), não
+      // como sala. Salas de verdade (reunião/copa/diretoria/etc) seguem
+      // isolando. Mantido em sync com ZONES (noWalls:true) do OfficeLayout.
+      const norm = (z?: string) =>
+        z && !SpatialAudio.NON_ISOLATED_ZONES.has(z) ? z : "open";
+      const myZone = norm(myInfo.zoneId);
+      const peerZone = norm(info.zoneId);
 
       // Calcula o volume "espacial" (0..1); o master de saída é aplicado
       // em applyPeerVolume (que permite ultrapassar 1.0 via Web Audio).
