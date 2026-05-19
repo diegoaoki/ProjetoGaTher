@@ -223,32 +223,59 @@ export default function ChatPanel({
     return [...map.values()].sort((a, b) => (a.lastAt < b.lastAt ? 1 : -1));
   }, [dmConversations, liveMessages, myUserId]);
 
+  // Mobile: fullscreen com 100dvh (encolhe quando o teclado abre →
+  // input nunca fica coberto) + safe-area (notch/home). Coluna flex:
+  // header/abas fixos, mensagens rolam, input no rodapé.
+  const rootStyle: React.CSSProperties = mobile
+    ? {
+        ...panelStyle,
+        position: "fixed",
+        inset: 0,
+        width: "100vw",
+        height: "100dvh",
+        borderLeft: "none",
+        zIndex: 40,
+      }
+    : panelStyle;
+
   return (
-    <div style={mobile ? { ...panelStyle, width: "100vw", borderLeft: "none" } : panelStyle}>
-      <div style={headerStyle}>
-        <strong style={{ fontSize: 14 }}>💬 Chat</strong>
-        <button onClick={onClose} style={closeBtnStyle} title="Fechar">✕</button>
+    <div style={rootStyle}>
+      <div
+        style={{
+          ...headerStyle,
+          ...(mobile
+            ? { paddingTop: "calc(12px + env(safe-area-inset-top))" }
+            : {}),
+        }}
+      >
+        <strong style={{ fontSize: mobile ? 16 : 14 }}>💬 Chat</strong>
+        <button
+          onClick={onClose}
+          style={{ ...closeBtnStyle, fontSize: mobile ? 22 : 16, padding: mobile ? 8 : 4 }}
+          title="Fechar"
+        >
+          ✕
+        </button>
       </div>
 
-      <div style={tabsStyle}>
-        <button
-          onClick={() => setTab("global")}
-          style={{ ...tabBtnStyle, ...(tab === "global" ? tabBtnActive : {}) }}
-        >
-          🌐 Geral
-        </button>
-        <button
-          onClick={() => setTab("room")}
-          style={{ ...tabBtnStyle, ...(tab === "room" ? tabBtnActive : {}) }}
-        >
-          📍 Aqui
-        </button>
-        <button
-          onClick={() => setTab("dm")}
-          style={{ ...tabBtnStyle, ...(tab === "dm" ? tabBtnActive : {}) }}
-        >
-          💌 DMs
-        </button>
+      <div style={mobile ? { ...tabsStyle, padding: 6, gap: 6 } : tabsStyle}>
+        {([
+          ["global", "🌐 Geral"],
+          ["room", "📍 Aqui"],
+          ["dm", "💌 DMs"],
+        ] as const).map(([id, label]) => (
+          <button
+            key={id}
+            onClick={() => setTab(id)}
+            style={{
+              ...tabBtnStyle,
+              ...(tab === id ? tabBtnActive : {}),
+              ...(mobile ? { padding: "11px 8px", fontSize: 14 } : {}),
+            }}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       {tab === "dm" && !activeDmUserId && (
@@ -380,7 +407,15 @@ export default function ChatPanel({
               do browser, independente de qualquer listener de keydown ou de
               stopPropagation na página. À prova de interceptores. */}
           <form
-            style={inputAreaStyle}
+            style={
+              mobile
+                ? {
+                    ...inputAreaStyle,
+                    padding: 10,
+                    paddingBottom: "calc(10px + env(safe-area-inset-bottom))",
+                  }
+                : inputAreaStyle
+            }
             onSubmit={(e) => {
               e.preventDefault();
               submit();
@@ -406,13 +441,14 @@ export default function ChatPanel({
                   : "Digite uma mensagem…"
               }
               disabled={(tab === "dm" && !activeDmUserId) || visitorBlocked}
-              style={inputStyle}
+              // fontSize >=16 no mobile evita o auto-zoom do iOS ao focar.
+              style={mobile ? { ...inputStyle, fontSize: 16, padding: "10px 12px" } : inputStyle}
               maxLength={2000}
             />
             <button
               type="submit"
               disabled={(tab === "dm" && !activeDmUserId) || visitorBlocked}
-              style={sendBtnStyle}
+              style={mobile ? { ...sendBtnStyle, padding: "10px 16px", fontSize: 14 } : sendBtnStyle}
             >
               Enviar
             </button>
